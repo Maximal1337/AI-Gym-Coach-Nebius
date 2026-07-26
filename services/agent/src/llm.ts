@@ -7,9 +7,9 @@ export interface LlmUsage {
   costCents: number;
 }
 
-/** Gemini 2.5 Flash-Lite pricing, in cents per token. */
-const CENTS_PER_INPUT_TOKEN = 10 / 1_000_000; // $0.10 / M
-const CENTS_PER_OUTPUT_TOKEN = 40 / 1_000_000; // $0.40 / M
+/** Gemini 3.1 Flash-Lite pricing, in cents per token. */
+const CENTS_PER_INPUT_TOKEN = 25 / 1_000_000; // $0.25 / M
+const CENTS_PER_OUTPUT_TOKEN = 150 / 1_000_000; // $1.50 / M
 
 export function costCents(tokensInput: number, tokensOutput: number): number {
   return (

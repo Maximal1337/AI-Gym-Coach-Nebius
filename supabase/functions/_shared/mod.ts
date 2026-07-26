@@ -67,16 +67,16 @@ export function currentPeriod(): string {
 
 /**
  * GYM-21: monthly budget check — done once per session start.
- * Units are CENTS: the default of 3¢/user/month ≈ 12-15 Flash-Lite
- * sessions at ~0.2¢ each. Deliberately advisory-precision: concurrent
- * starts within one rate-limit window can overshoot by a few sessions,
- * which at these prices is fractions of a cent.
+ * Units are CENTS: the default of 8¢/user/month ≈ 12-13 sessions on
+ * Gemini 3.1 Flash-Lite at ~0.6¢ each. Deliberately advisory-precision:
+ * concurrent starts within one rate-limit window can overshoot by a few
+ * sessions, which at these prices is a fraction of a cent.
  */
 export async function budgetRemaining(
   db: SupabaseClient,
   userId: string,
 ): Promise<{ ok: boolean; spentCents: number; budgetCents: number }> {
-  const budgetCents = Number(Deno.env.get("USAGE_MONTHLY_BUDGET_CENTS") ?? "3");
+  const budgetCents = Number(Deno.env.get("USAGE_MONTHLY_BUDGET_CENTS") ?? "8");
   const { data } = await db
     .from("usage_ledger")
     .select("cost_cents")

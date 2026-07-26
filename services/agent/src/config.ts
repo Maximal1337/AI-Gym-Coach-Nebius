@@ -6,7 +6,9 @@
 
 export const llmConfig = {
   provider: "google" as const,
-  model: "gemini-2.5-flash-lite",
+  // 2.5-flash-lite is closed to new API users (404s); 3.1-flash-lite is the
+  // cheapest Flash-Lite currently open: $0.25/M in, $1.50/M out.
+  model: "gemini-3.1-flash-lite",
   /** GYM-51: no single call can generate a runaway-expensive response. */
   maxOutputTokens: 800,
   temperature: 0.4,
