@@ -10,8 +10,9 @@ export const llmConfig = {
   /** GYM-51: no single call can generate a runaway-expensive response. */
   maxOutputTokens: 800,
   temperature: 0.4,
-  /** Persona/system block is identical every turn — cache it (bills ~10% of input rate). */
-  contextCaching: true,
+  // Prompt caching: Gemini 2.5 models apply implicit caching automatically
+  // to repeated prefixes (our persona/system block). Explicit CachedContent
+  // is a later optimization if billing shows implicit isn't catching it.
 } as const;
 
 /** GYM-56: kill switch — flip AGENT_DISABLED=1 to stop all LLM traffic in minutes. */
