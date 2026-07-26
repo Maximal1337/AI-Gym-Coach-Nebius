@@ -1,8 +1,16 @@
 import { createServer } from "node:http";
 import { timingSafeEqual } from "node:crypto";
+import { z } from "zod";
 import { agentDisabled } from "./config.js";
 import { runCoachingTurn } from "./graph.js";
 import { turnInputSchema } from "./schema.js";
+import { parsePlanText, parseSummaryText } from "./parse.js";
+
+const parsePlanInput = z.object({ text: z.string().min(10).max(20000) });
+const parseSummaryInput = z.object({
+  text: z.string().min(10).max(20000),
+  knownExercises: z.array(z.string().max(200)).max(100).default([]),
+});
 
 const PORT = Number(process.env.PORT ?? 8787);
 const MAX_BODY_BYTES = 64 * 1024;
@@ -64,6 +72,59 @@ const server = createServer(async (req, res) => {
       json(200, await runCoachingTurn(parsed.data));
     } catch {
       json(400, { error: "bad_request" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && (req.url === "/parse-plan" || req.url === "/parse-summary")) {
+    if (agentDisabled()) {
+      json(503, { error: "agent_disabled" });
+      return;
+    }
+    if (!secretMatches(req.headers["x-agent-secret"])) {
+      json(401, { error: "unauthorized" });
+      return;
+    }
+    try {
+      const chunks: Buffer[] = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += (chunk as Buffer).length;
+        if (size > MAX_BODY_BYTES) {
+          json(413, { error: "body_too_large" });
+          return;
+        }
+        chunks.push(chunk as Buffer);
+      }
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      if (req.url === "/parse-plan") {
+        const parsed = parsePlanInput.safeParse(body);
+        if (!parsed.success) {
+          json(400, { error: "invalid_input" });
+          return;
+        }
+        const result = await parsePlanText(parsed.data.text);
+        if (!result) {
+          json(503, { error: "llm_not_configured" });
+          return;
+        }
+        json(200, result);
+      } else {
+        const parsed = parseSummaryInput.safeParse(body);
+        if (!parsed.success) {
+          json(400, { error: "invalid_input" });
+          return;
+        }
+        const result = await parseSummaryText(parsed.data.text, parsed.data.knownExercises);
+        if (!result) {
+          json(503, { error: "llm_not_configured" });
+          return;
+        }
+        json(200, result);
+      }
+    } catch (e) {
+      console.error("parse failed:", (e as Error)?.message);
+      json(422, { error: "unparseable" });
     }
     return;
   }

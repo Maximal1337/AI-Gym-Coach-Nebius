@@ -106,7 +106,10 @@ export async function recordUsage(
 }
 
 /** Call the agent service. GYM-56's kill switch lives on the agent side. */
-export async function callAgent(payload: unknown): Promise<Response> {
+export async function callAgent(
+  payload: unknown,
+  path = "/turn",
+): Promise<Response> {
   const url = Deno.env.get("AGENT_URL");
   const secret = Deno.env.get("AGENT_SHARED_SECRET");
   if (!url || !secret) {
@@ -114,7 +117,7 @@ export async function callAgent(payload: unknown): Promise<Response> {
       status: 503,
     });
   }
-  return fetch(`${url}/turn`, {
+  return fetch(`${url}${path}`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-agent-secret": secret },
     body: JSON.stringify(payload),

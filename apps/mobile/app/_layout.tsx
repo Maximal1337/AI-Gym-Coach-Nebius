@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useColorScheme } from 'react-native';
 import { palette } from '@gymcoach/shared';
+import '../src/i18n';
 
 export default function RootLayout() {
   const scheme = useColorScheme();
