@@ -25,7 +25,7 @@ export default function Home() {
           margin: 0,
         }}
       >
-        GymCoach AI
+        Notch Fitness
       </h1>
       <p style={{ color: t.inkSoft, maxWidth: "42ch", textAlign: "center" }}>
         The personal trainer that remembers every rep, every set, every kg —
