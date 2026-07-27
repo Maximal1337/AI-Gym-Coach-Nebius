@@ -31,6 +31,12 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarShowLabel: false,
+        // The library's default icon slot is a fixed, icon-only 31x28 box
+        // (@react-navigation/bottom-tabs' TabBarIcon wrapperUikit) — too
+        // small for TabIcon's icon+label column, which was getting
+        // squashed down to nothing inside it. This is the supported
+        // override for a custom combined icon+label.
+        tabBarIconStyle: { width: 84, height: TAB_BAR_HEIGHT - 12 },
         tabBarStyle: {
           position: 'absolute',
           left: 20,
