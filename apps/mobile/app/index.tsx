@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
+import { Screen } from '../src/components/Screen';
 import { useTheme } from '../src/theme';
 
 /**
@@ -47,8 +48,10 @@ export default function Entry() {
   }, []);
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg }}>
-      {checking && <ActivityIndicator color={theme.accent} />}
-    </View>
+    <Screen>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        {checking && <ActivityIndicator color={theme.accent} />}
+      </View>
+    </Screen>
   );
 }

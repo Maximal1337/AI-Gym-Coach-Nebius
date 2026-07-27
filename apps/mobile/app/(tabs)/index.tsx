@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn, ApiError } from '../../src/lib/api';
 import { enqueueTurn, setPendingTurnHandlers, type TurnResult } from '../../src/lib/pendingTurn';
+import { Screen } from '../../src/components/Screen';
 import { useTheme, spacing, radius, typography } from '../../src/theme';
 
 interface Plan { id: string; name: string }
@@ -133,9 +134,10 @@ export default function Chat() {
   const currentExPos = currentEx ? exercises.findIndex((e) => e.id === currentEx.id) + 1 : 0;
 
   return (
+    <Screen>
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.bg }}
+      style={{ flex: 1 }}
     >
       <View style={{ padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule }}>
         <Text style={{ color: theme.ink, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>
@@ -235,5 +237,6 @@ export default function Chat() {
         </View>
       )}
     </KeyboardAvoidingView>
+    </Screen>
   );
 }

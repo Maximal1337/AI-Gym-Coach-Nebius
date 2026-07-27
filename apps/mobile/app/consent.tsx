@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../src/lib/api';
+import { Screen } from '../src/components/Screen';
 import { useTheme, spacing, radius } from '../src/theme';
 
 export const TERMS_VERSION = '2026-07-26';
@@ -26,7 +27,8 @@ export default function Consent() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg, padding: spacing.lg }}>
+    <Screen>
+    <View style={{ flex: 1, padding: spacing.lg }}>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: 'right' }}>
         {t('consentTitle')}
       </Text>
@@ -64,5 +66,6 @@ export default function Consent() {
         </Text>
       </Pressable>
     </View>
+    </Screen>
   );
 }

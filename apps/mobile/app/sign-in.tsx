@@ -6,6 +6,7 @@ import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/lib/supabase';
+import { Screen } from '../src/components/Screen';
 import { useTheme, spacing, radius, typography } from '../src/theme';
 
 export default function SignIn() {
@@ -63,9 +64,10 @@ export default function SignIn() {
   }
 
   return (
+    <Screen>
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.bg }}
+      style={{ flex: 1 }}
     >
       <ScrollView
         keyboardShouldPersistTaps="handled"
@@ -132,5 +134,6 @@ export default function SignIn() {
       </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
+    </Screen>
   );
 }

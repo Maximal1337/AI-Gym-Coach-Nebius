@@ -3,11 +3,13 @@ import {
   Alert, FlatList, Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn } from '../../src/lib/api';
 import { DismissKeyboardView } from '../../src/components/DismissKeyboardView';
 import { LineChart } from '../../src/components/LineChart';
+import { Screen } from '../../src/components/Screen';
 import { useTheme, spacing, radius } from '../../src/theme';
 
 interface SessionRow {
@@ -196,7 +198,8 @@ export default function Progress() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.bg, padding: spacing.md }}>
+    <Screen>
+    <View style={{ flex: 1, padding: spacing.md }}>
       <FlatList
         data={sessions}
         keyExtractor={(s) => s.id}
@@ -265,7 +268,14 @@ export default function Progress() {
       />
 
       <Modal visible={importOpen} animationType="slide" onRequestClose={() => setImportOpen(false)}>
-        <DismissKeyboardView style={{ backgroundColor: theme.bg, padding: spacing.lg }}>
+        {/* Modal content can render on a separate native surface, so it
+            needs its own SafeAreaProvider, not just a consumer — the
+            insets from the screen's own provider aren't guaranteed to
+            apply here (react-native-safe-area-context's documented
+            pattern for Modal). */}
+        <SafeAreaProvider>
+        <Screen>
+        <DismissKeyboardView style={{ padding: spacing.lg }}>
           <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
             {t('importHistory')}
           </Text>
@@ -305,7 +315,10 @@ export default function Progress() {
             <Text style={{ color: theme.inkSoft }}>{t('cancel')}</Text>
           </Pressable>
         </DismissKeyboardView>
+        </Screen>
+        </SafeAreaProvider>
       </Modal>
     </View>
+    </Screen>
   );
 }

@@ -4,6 +4,7 @@ import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn } from '../../src/lib/api';
+import { Screen } from '../../src/components/Screen';
 import { useTheme, spacing, radius } from '../../src/theme';
 
 const BUDGET_CENTS = Number(process.env.EXPO_PUBLIC_MONTHLY_BUDGET_CENTS ?? '8');
@@ -76,7 +77,8 @@ export default function Settings() {
   );
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: theme.bg }} contentContainerStyle={{ padding: spacing.md }}>
+    <Screen>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
         {t('settingsTitle')}
       </Text>
@@ -102,5 +104,6 @@ export default function Settings() {
         {row(t('deleteAccount'), undefined, confirmDelete, true)}
       </View>
     </ScrollView>
+    </Screen>
   );
 }

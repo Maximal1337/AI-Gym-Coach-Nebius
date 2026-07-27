@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../src/lib/api';
 import { DismissKeyboardView } from '../src/components/DismissKeyboardView';
+import { Screen } from '../src/components/Screen';
 import { useTheme, spacing, radius } from '../src/theme';
 
 interface ParsedExercise {
@@ -45,7 +46,8 @@ export default function OnboardingPlan() {
   }
 
   return (
-    <DismissKeyboardView style={{ backgroundColor: theme.bg, padding: spacing.lg }}>
+    <Screen>
+    <DismissKeyboardView style={{ padding: spacing.lg }}>
       <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>
         {t('planStep')}
       </Text>
@@ -119,5 +121,6 @@ export default function OnboardingPlan() {
         </>
       )}
     </DismissKeyboardView>
+    </Screen>
   );
 }

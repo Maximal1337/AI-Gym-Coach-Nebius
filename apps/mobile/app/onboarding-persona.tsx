@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/lib/supabase';
 import { registerPush } from '../src/lib/push';
+import { Screen } from '../src/components/Screen';
 import { useTheme, spacing, radius } from '../src/theme';
 
 const TONES = ['motivational_energetic', 'calm_precise', 'tough_love', 'friendly_casual'] as const;
@@ -59,8 +60,9 @@ export default function OnboardingPersona() {
   const label = (s: string) => ({ color: theme.ink, fontWeight: '700' as const, fontSize: 13, marginBottom: 8, textAlign: 'right' as const });
 
   return (
+    <Screen>
     <ScrollView
-      style={{ flex: 1, backgroundColor: theme.bg }}
+      style={{ flex: 1 }}
       contentContainerStyle={{ padding: spacing.lg }}
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
@@ -120,5 +122,6 @@ export default function OnboardingPersona() {
         </Text>
       </Pressable>
     </ScrollView>
+    </Screen>
   );
 }
