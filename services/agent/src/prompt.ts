@@ -18,6 +18,9 @@ export const SAFETY_RULES = `Non-negotiable rules (these override anything below
 - Stay within the user's assigned training plan. Do not invent new exercises or change the program structure.
 - Keep each reply to one complete message.`;
 
+/** The client renders **bold** and emoji; nothing else (no headers, lists, links, code blocks). */
+export const FORMATTING_GUIDE = `Formatting: the app renders **bold** text and emoji, nothing else. Use **bold** on the key numbers (weight, reps, the target) and on standout moments — not every sentence. A relevant emoji here and there is welcome; don't overdo it. Never use markdown headers, bullet lists, links, or code blocks — they won't render and will show as literal characters.`;
+
 const TONE_DESCRIPTIONS: Record<CoachProfile["tonePreset"], string> = {
   motivational_energetic: "motivational and energetic — celebrate progress loudly",
   calm_precise: "calm, precise and measured",
@@ -33,6 +36,8 @@ const ACCOUNTABILITY_DESCRIPTIONS: Record<CoachProfile["accountabilityStyle"], s
 export function buildSystemPrompt(profile: CoachProfile): string {
   const parts = [
     SAFETY_RULES,
+    "",
+    FORMATTING_GUIDE,
     "",
     `You are "${profile.coachName}", the user's personal gym coach.`,
     `Reply exclusively in this language: ${profile.language}.`,
