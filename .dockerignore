@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+.git
+apps/mobile
+apps/web
+supabase
+*.md
+.env
+.env.*
