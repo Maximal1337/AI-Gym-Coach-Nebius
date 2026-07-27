@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  Alert, FlatList, Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View,
+  ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -16,6 +16,32 @@ interface SessionRow {
   id: string; started_at: string; source: string;
   training_plans: { name: string } | null;
   set_logs: { id: string }[];
+}
+interface SessionDetailExercise { name: string; sets: string[] }
+interface RawSetLogDetail {
+  exercise_id: string; set_no: number; weight_kg: number; reps: number;
+  exercises: { name: string; order_index: number } | null;
+}
+
+async function fetchSessionDetails(sessionId: string): Promise<SessionDetailExercise[]> {
+  const { data } = await supabase
+    .from('set_logs')
+    .select('exercise_id, set_no, weight_kg, reps, exercises!inner(name, order_index)')
+    .eq('session_id', sessionId)
+    .order('set_no', { ascending: true });
+  const rows = (data ?? []) as unknown as RawSetLogDetail[];
+
+  const byExercise = new Map<string, { name: string; orderIndex: number; sets: string[] }>();
+  for (const row of rows) {
+    if (!row.exercises) continue;
+    const entry = byExercise.get(row.exercise_id) ??
+      { name: row.exercises.name, orderIndex: row.exercises.order_index, sets: [] };
+    entry.sets.push(`${Number(row.weight_kg)}×${row.reps}`);
+    byExercise.set(row.exercise_id, entry);
+  }
+  return [...byExercise.values()]
+    .sort((a, b) => a.orderIndex - b.orderIndex)
+    .map(({ name, sets }) => ({ name, sets }));
 }
 interface Plan { id: string; name: string }
 interface ExerciseRow { id: string; name: string; order_index: number }
@@ -111,6 +137,28 @@ export default function Progress() {
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
   const [exercises, setExercises] = useState<ExerciseRow[]>([]);
   const [series, setSeries] = useState<Record<string, number[]>>({});
+
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [details, setDetails] = useState<Record<string, SessionDetailExercise[]>>({});
+  const [loadingDetailsId, setLoadingDetailsId] = useState<string | null>(null);
+  const detailsRequest = useRef<string | null>(null);
+
+  async function toggleExpand(sessionId: string) {
+    if (expandedId === sessionId) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(sessionId);
+    if (details[sessionId]) return;
+    detailsRequest.current = sessionId;
+    setLoadingDetailsId(sessionId);
+    const result = await fetchSessionDetails(sessionId);
+    // A second tap while this was in flight already started its own
+    // fetch — only this session's own request may write the result.
+    if (detailsRequest.current !== sessionId) return;
+    setDetails((d) => ({ ...d, [sessionId]: result }));
+    setLoadingDetailsId(null);
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -248,24 +296,46 @@ export default function Progress() {
         ListEmptyComponent={
           <Text style={{ color: theme.inkSoft, textAlign: 'right' }}>{t('noData')}</Text>
         }
-        renderItem={({ item }) => (
-          <View style={{
-            flexDirection: 'row-reverse', justifyContent: 'space-between',
-            paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: theme.rule,
-          }}>
-            <View>
-              <Text style={{ color: theme.ink, fontWeight: '600', textAlign: 'right' }}>
-                {item.training_plans?.name ?? '—'}{item.source === 'imported' ? ' ⤵' : ''}
-              </Text>
-              <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
-                {new Date(item.started_at).toLocaleDateString('he-IL')}
-              </Text>
-            </View>
-            <Text style={{ color: theme.inkSoft, fontSize: 12, alignSelf: 'center', fontVariant: ['tabular-nums'] }}>
-              {item.set_logs.length} sets
-            </Text>
-          </View>
-        )}
+        renderItem={({ item }) => {
+          const expanded = expandedId === item.id;
+          return (
+            <Pressable onPress={() => toggleExpand(item.id)} style={{ borderBottomWidth: 1, borderBottomColor: theme.rule }}>
+              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingVertical: 10 }}>
+                <View>
+                  <Text style={{ color: theme.ink, fontWeight: '600', textAlign: 'right' }}>
+                    {item.training_plans?.name ?? '—'}{item.source === 'imported' ? ' ⤵' : ''}
+                  </Text>
+                  <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
+                    {new Date(item.started_at).toLocaleDateString('he-IL')}
+                  </Text>
+                </View>
+                <Text style={{ color: theme.inkSoft, fontSize: 12, alignSelf: 'center', fontVariant: ['tabular-nums'] }}>
+                  {item.set_logs.length} sets
+                </Text>
+              </View>
+              {expanded && (
+                <View style={{ paddingBottom: spacing.md, paddingRight: spacing.sm }}>
+                  {loadingDetailsId === item.id ? (
+                    <ActivityIndicator size="small" color={theme.inkSoft} />
+                  ) : (details[item.id] ?? []).length === 0 ? (
+                    <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('noData')}</Text>
+                  ) : (
+                    (details[item.id] ?? []).map((e) => (
+                      <View key={e.name} style={{ marginBottom: 6 }}>
+                        <Text style={{ color: theme.ink, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
+                          {e.name}
+                        </Text>
+                        <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+                          {e.sets.join(', ')} ק"ג
+                        </Text>
+                      </View>
+                    ))
+                  )}
+                </View>
+              )}
+            </Pressable>
+          );
+        }}
       />
 
       <Modal visible={importOpen} animationType="slide" onRequestClose={() => setImportOpen(false)}>
