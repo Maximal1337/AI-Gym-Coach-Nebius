@@ -45,6 +45,13 @@ export default function TabsLayout() {
           shadowOpacity: 0.15,
           shadowRadius: 12,
           shadowOffset: { width: 0, height: 4 },
+          // The bar already floats clear of the home indicator (bottom
+          // margin above), so it needs none of the default safe-area
+          // bottom padding a docked-to-the-edge bar would — without this,
+          // that inherited padding squeezes the icon+label content out of
+          // the fixed height above.
+          paddingBottom: 0,
+          paddingTop: 0,
         },
         tabBarBackground: () => (
           <BlurView
