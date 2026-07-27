@@ -1,9 +1,10 @@
 import { useCallback, useState } from 'react';
-import { Alert, FlatList, Modal, Pressable, Text, TextInput, View } from 'react-native';
+import { Alert, FlatList, Keyboard, Modal, Pressable, Text, TextInput, View } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn } from '../../src/lib/api';
+import { DismissKeyboardView } from '../../src/components/DismissKeyboardView';
 import { useTheme, spacing, radius } from '../../src/theme';
 
 interface SessionRow {
@@ -126,7 +127,7 @@ export default function Progress() {
       />
 
       <Modal visible={importOpen} animationType="slide" onRequestClose={() => setImportOpen(false)}>
-        <View style={{ flex: 1, backgroundColor: theme.bg, padding: spacing.lg }}>
+        <DismissKeyboardView style={{ backgroundColor: theme.bg, padding: spacing.lg }}>
           <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
             {t('importHistory')}
           </Text>
@@ -144,7 +145,7 @@ export default function Progress() {
           {!importPreview ? (
             <Pressable
               disabled={busy || importText.length < 10}
-              onPress={importParse}
+              onPress={() => { Keyboard.dismiss(); importParse(); }}
               style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
             >
               <Text style={{ color: theme.onAccent, fontWeight: '700' }}>
@@ -165,7 +166,7 @@ export default function Progress() {
           <Pressable onPress={() => { setImportOpen(false); setImportPreview(null); }} style={{ padding: spacing.md, alignItems: 'center' }}>
             <Text style={{ color: theme.inkSoft }}>{t('cancel')}</Text>
           </Pressable>
-        </View>
+        </DismissKeyboardView>
       </Modal>
     </View>
   );

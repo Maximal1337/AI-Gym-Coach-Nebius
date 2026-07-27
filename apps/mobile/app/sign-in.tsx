@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
+  Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -48,21 +48,30 @@ export default function SignIn() {
   }
 
   async function signInEmail(signUp: boolean) {
-    if (!email || !password) return;
+    Keyboard.dismiss();
+    if (!email.trim() || !password) {
+      Alert.alert(t('signInError'));
+      return;
+    }
     setBusy(true);
     const { error } = signUp
-      ? await supabase.auth.signUp({ email, password })
-      : await supabase.auth.signInWithPassword({ email, password });
+      ? await supabase.auth.signUp({ email: email.trim(), password })
+      : await supabase.auth.signInWithPassword({ email: email.trim(), password });
     setBusy(false);
-    if (error) Alert.alert(t('signInError'));
+    if (error) Alert.alert(t('signInError'), error.message);
     else afterAuth();
   }
 
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      style={{ flex: 1, backgroundColor: theme.bg, padding: spacing.lg, justifyContent: 'center' }}
+      style={{ flex: 1, backgroundColor: theme.bg }}
     >
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }}
+      >
       <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
         <Text style={{
           color: theme.ink, fontSize: typography.screenTitle.size,
@@ -121,6 +130,7 @@ export default function SignIn() {
       <Pressable disabled={busy} onPress={() => signInEmail(true)} style={{ padding: spacing.md, alignItems: 'center' }}>
         <Text style={{ color: theme.accent, fontWeight: '600' }}>{t('signUp')}</Text>
       </Pressable>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
