@@ -74,11 +74,11 @@ export default function SignIn() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }}
       >
-      <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
+      <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
         <Image
           source={require('../assets/logo-mark.png')}
           resizeMode="contain"
-          style={{ width: 220, height: 220, tintColor: theme.ink, marginBottom: spacing.md }}
+          style={{ width: 220, height: 220, tintColor: theme.ink, marginBottom: spacing.xs }}
         />
         <Text style={{
           color: theme.ink, fontSize: typography.screenTitle.size,
