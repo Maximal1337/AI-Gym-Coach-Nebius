@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Alert, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
+  Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
 import { router } from 'expo-router';
 import * as AppleAuthentication from 'expo-apple-authentication';
@@ -75,6 +75,11 @@ export default function SignIn() {
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }}
       >
       <View style={{ alignItems: 'center', marginBottom: spacing.xl }}>
+        <Image
+          source={require('../assets/logo-mark.png')}
+          resizeMode="contain"
+          style={{ width: 96, height: 96, tintColor: theme.ink, marginBottom: spacing.md }}
+        />
         <Text style={{
           color: theme.ink, fontSize: typography.screenTitle.size,
           fontWeight: typography.screenTitle.weight, letterSpacing: typography.screenTitle.letterSpacing,
