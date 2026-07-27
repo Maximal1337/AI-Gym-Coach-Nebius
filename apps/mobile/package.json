@@ -10,6 +10,7 @@
     "@supabase/supabase-js": "^2.110.8",
     "expo": "~54.0.36",
     "expo-apple-authentication": "~8.0.8",
+    "expo-blur": "~15.0.8",
     "expo-constants": "~18.0.13",
     "expo-device": "~8.0.10",
     "expo-linking": "~8.0.12",

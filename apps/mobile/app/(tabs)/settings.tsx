@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn } from '../../src/lib/api';
 import { Screen } from '../../src/components/Screen';
-import { useTheme, spacing, radius } from '../../src/theme';
+import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 const BUDGET_CENTS = Number(process.env.EXPO_PUBLIC_MONTHLY_BUDGET_CENTS ?? '8');
 const APPROX_CENTS_PER_WORKOUT = 0.6;
@@ -78,7 +78,7 @@ export default function Settings() {
 
   return (
     <Screen>
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
         {t('settingsTitle')}
       </Text>

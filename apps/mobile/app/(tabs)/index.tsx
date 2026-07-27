@@ -7,7 +7,7 @@ import { supabase } from '../../src/lib/supabase';
 import { callFn, ApiError } from '../../src/lib/api';
 import { enqueueTurn, setPendingTurnHandlers, type TurnResult } from '../../src/lib/pendingTurn';
 import { Screen } from '../../src/components/Screen';
-import { useTheme, spacing, radius, typography } from '../../src/theme';
+import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
 interface Exercise { id: string; name: string; sets: number; order_index: number }
@@ -187,7 +187,7 @@ export default function Chat() {
       )}
 
       {!inWorkout ? (
-        <View style={{ padding: spacing.md }}>
+        <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
           <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.sm }}>
             {t('startWorkout')}
           </Text>
@@ -205,7 +205,7 @@ export default function Chat() {
           </View>
         </View>
       ) : (
-        <View style={{ padding: spacing.md, borderTopWidth: 1, borderTopColor: theme.rule }}>
+        <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule }}>
           <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
             <TextInput
               placeholder={t('messagePlaceholder')}
