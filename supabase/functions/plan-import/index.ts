@@ -1,11 +1,16 @@
 import { admin, allowRate, callAgent, corsHeaders, getUser, json } from "../_shared/mod.ts";
 
 /**
- * GYM-26: paste-and-parse plan onboarding.
+ * GYM-26: paste-and-parse plan onboarding. Also covers adding/editing
+ * training types after onboarding (GYM-69), sharing the same parse step.
  *  { action: "parse", text }  -> parsed preview (nothing written)
- *  { action: "commit", plans } -> archive all active plans, insert new ones
- * Two steps by design: the user always confirms what the parser understood
- * before anything is saved.
+ *  { action: "commit", plans, mode?, editPlanId? }
+ *    mode omitted (onboarding, default) -> archive ALL active plans, insert new ones
+ *    mode: "add"                        -> insert new plan(s), archive nothing
+ *    mode: "edit", editPlanId           -> archive ONLY editPlanId, insert new plan(s)
+ *  { action: "archive", planId } -> archive a single plan
+ * Two steps by design for commit: the user always confirms what the
+ * parser understood before anything is saved.
  */
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -19,7 +24,14 @@ Deno.serve(async (req) => {
     return json(429, { error: "rate_limited" });
   }
 
-  let body: { action: string; text?: string; plans?: unknown };
+  let body: {
+    action: string;
+    text?: string;
+    plans?: unknown;
+    mode?: string;
+    editPlanId?: string;
+    planId?: string;
+  };
   try {
     body = await req.json();
   } catch {
@@ -49,6 +61,22 @@ Deno.serve(async (req) => {
     }>;
     if (!Array.isArray(plans) || plans.length === 0 || plans.length > 10) {
       return json(400, { error: "invalid_input" });
+    }
+    const mode = body.mode as string | undefined;
+    if (mode !== undefined && mode !== "add" && mode !== "edit") {
+      return json(400, { error: "invalid_input" });
+    }
+    const editPlanId = body.editPlanId as string | undefined;
+    if (mode === "edit") {
+      if (typeof editPlanId !== "string") return json(400, { error: "invalid_input" });
+      const { data: target } = await db
+        .from("training_plans")
+        .select("id")
+        .eq("id", editPlanId)
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
+      if (!target) return json(404, { error: "plan_not_found" });
     }
     // Commit arrives as a separate client call, so the parse-path schema
     // doesn't protect this write — validate every field here.
@@ -113,14 +141,47 @@ Deno.serve(async (req) => {
       created.push(plan);
     }
 
-    // Pasting a new program archives everything before it (System Design §5).
-    await db.from("training_plans")
-      .update({ status: "archived" })
-      .eq("user_id", user.id)
-      .eq("status", "active")
-      .not("id", "in", `(${createdIds.join(",")})`);
+    // mode="add": archive nothing, the new type joins the existing ones.
+    // mode="edit": archive only the one plan being replaced.
+    // No mode (onboarding, System Design §5): archive everything else —
+    // a first-time paste replaces the whole program.
+    if (mode === "add") {
+      // nothing to archive
+    } else if (mode === "edit") {
+      const { error: archiveError } = await db.from("training_plans")
+        .update({ status: "archived" })
+        .eq("id", editPlanId!)
+        .eq("user_id", user.id);
+      if (archiveError) {
+        // The new plan is already committed and valid — not rolling that
+        // back over a cleanup failure — but the old one silently staying
+        // active would leave the user with two plans of the same type.
+        console.error("edit-mode archive failed", { userId: user.id, editPlanId, error: archiveError.message });
+      }
+    } else {
+      await db.from("training_plans")
+        .update({ status: "archived" })
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .not("id", "in", `(${createdIds.join(",")})`);
+    }
 
     return json(200, { plans: created });
+  }
+
+  if (body.action === "archive") {
+    if (typeof body.planId !== "string") return json(400, { error: "invalid_input" });
+    const { data: plan, error } = await db
+      .from("training_plans")
+      .update({ status: "archived" })
+      .eq("id", body.planId)
+      .eq("user_id", user.id)
+      .eq("status", "active")
+      .select("id")
+      .maybeSingle();
+    if (error) return json(500, { error: "write_failed" });
+    if (!plan) return json(404, { error: "plan_not_found" });
+    return json(200, { archived: true });
   }
 
   return json(400, { error: "unknown_action" });

@@ -92,6 +92,13 @@ export default function Settings() {
       </View>
 
       <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>
+        {t('trainingPlans')}
+      </Text>
+      <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
+        {row(t('managePlans'), undefined, () => router.push('/manage-plans'))}
+      </View>
+
+      <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>
         {t('account')}
       </Text>
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>

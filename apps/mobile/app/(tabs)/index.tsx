@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn, ApiError } from '../../src/lib/api';
@@ -27,10 +28,15 @@ export default function Chat() {
   const list = useRef<FlatList>(null);
   const nextId = useRef(0);
 
-  useEffect(() => {
-    supabase.from('training_plans').select('id, name').eq('status', 'active')
-      .then(({ data }) => setPlans(data ?? []));
-  }, []);
+  // useFocusEffect, not a plain mount-only effect: a plan added/edited/
+  // archived via Settings > Manage Training Plans must show up here
+  // without needing a full app reload.
+  useFocusEffect(
+    useCallback(() => {
+      supabase.from('training_plans').select('id, name').eq('status', 'active')
+        .then(({ data }) => setPlans(data ?? []));
+    }, []),
+  );
 
   function push(from: Msg['from'], text: string) {
     setMsgs((m) => [...m, { id: String(nextId.current++), from, text }]);
