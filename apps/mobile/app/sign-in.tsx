@@ -78,7 +78,7 @@ export default function SignIn() {
         <Image
           source={require('../assets/logo-mark.png')}
           resizeMode="contain"
-          style={{ width: 96, height: 96, tintColor: theme.ink, marginBottom: spacing.md }}
+          style={{ width: 220, height: 220, tintColor: theme.ink, marginBottom: spacing.md }}
         />
         <Text style={{
           color: theme.ink, fontSize: typography.screenTitle.size,
