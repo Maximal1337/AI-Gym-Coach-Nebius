@@ -87,8 +87,8 @@ export default function Settings() {
         {t('myCoach')}
       </Text>
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-        {row(t('coachName'), coach?.coach_name ?? '—')}
-        {row(t('tone'), coach ? t(`tone_${coach.tone_preset}`) : '—')}
+        {row(t('coachName'), coach?.coach_name ?? '—', () => router.push('/edit-persona'))}
+        {row(t('tone'), coach ? t(`tone_${coach.tone_preset}`) : '—', () => router.push('/edit-persona'))}
       </View>
 
       <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>
