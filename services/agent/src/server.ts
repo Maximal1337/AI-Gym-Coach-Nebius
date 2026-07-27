@@ -1,9 +1,10 @@
-import { createServer } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { agentDisabled } from "./config.js";
 import { runCoachingTurn } from "./graph.js";
-import { turnInputSchema } from "./schema.js";
+import { runConversationTurn } from "./converse.js";
+import { turnInputSchema, conversationTurnInputSchema } from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
 
 const parsePlanInput = z.object({ text: z.string().min(10).max(20000) });
@@ -14,6 +15,8 @@ const parseSummaryInput = z.object({
 
 const PORT = Number(process.env.PORT ?? 8787);
 const MAX_BODY_BYTES = 64 * 1024;
+
+type Json = (status: number, body: unknown) => void;
 
 function secretMatches(header: string | string[] | undefined): boolean {
   const secret = process.env.AGENT_SHARED_SECRET;
@@ -26,13 +29,38 @@ function secretMatches(header: string | string[] | undefined): boolean {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+/** Every POST route shares this gate: kill switch, then the service-to-service secret. */
+function checkAuth(req: IncomingMessage, json: Json): boolean {
+  if (agentDisabled()) {
+    json(503, { error: "agent_disabled" });
+    return false;
+  }
+  if (!secretMatches(req.headers["x-agent-secret"])) {
+    json(401, { error: "unauthorized" });
+    return false;
+  }
+  return true;
+}
+
+/** Reads the body up to MAX_BODY_BYTES; null means the cap was exceeded. */
+async function readBody(req: IncomingMessage): Promise<Buffer | null> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    size += (chunk as Buffer).length;
+    if (size > MAX_BODY_BYTES) return null;
+    chunks.push(chunk as Buffer);
+  }
+  return Buffer.concat(chunks);
+}
+
 /**
  * Minimal HTTP surface for the agent service.
  * Only Supabase Edge Functions call this (service-to-service secret);
  * end users never reach it directly.
  */
 const server = createServer(async (req, res) => {
-  const json = (status: number, body: unknown) => {
+  const json: Json = (status, body) => {
     res.writeHead(status, { "content-type": "application/json" });
     res.end(JSON.stringify(body));
   };
@@ -43,28 +71,14 @@ const server = createServer(async (req, res) => {
   }
 
   if (req.method === "POST" && req.url === "/turn") {
-    if (agentDisabled()) {
-      json(503, { error: "agent_disabled" });
-      return;
-    }
-    if (!secretMatches(req.headers["x-agent-secret"])) {
-      json(401, { error: "unauthorized" });
-      return;
-    }
+    if (!checkAuth(req, json)) return;
     try {
-      const chunks: Buffer[] = [];
-      let size = 0;
-      for await (const chunk of req) {
-        size += (chunk as Buffer).length;
-        if (size > MAX_BODY_BYTES) {
-          json(413, { error: "body_too_large" });
-          return;
-        }
-        chunks.push(chunk as Buffer);
+      const body = await readBody(req);
+      if (!body) {
+        json(413, { error: "body_too_large" });
+        return;
       }
-      const parsed = turnInputSchema.safeParse(
-        JSON.parse(Buffer.concat(chunks).toString()),
-      );
+      const parsed = turnInputSchema.safeParse(JSON.parse(body.toString()));
       if (!parsed.success) {
         json(400, { error: "invalid_input" });
         return;
@@ -76,27 +90,35 @@ const server = createServer(async (req, res) => {
     return;
   }
 
-  if (req.method === "POST" && (req.url === "/parse-plan" || req.url === "/parse-summary")) {
-    if (agentDisabled()) {
-      json(503, { error: "agent_disabled" });
-      return;
-    }
-    if (!secretMatches(req.headers["x-agent-secret"])) {
-      json(401, { error: "unauthorized" });
-      return;
-    }
+  if (req.method === "POST" && req.url === "/converse") {
+    if (!checkAuth(req, json)) return;
     try {
-      const chunks: Buffer[] = [];
-      let size = 0;
-      for await (const chunk of req) {
-        size += (chunk as Buffer).length;
-        if (size > MAX_BODY_BYTES) {
-          json(413, { error: "body_too_large" });
-          return;
-        }
-        chunks.push(chunk as Buffer);
+      const body = await readBody(req);
+      if (!body) {
+        json(413, { error: "body_too_large" });
+        return;
       }
-      const body = JSON.parse(Buffer.concat(chunks).toString());
+      const parsed = conversationTurnInputSchema.safeParse(JSON.parse(body.toString()));
+      if (!parsed.success) {
+        json(400, { error: "invalid_input" });
+        return;
+      }
+      json(200, await runConversationTurn(parsed.data));
+    } catch {
+      json(400, { error: "bad_request" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && (req.url === "/parse-plan" || req.url === "/parse-summary")) {
+    if (!checkAuth(req, json)) return;
+    try {
+      const rawBody = await readBody(req);
+      if (!rawBody) {
+        json(413, { error: "body_too_large" });
+        return;
+      }
+      const body = JSON.parse(rawBody.toString());
       if (req.url === "/parse-plan") {
         const parsed = parsePlanInput.safeParse(body);
         if (!parsed.success) {

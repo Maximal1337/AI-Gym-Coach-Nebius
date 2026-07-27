@@ -1,5 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { llmConfig } from "./config.js";
+import { extractJson } from "./util.js";
+import { conversationReplySchema } from "./schema.js";
 
 export interface LlmUsage {
   tokensInput: number;
@@ -52,6 +54,49 @@ export async function composeWithLlm(
       tokensOutput,
       costCents: costCents(tokensInput, tokensOutput),
     },
+    degraded: false,
+  };
+}
+
+export interface ComposedConversationReply {
+  message: string;
+  loggedSets: Array<{ weightKg: number; reps: number }>;
+  advance: boolean;
+  usage: LlmUsage;
+  degraded: boolean;
+}
+
+/**
+ * Free-text mid-workout turn (GYM-61/67): one call that both interprets
+ * the user's message (into structured loggedSets/advance) and composes
+ * the narrative reply, so a turn stays at one LLM call regardless of
+ * whether the user is reporting a set or renegotiating.
+ */
+export async function composeConversationTurn(
+  systemPrompt: string,
+  turnPrompt: string,
+): Promise<ComposedConversationReply | null> {
+  if (!process.env.GEMINI_API_KEY) return null;
+
+  const model = new ChatGoogleGenerativeAI({
+    model: llmConfig.model,
+    apiKey: process.env.GEMINI_API_KEY,
+    maxOutputTokens: 1000,
+    temperature: llmConfig.temperature,
+  });
+
+  const res = await model.invoke([
+    ["system", systemPrompt],
+    ["human", turnPrompt],
+  ]);
+
+  const raw = typeof res.content === "string" ? res.content : JSON.stringify(res.content);
+  const parsed = conversationReplySchema.parse(extractJson(raw));
+  const tokensInput = res.usage_metadata?.input_tokens ?? 0;
+  const tokensOutput = res.usage_metadata?.output_tokens ?? 0;
+  return {
+    ...parsed,
+    usage: { tokensInput, tokensOutput, costCents: costCents(tokensInput, tokensOutput) },
     degraded: false,
   };
 }

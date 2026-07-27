@@ -218,6 +218,98 @@ export async function notesForExercise(
 }
 
 /**
+ * Free-text mid-workout turn (GYM-61/67), used by coach-turn once a
+ * session is running: interpret what the user said about `exercise`
+ * (report of completed sets, or something else), persist any sets the
+ * agent extracted, and — if it decided to advance — hand back the id of
+ * the next exercise (or signal the workout is complete).
+ */
+export async function runConversationExerciseTurn(
+  db: SupabaseClient,
+  params: {
+    userId: string;
+    sessionId: string;
+    planId: string;
+    exercise: Record<string, unknown>;
+    userMessage: string;
+    recentHistory: Array<{ from: "coach" | "me"; text: string }>;
+  },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { userId, sessionId, planId, exercise, userMessage, recentHistory } = params;
+
+  const { data: profileRow } = await db
+    .from("coach_profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
+
+  const { data: planExercises } = await db
+    .from("exercises")
+    .select("*")
+    .eq("plan_id", planId)
+    .order("order_index", { ascending: true });
+  const ordered = planExercises ?? [];
+  const currentIdx = ordered.findIndex((e) => e.id === exercise.id);
+  const nextRow = currentIdx >= 0 ? ordered[currentIdx + 1] ?? null : null;
+
+  const [lastLogs, notes, nextLastLogs, nextNotes] = await Promise.all([
+    lastLogsForExercise(db, userId, exercise.id as string),
+    notesForExercise(db, userId, exercise.id as string),
+    nextRow ? lastLogsForExercise(db, userId, nextRow.id as string) : Promise.resolve([]),
+    nextRow ? notesForExercise(db, userId, nextRow.id as string) : Promise.resolve([]),
+  ]);
+
+  const agentRes = await callAgent(
+    {
+      profile: profileToAgent(profileRow),
+      exercise: exerciseToAgent(exercise),
+      lastLogs: setLogsToAgent(lastLogs),
+      notes,
+      userMessage,
+      recentHistory,
+      nextExercise: nextRow ? exerciseToAgent(nextRow) : null,
+      nextLastLogs: setLogsToAgent(nextLastLogs),
+      nextNotes,
+    },
+    "/converse",
+  );
+  if (!agentRes.ok) return { status: 503, body: { error: "coach_unavailable" } };
+
+  const turn = await agentRes.json();
+  await recordUsage(db, userId, turn.usage);
+
+  if (turn.advance && Array.isArray(turn.loggedSets) && turn.loggedSets.length > 0) {
+    const rows = turn.loggedSets.map(
+      (s: { weightKg: number; reps: number }, i: number) => ({
+        session_id: sessionId,
+        exercise_id: exercise.id,
+        set_no: i + 1,
+        weight_kg: s.weightKg,
+        reps: s.reps,
+      }),
+    );
+    const { error } = await db
+      .from("set_logs")
+      .upsert(rows, { onConflict: "session_id,exercise_id,set_no" });
+    if (error) {
+      console.error("set_logs upsert failed", { userId, sessionId, error: error.message });
+    }
+  }
+
+  return {
+    status: 200,
+    body: {
+      message: turn.message,
+      advance: !!turn.advance,
+      nextExerciseId: turn.advance ? (nextRow?.id ?? null) : exercise.id,
+      sessionComplete: !!turn.advance && !nextRow,
+      degraded: !!turn.degraded,
+    },
+  };
+}
+
+/**
  * Shared core of session-start and coach-turn: gather context for one
  * exercise, run the agent, record usage, shape the response.
  */

@@ -5,25 +5,23 @@ import {
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn, ApiError } from '../../src/lib/api';
-import { enqueueSet, flush } from '../../src/lib/queue';
+import { enqueueTurn, setPendingTurnHandlers, type TurnResult } from '../../src/lib/pendingTurn';
 import { useTheme, spacing, radius, typography } from '../../src/theme';
 
 interface Plan { id: string; name: string }
 interface Exercise { id: string; name: string; sets: number; order_index: number }
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
 
-/** The core screen: WhatsApp-style, single complete coach messages (GYM-28). */
+/** The core screen: free-text chat, single complete coach messages (GYM-28/61/67). */
 export default function Chat() {
   const theme = useTheme();
   const { t } = useTranslation();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [exIndex, setExIndex] = useState(0);
-  const [setNo, setSetNo] = useState(1);
+  const [currentExerciseId, setCurrentExerciseId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
-  const [weight, setWeight] = useState('');
-  const [reps, setReps] = useState('');
+  const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const list = useRef<FlatList>(null);
   const nextId = useRef(0);
@@ -31,7 +29,6 @@ export default function Chat() {
   useEffect(() => {
     supabase.from('training_plans').select('id, name').eq('status', 'active')
       .then(({ data }) => setPlans(data ?? []));
-    void flush();
   }, []);
 
   function push(from: Msg['from'], text: string) {
@@ -45,6 +42,21 @@ export default function Chat() {
     else push('system', t('coachUnavailable'));
   }
 
+  function handleTurnResult(res: TurnResult) {
+    push('coach', res.message);
+    if (res.advance) {
+      if (res.sessionComplete) void finish();
+      else setCurrentExerciseId(res.nextExerciseId);
+    }
+  }
+
+  // A message that failed to send over the network retries automatically
+  // on reconnect (pendingTurn.ts) — wire its outcome back into this chat.
+  useEffect(() => {
+    setPendingTurnHandlers({ onDelivered: handleTurnResult, onFailed: coachError });
+    return () => setPendingTurnHandlers(null);
+  }, [sessionId, currentExerciseId]);
+
   async function start(plan: Plan) {
     setBusy(true);
     push('me', plan.name);
@@ -53,10 +65,11 @@ export default function Chat() {
         .from('exercises').select('id, name, sets, order_index')
         .eq('plan_id', plan.id).order('order_index');
       setExercises(data ?? []);
-      const res = await callFn<{ sessionId: string; message: string }>('session-start', { planId: plan.id });
+      const res = await callFn<{ sessionId: string; exerciseId: string; message: string }>(
+        'session-start', { planId: plan.id },
+      );
       setSessionId(res.sessionId);
-      setExIndex(0);
-      setSetNo(1);
+      setCurrentExerciseId(res.exerciseId);
       push('coach', res.message);
     } catch (e) {
       coachError(e);
@@ -65,33 +78,33 @@ export default function Chat() {
     }
   }
 
-  async function logSet() {
-    const w = Number(weight.replace(',', '.'));
-    const r = Number(reps);
-    const ex = exercises[exIndex];
-    if (!sessionId || !ex || !Number.isFinite(w) || !Number.isInteger(r)) return;
-    await enqueueSet({ sessionId, exerciseId: ex.id, setNo, weightKg: w, reps: r });
-    push('me', t('setLogged', { weight: w, reps: r }));
-    setWeight('');
-    setReps('');
-    if (setNo < ex.sets) {
-      setSetNo(setNo + 1);
-    } else if (exIndex + 1 < exercises.length) {
-      // Exercise finished -> fetch the next briefing.
-      const next = exercises[exIndex + 1];
-      setExIndex(exIndex + 1);
-      setSetNo(1);
-      setBusy(true);
-      try {
-        const res = await callFn<{ message: string }>('coach-turn', { sessionId, exerciseId: next.id });
-        push('coach', res.message);
-      } catch (e) {
+  async function send() {
+    const text = draft.trim();
+    if (!text || !sessionId || !currentExerciseId || busy) return;
+    setDraft('');
+    push('me', text);
+    setBusy(true);
+    // Last few turns, so the coach has short-term memory of this
+    // exchange (e.g. a target it just agreed to change).
+    const recentHistory = msgs
+      .filter((m) => m.from !== 'system')
+      .slice(-10)
+      .map((m) => ({ from: m.from as 'coach' | 'me', text: m.text }));
+    const turn = { sessionId, exerciseId: currentExerciseId, userMessage: text, recentHistory };
+    try {
+      handleTurnResult(await callFn<TurnResult>('coach-turn', turn));
+    } catch (e) {
+      if (e instanceof ApiError) {
+        setDraft(text); // server rejected it outright — let the user retry
         coachError(e);
-      } finally {
-        setBusy(false);
+      } else {
+        // A network-level failure, not a server rejection — queue it
+        // instead of losing the report; pendingTurn.ts retries on reconnect.
+        await enqueueTurn(turn);
+        push('system', t('queuedOffline'));
       }
-    } else {
-      await finish();
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -99,13 +112,13 @@ export default function Chat() {
     if (!sessionId) return;
     setBusy(true);
     try {
-      await flush();
       const res = await callFn<{ exercises: Array<{ name: string; sets: string[] }> }>(
         'session-complete', { sessionId },
       );
       const lines = res.exercises.map((e) => `${e.name}: ${e.sets.join(', ')}`).join('\n');
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
+      setCurrentExerciseId(null);
     } catch (e) {
       // Keep the session so "finish" can be retried once back online —
       // clearing it here would strand an in_progress session server-side.
@@ -116,7 +129,8 @@ export default function Chat() {
   }
 
   const inWorkout = sessionId !== null;
-  const currentEx = exercises[exIndex];
+  const currentEx = exercises.find((e) => e.id === currentExerciseId);
+  const currentExPos = currentEx ? exercises.findIndex((e) => e.id === currentEx.id) + 1 : 0;
 
   return (
     <KeyboardAvoidingView
@@ -129,7 +143,7 @@ export default function Chat() {
         </Text>
         {inWorkout && currentEx && (
           <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
-            {currentEx.name} · {setNo}/{currentEx.sets}
+            {currentEx.name} · {currentExPos}/{exercises.length}
           </Text>
         )}
       </View>
@@ -192,33 +206,27 @@ export default function Chat() {
         <View style={{ padding: spacing.md, borderTopWidth: 1, borderTopColor: theme.rule }}>
           <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
             <TextInput
-              placeholder={t('weightKg')}
+              placeholder={t('messagePlaceholder')}
               placeholderTextColor={theme.inkSoft}
-              keyboardType="decimal-pad"
-              value={weight}
-              onChangeText={setWeight}
+              value={draft}
+              onChangeText={setDraft}
+              multiline
               style={{
                 flex: 1, backgroundColor: theme.surface, borderRadius: radius.field,
-                padding: 10, color: theme.ink, textAlign: 'right',
-              }}
-            />
-            <TextInput
-              placeholder={t('reps')}
-              placeholderTextColor={theme.inkSoft}
-              keyboardType="number-pad"
-              value={reps}
-              onChangeText={setReps}
-              style={{
-                flex: 1, backgroundColor: theme.surface, borderRadius: radius.field,
-                padding: 10, color: theme.ink, textAlign: 'right',
+                padding: 10, color: theme.ink, textAlign: 'right', maxHeight: 100,
               }}
             />
             <Pressable
-              disabled={busy}
-              onPress={logSet}
-              style={{ backgroundColor: theme.accent, borderRadius: radius.pill, paddingHorizontal: 16, justifyContent: 'center' }}
+              disabled={busy || !draft.trim()}
+              onPress={send}
+              style={{
+                backgroundColor: draft.trim() ? theme.accent : theme.rule,
+                borderRadius: radius.pill, paddingHorizontal: 16, justifyContent: 'center',
+              }}
             >
-              <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('logSet')}</Text>
+              <Text style={{ color: draft.trim() ? theme.onAccent : theme.inkSoft, fontWeight: '700' }}>
+                {t('send')}
+              </Text>
             </Pressable>
           </View>
           <Pressable disabled={busy} onPress={finish} style={{ padding: spacing.sm, alignItems: 'center' }}>

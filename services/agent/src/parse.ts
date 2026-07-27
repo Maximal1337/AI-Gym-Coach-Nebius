@@ -1,6 +1,7 @@
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { z } from "zod";
 import { llmConfig } from "./config.js";
+import { extractJson } from "./util.js";
 
 /**
  * Paste-and-parse (GYM-26 / GYM-48): free text in, structured rows out.
@@ -66,11 +67,6 @@ function parseModel(): ChatGoogleGenerativeAI | null {
     maxOutputTokens: 4096, // parsing a full plan legitimately needs more than a chat reply
     temperature: 0,
   });
-}
-
-function extractJson(text: string): unknown {
-  const trimmed = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
-  return JSON.parse(trimmed);
 }
 
 export async function parsePlanText(text: string): Promise<ParsedPlan | null> {

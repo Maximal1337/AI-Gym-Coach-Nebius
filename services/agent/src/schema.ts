@@ -50,3 +50,44 @@ export const turnInputSchema = z.object({
   lastLogs: z.array(setLogSchema).max(200),
   notes: z.array(z.string().max(1000)).max(50),
 });
+
+/**
+ * Free-text mid-workout turn (GYM-61/67): the user reports what they
+ * actually did (which may diverge from the suggested target) or asks to
+ * renegotiate it. `recentHistory` gives the model short-term memory of
+ * this exchange (e.g. a just-agreed target override) since the service
+ * itself holds no session state between calls.
+ */
+export const conversationTurnInputSchema = z.object({
+  profile: coachProfileSchema,
+  exercise: exerciseSchema,
+  lastLogs: z.array(setLogSchema).max(200),
+  notes: z.array(z.string().max(1000)).max(50),
+  userMessage: z.string().min(1).max(2000),
+  recentHistory: z
+    .array(
+      z.object({
+        from: z.enum(["coach", "me"]),
+        text: z.string().max(2000),
+      }),
+    )
+    .max(12)
+    .default([]),
+  nextExercise: exerciseSchema.nullable(),
+  nextLastLogs: z.array(setLogSchema).max(200).default([]),
+  nextNotes: z.array(z.string().max(1000)).max(50).default([]),
+});
+
+export const conversationReplySchema = z.object({
+  message: z.string().min(1),
+  loggedSets: z
+    .array(
+      z.object({
+        weightKg: z.number().min(0).max(500),
+        reps: z.number().int().min(0).max(200),
+      }),
+    )
+    .max(20)
+    .default([]),
+  advance: z.boolean(),
+});
