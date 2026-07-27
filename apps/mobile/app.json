@@ -25,6 +25,13 @@
     },
     "plugins": [
       "expo-router"
-    ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1a49acbc-6b71-4dc2-9dae-d9047b2597bc"
+      }
+    },
+    "owner": "gymcoach-ai"
   }
 }
