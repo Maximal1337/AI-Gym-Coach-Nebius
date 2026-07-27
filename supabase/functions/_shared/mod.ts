@@ -237,18 +237,12 @@ export async function runConversationExerciseTurn(
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   const { userId, sessionId, planId, exercise, userMessage, recentHistory } = params;
 
-  const { data: profileRow } = await db
-    .from("coach_profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
+  const [{ data: profileRow }, { data: planExercises }] = await Promise.all([
+    db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("exercises").select("*").eq("plan_id", planId)
+      .order("order_index", { ascending: true }),
+  ]);
   if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
-
-  const { data: planExercises } = await db
-    .from("exercises")
-    .select("*")
-    .eq("plan_id", planId)
-    .order("order_index", { ascending: true });
   const ordered = planExercises ?? [];
   const currentIdx = ordered.findIndex((e) => e.id === exercise.id);
   const nextRow = currentIdx >= 0 ? ordered[currentIdx + 1] ?? null : null;
@@ -319,24 +313,21 @@ export async function runExerciseTurn(
   planId: string,
   exercise: Record<string, unknown>,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { data: profileRow } = await db
-    .from("coach_profiles")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-  if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
-
   // Plan context (GYM-20): the coach should know the whole workout, not
-  // just the current exercise.
-  const [{ data: plan }, { data: planExercises }] = await Promise.all([
-    db.from("training_plans").select("name").eq("id", planId)
-      .eq("user_id", userId).maybeSingle(),
-    db.from("exercises").select("name, order_index").eq("plan_id", planId)
-      .order("order_index", { ascending: true }),
-  ]);
-
-  const lastLogs = await lastLogsForExercise(db, userId, exercise.id as string);
-  const notes = await notesForExercise(db, userId, exercise.id as string);
+  // just the current exercise. All four reads are independent of each
+  // other (only the profile-missing check gates anything downstream),
+  // so they run in one round trip instead of four.
+  const [{ data: profileRow }, { data: plan }, { data: planExercises }, lastLogs, notes] =
+    await Promise.all([
+      db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
+      db.from("training_plans").select("name").eq("id", planId)
+        .eq("user_id", userId).maybeSingle(),
+      db.from("exercises").select("name, order_index").eq("plan_id", planId)
+        .order("order_index", { ascending: true }),
+      lastLogsForExercise(db, userId, exercise.id as string),
+      notesForExercise(db, userId, exercise.id as string),
+    ]);
+  if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
 
   const agentRes = await callAgent({
     userId,
