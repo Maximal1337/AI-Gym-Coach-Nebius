@@ -87,7 +87,7 @@ function ExerciseProgress({ name, values }: { name: string; values: number[] }) 
       <View style={{ flex: 1 }}>
         <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: 'right' }}>{name}</Text>
         <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
-          {values.length > 0 ? `${last} ק"ג` : t('noData')}
+          {values.length === 0 ? t('noData') : values.length === 1 ? `${last} ק"ג · ${t('needOneMore')}` : `${last} ק"ג`}
         </Text>
       </View>
       {values.length > 0 && <LineChart values={values} />}
