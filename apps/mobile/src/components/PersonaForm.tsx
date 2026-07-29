@@ -8,6 +8,9 @@ import { useTheme, spacing, radius } from '../theme';
 const TONES = ['motivational_energetic', 'calm_precise', 'tough_love', 'friendly_casual'] as const;
 const ACCS = ['gentle', 'no_excuses'] as const;
 
+/** Tone selection is disabled for now — every coach is "friendly" until it's re-enabled. */
+const FIXED_TONE: (typeof TONES)[number] = 'friendly_casual';
+
 export interface PersonaValues {
   coachName: string;
   tone: (typeof TONES)[number];
@@ -49,7 +52,7 @@ export function PersonaForm({
   const theme = useTheme();
   const { t } = useTranslation();
   const [coachName, setCoachName] = useState(initial?.coachName ?? '');
-  const [tone, setTone] = useState<PersonaValues['tone']>(initial?.tone ?? 'motivational_energetic');
+  const tone: PersonaValues['tone'] = FIXED_TONE;
   const [acc, setAcc] = useState<PersonaValues['acc']>(initial?.acc ?? 'gentle');
   const [freeform, setFreeform] = useState(initial?.freeform ?? '');
   const [busy, setBusy] = useState(false);
@@ -101,13 +104,6 @@ export function PersonaForm({
           padding: 12, color: theme.ink, marginBottom: spacing.md, textAlign: 'right',
         }}
       />
-
-      <Text style={label('tone')}>{t('tone')}</Text>
-      <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md }}>
-        {TONES.map((v) => (
-          <Chip key={v} label={t(`tone_${v}`)} active={tone === v} onPress={() => setTone(v)} />
-        ))}
-      </View>
 
       <Text style={label('acc')}>{t('accountability')}</Text>
       <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md }}>
