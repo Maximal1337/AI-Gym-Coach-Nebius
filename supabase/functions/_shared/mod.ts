@@ -71,19 +71,23 @@ export function currentPeriod(): string {
  * Gemini 3.1 Flash-Lite at ~0.6¢ each. Deliberately advisory-precision:
  * concurrent starts within one rate-limit window can overshoot by a few
  * sessions, which at these prices is a fraction of a cent.
+ *
+ * A per-user budget_override_cents (nullable) lets a specific account
+ * (e.g. the developer's own, for heavy testing) run past the default
+ * without raising the cap for everyone else.
  */
 export async function budgetRemaining(
   db: SupabaseClient,
   userId: string,
 ): Promise<{ ok: boolean; spentCents: number; budgetCents: number }> {
-  const budgetCents = Number(Deno.env.get("USAGE_MONTHLY_BUDGET_CENTS") ?? "8");
-  const { data } = await db
-    .from("usage_ledger")
-    .select("cost_cents")
-    .eq("user_id", userId)
-    .eq("period", currentPeriod())
-    .maybeSingle();
-  const spentCents = Number(data?.cost_cents ?? 0);
+  const defaultBudgetCents = Number(Deno.env.get("USAGE_MONTHLY_BUDGET_CENTS") ?? "8");
+  const [{ data: userRow }, { data: ledgerRow }] = await Promise.all([
+    db.from("users").select("budget_override_cents").eq("id", userId).maybeSingle(),
+    db.from("usage_ledger").select("cost_cents").eq("user_id", userId)
+      .eq("period", currentPeriod()).maybeSingle(),
+  ]);
+  const budgetCents = userRow?.budget_override_cents ?? defaultBudgetCents;
+  const spentCents = Number(ledgerRow?.cost_cents ?? 0);
   return { ok: spentCents < budgetCents, spentCents, budgetCents };
 }
 
