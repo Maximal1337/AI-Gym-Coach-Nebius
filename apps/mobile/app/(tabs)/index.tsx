@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -124,6 +124,28 @@ export default function Chat() {
     } finally {
       setBusy(false);
     }
+  }
+
+  // A tap on "Finish Workout" always goes through here first — if
+  // exercises remain, confirm before actually ending, since nothing else
+  // stops an accidental early finish (e.g. an ambiguous coach message
+  // after the previous exercise reading like a wrap-up).
+  function confirmFinish() {
+    // currentExPos is 1-based and points at the exercise not yet
+    // reported, so it counts toward "remaining" too.
+    const remaining = exercises.length - currentExPos + 1;
+    if (remaining <= 0) {
+      void finish();
+      return;
+    }
+    Alert.alert(
+      t('finishEarlyTitle'),
+      t('finishEarlySub', { count: remaining, name: currentEx?.name ?? '' }),
+      [
+        { text: t('cancel'), style: 'cancel' },
+        { text: t('finishWorkout'), style: 'destructive', onPress: () => void finish() },
+      ],
+    );
   }
 
   async function finish() {
@@ -254,7 +276,7 @@ export default function Chat() {
               </Text>
             </Pressable>
           </View>
-          <Pressable disabled={busy} onPress={finish} style={{ padding: spacing.sm, alignItems: 'center' }}>
+          <Pressable disabled={busy} onPress={confirmFinish} style={{ padding: spacing.sm, alignItems: 'center' }}>
             <Text style={{ color: theme.critical, fontWeight: '600', fontSize: 13 }}>{t('finishWorkout')}</Text>
           </Pressable>
         </View>

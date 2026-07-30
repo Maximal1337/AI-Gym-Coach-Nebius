@@ -147,7 +147,7 @@ export function buildConversationPrompt(params: {
   if (nextExercise && nextTargets) {
     lines.push(
       "",
-      `If advance=true, weave in an introduction to the next exercise after acknowledging what was just logged: ${nextExercise.name}`,
+      `If advance=true, weave in a CLEAR introduction to the next exercise after acknowledging what was just logged: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.) here, that would be misleading; the message must make it unambiguous that another exercise follows right now.`,
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
