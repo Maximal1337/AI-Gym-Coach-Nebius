@@ -60,7 +60,14 @@ export default function Chat() {
   }
 
   function handleTurnResult(res: TurnResult) {
-    push('coach', withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps));
+    // The server always computes the *next* exercise's target so it's ready
+    // if the turn advances, but a turn that stays on the current exercise
+    // (e.g. a note, a question) shouldn't show a target for a different
+    // exercise the user isn't even being introduced to yet.
+    const text = res.advance
+      ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps)
+      : res.message;
+    push('coach', text);
     if (res.advance) {
       if (res.sessionComplete) void finish();
       else setCurrentExerciseId(res.nextExerciseId);
