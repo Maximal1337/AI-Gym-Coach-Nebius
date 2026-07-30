@@ -23,6 +23,7 @@
   "parseFailed": "לא הצלחתי להבין את התוכנית — נסה לנקות את הטקסט ולהדביק שוב",
   "confirmPlanTitle": "זה מה שהבנתי:",
   "exercisesCount": "{{count}} תרגילים",
+  "warmupPlaceholder": "חימום (אופציונלי)",
   "approveAndSave": "אשר ושמור",
   "tryAgain": "נסה שוב",
   "personaStep": "שלב 2 מתוך 2",

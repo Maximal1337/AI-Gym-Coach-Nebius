@@ -183,30 +183,36 @@ export function PlanPasteFlow({
                   {t('exercisesCount', { count: plan.exercises.length })}
                 </Text>
                 {plan.exercises.map((e, exIdx) => (
-                  <View
-                    key={e.orderIndex}
-                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 6 }}
-                  >
-                    <Text style={{ color: theme.inkSoft, fontSize: 13 }}>{e.orderIndex}.</Text>
+                  <View key={e.orderIndex} style={{ marginBottom: 8 }}>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                      <Text style={{ color: theme.inkSoft, fontSize: 13 }}>{e.orderIndex}.</Text>
+                      <TextInput
+                        value={e.name}
+                        onChangeText={(v) => updateExercise(planIdx, exIdx, { name: v })}
+                        style={{ flex: 1, color: theme.ink, fontSize: 13, textAlign: 'right', padding: 0 }}
+                      />
+                      <TextInput
+                        value={String(e.sets)}
+                        onChangeText={(v) => {
+                          const n = parseInt(v, 10);
+                          updateExercise(planIdx, exIdx, { sets: Number.isFinite(n) ? n : 0 });
+                        }}
+                        keyboardType="number-pad"
+                        style={{ width: 28, color: theme.ink, fontSize: 13, textAlign: 'center', padding: 0 }}
+                      />
+                      <Text style={{ color: theme.inkSoft, fontSize: 13 }}>×</Text>
+                      <TextInput
+                        value={e.repRange}
+                        onChangeText={(v) => updateExercise(planIdx, exIdx, { repRange: v })}
+                        style={{ width: 48, color: theme.ink, fontSize: 13, textAlign: 'center', padding: 0 }}
+                      />
+                    </View>
                     <TextInput
-                      value={e.name}
-                      onChangeText={(v) => updateExercise(planIdx, exIdx, { name: v })}
-                      style={{ flex: 1, color: theme.ink, fontSize: 13, textAlign: 'right', padding: 0 }}
-                    />
-                    <TextInput
-                      value={String(e.sets)}
-                      onChangeText={(v) => {
-                        const n = parseInt(v, 10);
-                        updateExercise(planIdx, exIdx, { sets: Number.isFinite(n) ? n : 0 });
-                      }}
-                      keyboardType="number-pad"
-                      style={{ width: 28, color: theme.ink, fontSize: 13, textAlign: 'center', padding: 0 }}
-                    />
-                    <Text style={{ color: theme.inkSoft, fontSize: 13 }}>×</Text>
-                    <TextInput
-                      value={e.repRange}
-                      onChangeText={(v) => updateExercise(planIdx, exIdx, { repRange: v })}
-                      style={{ width: 48, color: theme.ink, fontSize: 13, textAlign: 'center', padding: 0 }}
+                      value={e.warmup ?? ''}
+                      onChangeText={(v) => updateExercise(planIdx, exIdx, { warmup: v.length > 0 ? v : null })}
+                      placeholder={t('warmupPlaceholder')}
+                      placeholderTextColor={theme.inkSoft}
+                      style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right', padding: 0, marginTop: 2 }}
                     />
                   </View>
                 ))}
