@@ -344,6 +344,88 @@ export async function runConversationExerciseTurn(
 }
 
 /**
+ * Generative-UI confirm action (System Design §19, revised): the sets
+ * are already final (confirmed via button, not typed) — nothing here is
+ * extracted or decided by the model. But per direct feedback, a canned
+ * template read as a noticeably worse reply than the LLM-composed one
+ * free text gets, so this still calls the agent — just to compose the
+ * reply text and the next exercise's intro, never to pick the numbers.
+ */
+export async function confirmExerciseSets(
+  db: SupabaseClient,
+  params: {
+    userId: string;
+    sessionId: string;
+    planId: string;
+    exercise: Record<string, unknown>;
+    confirmedSets: Array<{ weightKg: number; reps: number }>;
+  },
+): Promise<{ status: number; body: Record<string, unknown> }> {
+  const { userId, sessionId, planId, exercise, confirmedSets } = params;
+
+  const [{ data: profileRow }, { data: planExercises }] = await Promise.all([
+    db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("exercises").select("*").eq("plan_id", planId).order("order_index", { ascending: true }),
+  ]);
+  if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
+
+  const ordered = planExercises ?? [];
+  const currentIdx = ordered.findIndex((e) => e.id === exercise.id);
+  const nextRow = currentIdx >= 0 ? ordered[currentIdx + 1] ?? null : null;
+
+  const rows = confirmedSets.map((s, i) => ({
+    session_id: sessionId,
+    exercise_id: exercise.id,
+    set_no: i + 1,
+    weight_kg: s.weightKg,
+    reps: s.reps,
+  }));
+  const { error } = await db
+    .from("set_logs")
+    .upsert(rows, { onConflict: "session_id,exercise_id,set_no" });
+  if (error) {
+    console.error("set_logs upsert failed (confirm)", { userId, sessionId, error: error.message });
+    return { status: 500, body: { error: "write_failed" } };
+  }
+
+  const [notes, nextLastLogs, nextNotes] = await Promise.all([
+    notesForExercise(db, userId, planId, exercise.id as string),
+    nextRow ? lastLogsForExercise(db, userId, nextRow.id as string) : Promise.resolve([]),
+    nextRow ? notesForExercise(db, userId, planId, nextRow.id as string) : Promise.resolve([]),
+  ]);
+
+  const agentRes = await callAgent(
+    {
+      profile: profileToAgent(profileRow),
+      exercise: exerciseToAgent(exercise),
+      confirmedSets,
+      notes,
+      nextExercise: nextRow ? exerciseToAgent(nextRow) : null,
+      nextLastLogs: setLogsToAgent(nextLastLogs),
+      nextNotes,
+    },
+    "/confirm-turn",
+  );
+  if (!agentRes.ok) return { status: 503, body: { error: "coach_unavailable" } };
+
+  const turn = await agentRes.json();
+  await recordUsage(db, userId, turn.usage);
+
+  return {
+    status: 200,
+    body: {
+      message: turn.message,
+      advance: true,
+      nextExerciseId: nextRow?.id ?? null,
+      sessionComplete: !nextRow,
+      degraded: !!turn.degraded,
+      nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
+      nextTargetReps: turn.nextTargetReps ?? null,
+    },
+  };
+}
+
+/**
  * Shared core of session-start and coach-turn: gather context for one
  * exercise, run the agent, record usage, shape the response.
  */

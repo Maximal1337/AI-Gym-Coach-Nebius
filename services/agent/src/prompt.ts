@@ -100,6 +100,55 @@ export function buildTurnPrompt(
 }
 
 /**
+ * Generative-UI confirm action (System Design §19): the numbers are
+ * already final (confirmed via button, not typed) — nothing here is
+ * extracted or decided by the model, it only narrates. Mirrors
+ * buildConversationPrompt's next-exercise section so the reply reads
+ * the same whether the user typed or tapped a button.
+ */
+export function buildConfirmPrompt(params: {
+  exercise: Exercise;
+  confirmedSets: Array<{ weightKg: number; reps: number }>;
+  notes: string[];
+  nextExercise: Exercise | null;
+  nextTargets: Targets | null;
+  nextLastLogs: SetLog[];
+  nextNotes: string[];
+}): string {
+  const { exercise, confirmedSets, notes, nextExercise, nextTargets, nextLastLogs, nextNotes } = params;
+  const setsDesc = confirmedSets.map((s) => `${s.weightKg}kg x ${s.reps}`).join(", ");
+  const lines: string[] = [
+    `The user just confirmed they completed ${exercise.name}: ${setsDesc}. This came from a quick-confirm UI button, not typed text — there is nothing to interpret or extract, these numbers are already final and logged. Restate them exactly; never alter them.`,
+  ];
+  if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
+  lines.push("", "Write a short, encouraging acknowledgment of what was just done.");
+  if (nextExercise && nextTargets) {
+    lines.push(
+      "",
+      `Then weave in a CLEAR introduction to the next exercise: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`,
+      `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
+      nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
+      "Last time on this exercise:",
+      formatHistory(nextLastLogs),
+      nextTargets.reason === "baseline"
+        ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
+        : `Computed target for today (already validated, present it as the goal): ${nextTargets.suggestedWeightKg}kg, sets of ${nextTargets.targetReps?.join(", ")} reps.`,
+    );
+    if (nextNotes.length > 0) lines.push("", "Saved notes about the next exercise:", ...nextNotes.map((n) => `- ${n}`));
+  } else {
+    lines.push(
+      "",
+      "This was the LAST exercise in the plan. Warmly wrap up the workout instead of introducing a new exercise — do not fabricate a summary of numbers, that is handled separately.",
+    );
+  }
+  lines.push(
+    "",
+    "Write the coaching message directly as plain text (not JSON) — in your coaching voice per the rules and tone above, always restating the numbers exactly as given above.",
+  );
+  return lines.join("\n");
+}
+
+/**
  * Free-text mid-workout turn (GYM-61/67): interpret what the user just
  * said about the current exercise, decide whether it's a completed
  * report (advance) or something else (renegotiation, a question, an

@@ -1,6 +1,7 @@
 import {
   admin,
   allowRate,
+  confirmExerciseSets,
   corsHeaders,
   getUser,
   json,
@@ -33,19 +34,38 @@ Deno.serve(async (req) => {
     return json(429, { error: "rate_limited" });
   }
 
-  let sessionId: string, exerciseId: string, userMessage: string;
+  let sessionId: string, exerciseId: string;
+  let userMessage: string | undefined;
+  let confirmedSets: Array<{ weightKg: number; reps: number }> | undefined;
   let recentHistory: Array<{ from: unknown; text: unknown }> = [];
   try {
     const body = await req.json();
-    ({ sessionId, exerciseId, userMessage } = body);
-    if (Array.isArray(body.recentHistory)) recentHistory = body.recentHistory;
-    if (
-      typeof sessionId !== "string" ||
-      typeof exerciseId !== "string" ||
-      typeof userMessage !== "string" ||
-      userMessage.length < 1 ||
-      userMessage.length > 200
-    ) throw new Error();
+    ({ sessionId, exerciseId } = body);
+    if (typeof sessionId !== "string" || typeof exerciseId !== "string") throw new Error();
+
+    // Generative-UI confirm action (System Design §19): confirmedSets is a
+    // deterministic alternative to userMessage — no LLM call, so it's
+    // mutually exclusive with free text, never both.
+    if (body.confirmedSets !== undefined) {
+      const sets = body.confirmedSets;
+      if (
+        !Array.isArray(sets) || sets.length < 1 || sets.length > 20 ||
+        !sets.every((s) =>
+          typeof s === "object" && s !== null &&
+          typeof s.weightKg === "number" && s.weightKg >= 0 && s.weightKg <= 500 &&
+          typeof s.reps === "number" && Number.isInteger(s.reps) && s.reps >= 0 && s.reps <= 200
+        )
+      ) throw new Error();
+      confirmedSets = sets;
+    } else {
+      if (
+        typeof body.userMessage !== "string" ||
+        body.userMessage.length < 1 ||
+        body.userMessage.length > 200
+      ) throw new Error();
+      userMessage = body.userMessage;
+      if (Array.isArray(body.recentHistory)) recentHistory = body.recentHistory;
+    }
   } catch {
     return json(400, { error: "invalid_input" });
   }
@@ -84,12 +104,23 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (!exercise) return json(404, { error: "exercise_not_found" });
 
+  if (confirmedSets) {
+    const turn = await confirmExerciseSets(db, {
+      userId: user.id,
+      sessionId: session.id,
+      planId: session.plan_id,
+      exercise,
+      confirmedSets,
+    });
+    return json(turn.status, turn.body);
+  }
+
   const turn = await runConversationExerciseTurn(db, {
     userId: user.id,
     sessionId: session.id,
     planId: session.plan_id,
     exercise,
-    userMessage,
+    userMessage: userMessage!,
     recentHistory: cleanHistory,
   });
   return json(turn.status, turn.body);

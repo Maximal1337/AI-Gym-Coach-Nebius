@@ -13,11 +13,21 @@ import {
 import { Screen } from '../../src/components/Screen';
 import { MarkdownText } from '../../src/components/MarkdownText';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
+import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
 interface Exercise { id: string; name: string; sets: number; order_index: number }
+interface SuggestedAction { exerciseId: string; weightKg: number; targetReps: number[] }
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
+
+/** "58 ק"ג × 8/8/8" when every set shares a weight (the common case), else a per-set list. */
+function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>): string {
+  const sameWeight = sets.every((s) => s.weightKg === sets[0].weightKg);
+  return sameWeight
+    ? `${sets[0].weightKg} ק"ג × ${sets.map((s) => s.reps).join('/')}`
+    : sets.map((s) => `${s.weightKg}×${s.reps}`).join(', ');
+}
 
 /** The core screen: free-text chat, single complete coach messages (GYM-28/61/67). */
 export default function Chat() {
@@ -31,6 +41,7 @@ export default function Chat() {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
+  const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
   const list = useRef<FlatList>(null);
   const nextId = useRef(0);
 
@@ -73,16 +84,51 @@ export default function Chat() {
       ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps)
       : res.message;
     push('coach', text);
-    if (res.advance) {
-      if (res.sessionComplete) void finish();
-      else setCurrentExerciseId(res.nextExerciseId);
+    if (!res.advance) return; // same exercise still in play — leave pendingAction as-is
+    if (res.sessionComplete) {
+      setPendingAction(null);
+      void finish();
+      return;
     }
+    setCurrentExerciseId(res.nextExerciseId);
+    setPendingAction(
+      res.nextExerciseId && res.nextSuggestedWeightKg != null &&
+        res.nextTargetReps && res.nextTargetReps.length > 0
+        ? { exerciseId: res.nextExerciseId, weightKg: res.nextSuggestedWeightKg, targetReps: res.nextTargetReps }
+        : null,
+    );
   }
 
   function handleSessionStartResult(res: SessionStartResult) {
     setSessionId(res.sessionId);
     setCurrentExerciseId(res.exerciseId);
     push('coach', withTarget(res.message, res.suggestedWeightKg, res.targetReps));
+    setPendingAction(
+      res.suggestedWeightKg != null && res.targetReps && res.targetReps.length > 0
+        ? { exerciseId: res.exerciseId, weightKg: res.suggestedWeightKg, targetReps: res.targetReps }
+        : null,
+    );
+  }
+
+  // Generative-UI confirm action (System Design §19): deterministic on the
+  // server (no LLM call) — logs the given sets and advances, same shape as
+  // a parsed free-text confirmation. Echoes what was confirmed as the
+  // user's own message first, same as send() does for free text — without
+  // it the transcript looked like the coach replying to itself.
+  // pendingAction is only cleared on success, so a network failure leaves
+  // the bar in place, tappable again.
+  async function confirmSets(exerciseId: string, sets: Array<{ weightKg: number; reps: number }>) {
+    if (!sessionId || busy) return;
+    push('me', formatConfirmedSets(sets));
+    setBusy(true);
+    try {
+      const res = await callFn<TurnResult>('coach-turn', { sessionId, exerciseId, confirmedSets: sets });
+      handleTurnResult(res);
+    } catch (e) {
+      coachError(e);
+    } finally {
+      setBusy(false);
+    }
   }
 
   // A message that failed to send over the network retries automatically
@@ -188,6 +234,7 @@ export default function Chat() {
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
       setCurrentExerciseId(null);
+      setPendingAction(null);
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2600);
     } catch (e) {
@@ -209,15 +256,25 @@ export default function Chat() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
     >
-      <View style={{ padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule }}>
-        <Text style={{ color: theme.ink, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>
-          {t('chatTitle')}
-        </Text>
-        {inWorkout && currentEx && (
-          <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
-            {currentEx.name} · {currentExPos}/{exercises.length}
-          </Text>
+      <View style={{
+        flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+        padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule,
+      }}>
+        {inWorkout && (
+          <Pressable disabled={busy} onPress={confirmFinish}>
+            <Text style={{ color: theme.critical, fontWeight: '600', fontSize: 13 }}>{t('finishWorkout')}</Text>
+          </Pressable>
         )}
+        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+          <Text style={{ color: theme.ink, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>
+            {t('chatTitle')}
+          </Text>
+          {inWorkout && currentEx && (
+            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+              {currentEx.name} · {currentExPos}/{exercises.length}
+            </Text>
+          )}
+        </View>
       </View>
 
       <FlatList
@@ -260,6 +317,22 @@ export default function Chat() {
           <ActivityIndicator size="small" color={theme.inkSoft} />
           <Text style={{ color: theme.inkSoft, fontSize: 12 }}>{t('typing')}</Text>
         </View>
+      )}
+
+      {inWorkout && pendingAction && (
+        <SuggestedActionBar
+          weightKg={pendingAction.weightKg}
+          targetReps={pendingAction.targetReps}
+          disabled={busy}
+          onConfirmExact={() => {
+            const action = pendingAction;
+            void confirmSets(
+              action.exerciseId,
+              action.targetReps.map((reps) => ({ weightKg: action.weightKg, reps })),
+            );
+          }}
+          onSubmitSets={(sets) => void confirmSets(pendingAction.exerciseId, sets)}
+        />
       )}
 
       {!inWorkout ? (
@@ -308,9 +381,6 @@ export default function Chat() {
               </Text>
             </Pressable>
           </View>
-          <Pressable disabled={busy} onPress={confirmFinish} style={{ padding: spacing.sm, alignItems: 'center' }}>
-            <Text style={{ color: theme.critical, fontWeight: '600', fontSize: 13 }}>{t('finishWorkout')}</Text>
-          </Pressable>
         </View>
       )}
     </KeyboardAvoidingView>

@@ -3,8 +3,8 @@ import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { agentDisabled } from "./config.js";
 import { runCoachingTurn } from "./graph.js";
-import { runConversationTurn } from "./converse.js";
-import { turnInputSchema, conversationTurnInputSchema } from "./schema.js";
+import { runConversationTurn, runConfirmTurn } from "./converse.js";
+import { turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema } from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
 
 const parsePlanInput = z.object({ text: z.string().min(10).max(20000) });
@@ -104,6 +104,26 @@ const server = createServer(async (req, res) => {
         return;
       }
       json(200, await runConversationTurn(parsed.data));
+    } catch {
+      json(400, { error: "bad_request" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/confirm-turn") {
+    if (!checkAuth(req, json)) return;
+    try {
+      const body = await readBody(req);
+      if (!body) {
+        json(413, { error: "body_too_large" });
+        return;
+      }
+      const parsed = confirmTurnInputSchema.safeParse(JSON.parse(body.toString()));
+      if (!parsed.success) {
+        json(400, { error: "invalid_input" });
+        return;
+      }
+      json(200, await runConfirmTurn(parsed.data));
     } catch {
       json(400, { error: "bad_request" });
     }

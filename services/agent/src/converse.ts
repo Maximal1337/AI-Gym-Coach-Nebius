@@ -2,8 +2,8 @@ import { StateGraph, START, END } from "@langchain/langgraph";
 import { z } from "zod";
 import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
 import { suggestTargets, type Targets } from "./progression.js";
-import { buildSystemPrompt, buildConversationPrompt } from "./prompt.js";
-import { composeConversationTurn, type LlmUsage } from "./llm.js";
+import { buildSystemPrompt, buildConversationPrompt, buildConfirmPrompt } from "./prompt.js";
+import { composeConversationTurn, composeWithLlm, type LlmUsage } from "./llm.js";
 
 /**
  * Free-text mid-workout turn graph (GYM-61/67):
@@ -124,4 +124,71 @@ export async function runConversationTurn(
 ): Promise<ConversationOutput> {
   const result = await graph.invoke({ input });
   return result.output!;
+}
+
+export interface ConfirmInput {
+  profile: CoachProfile;
+  exercise: Exercise;
+  confirmedSets: Array<{ weightKg: number; reps: number }>;
+  notes: string[];
+  nextExercise: Exercise | null;
+  nextLastLogs: SetLog[];
+  nextNotes: string[];
+}
+
+export interface ConfirmOutput {
+  message: string;
+  usage: LlmUsage;
+  degraded: boolean;
+  nextSuggestedWeightKg: number | null;
+  nextTargetReps: number[] | null;
+}
+
+/**
+ * Generative-UI confirm action (System Design §19, revised): the sets
+ * are already final — no graph, no extraction, just compose the reply
+ * the same way session-start composes an exercise intro
+ * (composeWithLlm + plain-text output), so quality matches the
+ * free-text path. Chosen over a canned template after direct feedback
+ * that a flat sentence read as a noticeably worse response than a
+ * typed report gets.
+ */
+export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput> {
+  const nextTargets: Targets | null = input.nextExercise
+    ? suggestTargets(input.nextExercise, input.nextLastLogs)
+    : null;
+
+  const systemPrompt = buildSystemPrompt(input.profile);
+  const turnPrompt = buildConfirmPrompt({
+    exercise: input.exercise,
+    confirmedSets: input.confirmedSets,
+    notes: input.notes,
+    nextExercise: input.nextExercise,
+    nextTargets,
+    nextLastLogs: input.nextLastLogs,
+    nextNotes: input.nextNotes,
+  });
+
+  const reply = await composeWithLlm(systemPrompt, turnPrompt);
+  if (reply) {
+    return {
+      message: reply.message,
+      usage: reply.usage,
+      degraded: false,
+      nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
+      nextTargetReps: nextTargets?.targetReps ?? null,
+    };
+  }
+
+  // No API key (local dev): a safe no-op so the pipeline stays
+  // exercisable without spending a token or losing the confirmed sets.
+  const weightKg = input.confirmedSets[0]?.weightKg ?? 0;
+  const reps = input.confirmedSets.map((s) => s.reps).join("/");
+  return {
+    message: `Logged ${weightKg}kg x ${reps}. Let's keep going!`,
+    usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 },
+    degraded: true,
+    nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
+    nextTargetReps: nextTargets?.targetReps ?? null,
+  };
 }

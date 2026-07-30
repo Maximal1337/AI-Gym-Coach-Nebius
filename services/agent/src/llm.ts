@@ -118,7 +118,7 @@ export async function composeConversationTurn(
   const model = new ChatGoogleGenerativeAI({
     model: llmConfig.model,
     apiKey: process.env.GEMINI_API_KEY,
-    maxOutputTokens: 1000,
+    maxOutputTokens: llmConfig.maxOutputTokens,
     temperature: llmConfig.temperature,
   });
 

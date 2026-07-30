@@ -88,6 +88,25 @@ export const conversationTurnInputSchema = z.object({
   nextNotes: z.array(z.string().max(1000)).max(50).default([]),
 });
 
+/**
+ * Generative-UI confirm action (System Design §19): the sets are already
+ * final (confirmed via button) — nothing here is extracted or decided by
+ * the model, it only composes the reply and gets the next exercise's
+ * deterministic target, same quality as the free-text path.
+ */
+export const confirmTurnInputSchema = z.object({
+  profile: coachProfileSchema,
+  exercise: exerciseSchema,
+  confirmedSets: z
+    .array(z.object({ weightKg: z.number().min(0).max(500), reps: z.number().int().min(0).max(200) }))
+    .min(1)
+    .max(20),
+  notes: z.array(z.string().max(1000)).max(50),
+  nextExercise: exerciseSchema.nullable(),
+  nextLastLogs: z.array(setLogSchema).max(200).default([]),
+  nextNotes: z.array(z.string().max(1000)).max(50).default([]),
+});
+
 export const conversationReplySchema = z.object({
   message: z.string().min(1),
   loggedSets: z
