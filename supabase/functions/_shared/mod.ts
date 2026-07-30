@@ -180,22 +180,35 @@ export async function lastLogsForExercise(
   // Any session counts toward progression, not just completed ones — an
   // abandoned/still-in-progress session's logged sets are still real
   // performance data the user shouldn't have to repeat.
-  const { data: lastSession } = await db
+  //
+  // The "most recent" pick is done here in code, not via a PostgREST
+  // order — .order(col, { referencedTable }) only sorts rows *within* an
+  // embedded array relationship, it does not order the outer set_logs
+  // query by its joined session's started_at (confirmed against a real
+  // production mix-up: it silently returned the OLDEST matching session
+  // instead of the newest). Fetching every candidate row and reducing to
+  // the max started_at in JS sidesteps that PostgREST limitation.
+  const { data: rows } = await db
     .from("set_logs")
     .select("session_id, workout_sessions!inner(user_id, started_at)")
     .eq("exercise_id", exerciseId)
-    .eq("workout_sessions.user_id", userId)
-    .order("started_at", {
-      referencedTable: "workout_sessions",
-      ascending: false,
-    })
-    .limit(1)
-    .maybeSingle();
-  if (!lastSession) return [];
+    .eq("workout_sessions.user_id", userId);
+  if (!rows || rows.length === 0) return [];
+  let lastSessionId: string | null = null;
+  let latestStartedAt = -Infinity;
+  for (const row of rows) {
+    const session = row.workout_sessions as unknown as { started_at: string };
+    const startedAt = new Date(session.started_at).getTime();
+    if (startedAt > latestStartedAt) {
+      latestStartedAt = startedAt;
+      lastSessionId = row.session_id as string;
+    }
+  }
+  if (!lastSessionId) return [];
   const { data } = await db
     .from("set_logs")
     .select("*")
-    .eq("session_id", lastSession.session_id)
+    .eq("session_id", lastSessionId)
     .eq("exercise_id", exerciseId)
     .order("set_no", { ascending: true });
   return data ?? [];
