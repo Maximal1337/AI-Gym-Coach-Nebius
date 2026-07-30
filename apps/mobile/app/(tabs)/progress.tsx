@@ -45,6 +45,11 @@ async function fetchSessionDetails(sessionId: string): Promise<SessionDetailExer
 }
 interface Plan { id: string; name: string }
 interface ExerciseRow { id: string; name: string; order_index: number }
+interface ParsedImportLog {
+  exerciseName: string; setNo: number; weightKg: number; reps: number;
+  matched: boolean; matchedPlanName: string | null;
+}
+interface ParsedImportSession { date: string | null; planName: string | null; logs: ParsedImportLog[] }
 interface RawLog {
   session_id: string;
   exercise_id: string;
@@ -131,7 +136,7 @@ export default function Progress() {
   const [importOpen, setImportOpen] = useState(false);
   const [recentOpen, setRecentOpen] = useState(false);
   const [importText, setImportText] = useState('');
-  const [importPreview, setImportPreview] = useState<{ sessions: unknown[] } | null>(null);
+  const [importPreview, setImportPreview] = useState<{ sessions: ParsedImportSession[] } | null>(null);
   const [busy, setBusy] = useState(false);
 
   const [plans, setPlans] = useState<Plan[]>([]);
@@ -211,7 +216,7 @@ export default function Progress() {
   async function importParse() {
     setBusy(true);
     try {
-      const res = await callFn<{ sessions: unknown[] }>('history-import', { action: 'parse', text: importText });
+      const res = await callFn<{ sessions: ParsedImportSession[] }>('history-import', { action: 'parse', text: importText });
       setImportPreview(res);
     } catch {
       Alert.alert(t('parseFailed'));
@@ -374,39 +379,84 @@ export default function Progress() {
         <Screen>
         <DismissKeyboardView style={{ padding: spacing.lg }}>
           <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
-            {t('importHistory')}
+            {importPreview ? t('confirmPlanTitle') : t('importHistory')}
           </Text>
-          <TextInput
-            multiline
-            value={importText}
-            onChangeText={setImportText}
-            placeholder={t('planPlaceholder')}
-            placeholderTextColor={theme.inkSoft}
-            style={{
-              flex: 1, backgroundColor: theme.surface, borderRadius: radius.card,
-              padding: spacing.md, color: theme.ink, textAlign: 'right', textAlignVertical: 'top',
-            }}
-          />
           {!importPreview ? (
-            <Pressable
-              disabled={busy || importText.length < 10}
-              onPress={() => { Keyboard.dismiss(); importParse(); }}
-              style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
-            >
-              <Text style={{ color: theme.onAccent, fontWeight: '700' }}>
-                {busy ? t('parsing') : t('importParse')}
-              </Text>
-            </Pressable>
+            <>
+              <TextInput
+                multiline
+                value={importText}
+                onChangeText={setImportText}
+                placeholder={t('planPlaceholder')}
+                placeholderTextColor={theme.inkSoft}
+                style={{
+                  flex: 1, backgroundColor: theme.surface, borderRadius: radius.card,
+                  padding: spacing.md, color: theme.ink, textAlign: 'right', textAlignVertical: 'top',
+                }}
+              />
+              <Pressable
+                disabled={busy || importText.length < 10}
+                onPress={() => { Keyboard.dismiss(); importParse(); }}
+                style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
+              >
+                <Text style={{ color: theme.onAccent, fontWeight: '700' }}>
+                  {busy ? t('parsing') : t('importParse')}
+                </Text>
+              </Pressable>
+            </>
           ) : (
-            <Pressable
-              disabled={busy}
-              onPress={importCommit}
-              style={{ backgroundColor: theme.success, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
-            >
-              <Text style={{ color: theme.bg, fontWeight: '700' }}>
-                {t('importCommit', { count: importPreview.sessions.length })}
-              </Text>
-            </Pressable>
+            <>
+              <ScrollView style={{ flex: 1 }}>
+                {importPreview.sessions.map((s, sIdx) => {
+                  const groups = new Map<string, ParsedImportLog[]>();
+                  for (const l of s.logs) {
+                    const key = l.matched ? `plan:${l.matchedPlanName ?? ''}` : 'unmatched';
+                    groups.set(key, [...(groups.get(key) ?? []), l]);
+                  }
+                  return (
+                    <View key={sIdx} style={{
+                      backgroundColor: theme.surface, borderRadius: radius.card,
+                      padding: spacing.md, marginBottom: spacing.sm,
+                    }}>
+                      <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: 'right' }}>
+                        {s.date && /^\d{4}-\d{2}-\d{2}/.test(s.date)
+                          ? new Date(s.date).toLocaleDateString('he-IL')
+                          : t('importNoDate')}
+                      </Text>
+                      {[...groups.entries()].map(([key, logs]) => (
+                        <View key={key} style={{ marginTop: 6 }}>
+                          <Text style={{
+                            color: key === 'unmatched' ? theme.critical : theme.accent,
+                            fontWeight: '700', fontSize: 12, textAlign: 'right', marginBottom: 2,
+                          }}>
+                            {key === 'unmatched'
+                              ? t('importUnmatched')
+                              : t('importMatchedTo', { name: logs[0]?.matchedPlanName ?? '' })}
+                          </Text>
+                          {logs.map((l, lIdx) => (
+                            <Text key={lIdx} style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+                              {l.exerciseName}: {l.weightKg}×{l.reps}
+                            </Text>
+                          ))}
+                        </View>
+                      ))}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              <Pressable
+                disabled={busy}
+                onPress={importCommit}
+                style={{ backgroundColor: theme.success, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.sm }}
+              >
+                <Text style={{ color: theme.bg, fontWeight: '700' }}>
+                  {t('importCommit', { count: importPreview.sessions.length })}
+                </Text>
+              </Pressable>
+              <Pressable disabled={busy} onPress={() => setImportPreview(null)} style={{ padding: spacing.md, alignItems: 'center' }}>
+                <Text style={{ color: theme.accent, fontWeight: '600' }}>{t('tryAgain')}</Text>
+              </Pressable>
+            </>
           )}
           <Pressable onPress={() => { setImportOpen(false); setImportPreview(null); }} style={{ padding: spacing.md, alignItems: 'center' }}>
             <Text style={{ color: theme.inkSoft }}>{t('cancel')}</Text>

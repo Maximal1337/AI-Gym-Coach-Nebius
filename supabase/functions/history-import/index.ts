@@ -24,7 +24,9 @@ Deno.serve(async (req) => {
     .eq("user_id", user.id)
     .eq("status", "active");
   const exerciseByName = new Map<string, { id: string; planId: string }>();
+  const planNameById = new Map<string, string>();
   for (const p of activePlans ?? []) {
+    planNameById.set(p.id, p.name);
     for (const e of (p.exercises as Array<{ id: string; name: string }>) ?? []) {
       exerciseByName.set(e.name, { id: e.id, planId: p.id });
     }
@@ -51,10 +53,15 @@ Deno.serve(async (req) => {
       });
     }
     const parsed = await res.json();
-    // Annotate matches so the app can show what will actually be imported.
+    // Annotate matches so the app can show, per log, which of the user's
+    // actual training plans it's about to be logged into (matching is by
+    // exercise name against the active plans, not the parser's free-text
+    // guess at a plan name) — otherwise a commit is a leap of faith.
     for (const s of parsed.sessions ?? []) {
       for (const l of s.logs ?? []) {
-        l.matched = exerciseByName.has(l.exerciseName);
+        const match = exerciseByName.get(l.exerciseName);
+        l.matched = !!match;
+        l.matchedPlanName = match ? planNameById.get(match.planId) ?? null : null;
       }
     }
     return json(200, parsed);
