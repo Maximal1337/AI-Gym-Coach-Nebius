@@ -216,17 +216,21 @@ export async function lastLogsForExercise(
 
 /**
  * Saved coach notes for this exercise (GYM-22 read side) — includes
- * general notes (exercise_id is null), which apply to every exercise.
+ * general notes (exercise_id is null), which apply to every exercise in
+ * the same plan. Scoped to planId too: a note made under one plan must
+ * not keep applying after that plan is archived and replaced.
  */
 export async function notesForExercise(
   db: SupabaseClient,
   userId: string,
+  planId: string,
   exerciseId: string,
 ): Promise<string[]> {
   const { data } = await db
     .from("coach_notes")
     .select("note")
     .eq("user_id", userId)
+    .eq("plan_id", planId)
     .or(`exercise_id.eq.${exerciseId},exercise_id.is.null`)
     .order("created_at", { ascending: false })
     .limit(10);
@@ -265,9 +269,9 @@ export async function runConversationExerciseTurn(
 
   const [lastLogs, notes, nextLastLogs, nextNotes] = await Promise.all([
     lastLogsForExercise(db, userId, exercise.id as string),
-    notesForExercise(db, userId, exercise.id as string),
+    notesForExercise(db, userId, planId, exercise.id as string),
     nextRow ? lastLogsForExercise(db, userId, nextRow.id as string) : Promise.resolve([]),
-    nextRow ? notesForExercise(db, userId, nextRow.id as string) : Promise.resolve([]),
+    nextRow ? notesForExercise(db, userId, planId, nextRow.id as string) : Promise.resolve([]),
   ]);
 
   const agentRes = await callAgent(
@@ -316,6 +320,7 @@ export async function runConversationExerciseTurn(
   ) {
     const { error } = await db.from("coach_notes").insert({
       user_id: userId,
+      plan_id: planId,
       exercise_id: turn.noteToSave.general ? null : exercise.id,
       note: turn.noteToSave.text,
     });
@@ -360,7 +365,7 @@ export async function runExerciseTurn(
       db.from("exercises").select("name, order_index").eq("plan_id", planId)
         .order("order_index", { ascending: true }),
       lastLogsForExercise(db, userId, exercise.id as string),
-      notesForExercise(db, userId, exercise.id as string),
+      notesForExercise(db, userId, planId, exercise.id as string),
     ]);
   if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
 
