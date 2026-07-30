@@ -148,6 +148,7 @@ export function exerciseToAgent(row: Record<string, unknown>) {
     restSec: row.rest_sec,
     intensity: row.intensity,
     warmup: row.warmup ?? null,
+    equipmentType: row.equipment_type ?? null,
   };
 }
 

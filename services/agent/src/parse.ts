@@ -2,6 +2,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { z } from "zod";
 import { llmConfig } from "./config.js";
 import { extractJson } from "./util.js";
+import { equipmentTypeSchema } from "./schema.js";
 
 /**
  * Paste-and-parse (GYM-26 / GYM-48): free text in, structured rows out.
@@ -24,6 +25,7 @@ export const parsedPlanSchema = z.object({
               restSec: z.number().int().min(0).max(1800),
               intensity: z.string().max(200),
               warmup: z.string().max(300).nullable(),
+              equipmentType: equipmentTypeSchema.nullable(),
             }),
           )
           .min(1)
@@ -75,7 +77,7 @@ export async function parsePlanText(text: string): Promise<ParsedPlan | null> {
   const res = await model.invoke([
     [
       "system",
-      "You convert pasted workout plans (any language) into JSON. Reply with ONLY valid JSON matching: {\"plans\":[{\"name\":string,\"exercises\":[{\"orderIndex\":number,\"name\":string,\"sets\":number,\"repRange\":\"6-10\",\"restSec\":number,\"intensity\":string,\"warmup\":string|null}]}]}. Each distinct workout (e.g. 'Workout A', 'Workout B') is one plan entry. Keep exercise names in the original language. restSec in seconds. If sets count is a range, use the higher number.",
+      "You convert pasted workout plans (any language) into JSON. Reply with ONLY valid JSON matching: {\"plans\":[{\"name\":string,\"exercises\":[{\"orderIndex\":number,\"name\":string,\"sets\":number,\"repRange\":\"6-10\",\"restSec\":number,\"intensity\":string,\"warmup\":string|null,\"equipmentType\":\"barbell\"|\"dumbbell\"|\"machine\"|\"cable\"|\"bodyweight\"|\"other\"|null}]}]}. Each distinct workout (e.g. 'Workout A', 'Workout B') is one plan entry. Keep exercise names in the original language. restSec in seconds. If sets count is a range, use the higher number. Infer equipmentType from the exercise name (e.g. \"Barbell Squat\"->barbell, \"Dumbbell Curl\"->dumbbell, \"Leg Press machine\"->machine, \"Cable Row\"->cable, \"Push-up\"->bodyweight) — this determines what weight increment the exercise can realistically jump by, so a plain unqualified free-weight exercise name that's ambiguous between barbell and dumbbell should still use your best guess from common gym conventions, not null; use null only when you genuinely cannot infer any equipment (e.g. \"stretch\", \"plank\").",
     ],
     ["human", text],
   ]);

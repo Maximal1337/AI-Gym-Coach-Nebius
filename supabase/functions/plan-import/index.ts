@@ -57,8 +57,10 @@ Deno.serve(async (req) => {
       exercises: Array<{
         orderIndex: number; name: string; sets: number; repRange: string;
         restSec: number; intensity: string; warmup: string | null;
+        equipmentType: string | null;
       }>;
     }>;
+    const EQUIPMENT_TYPES = ["barbell", "dumbbell", "machine", "cable", "bodyweight", "other"];
     if (!Array.isArray(plans) || plans.length === 0 || plans.length > 10) {
       return json(400, { error: "invalid_input" });
     }
@@ -93,7 +95,8 @@ Deno.serve(async (req) => {
           typeof e.repRange !== "string" || e.repRange.length > 20 ||
           !Number.isInteger(e.restSec) || e.restSec < 0 || e.restSec > 1800 ||
           typeof e.intensity !== "string" || e.intensity.length > 200 ||
-          (e.warmup !== null && (typeof e.warmup !== "string" || e.warmup.length > 300))
+          (e.warmup !== null && (typeof e.warmup !== "string" || e.warmup.length > 300)) ||
+          (e.equipmentType !== null && !EQUIPMENT_TYPES.includes(e.equipmentType))
         ) {
           return json(400, { error: "invalid_input" });
         }
@@ -132,6 +135,7 @@ Deno.serve(async (req) => {
           rest_sec: e.restSec,
           intensity: e.intensity,
           warmup: e.warmup,
+          equipment_type: e.equipmentType,
         })),
       );
       if (exError) {

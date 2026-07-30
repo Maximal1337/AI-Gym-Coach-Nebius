@@ -8,6 +8,7 @@ import { useTheme, spacing, radius } from '../theme';
 interface ParsedExercise {
   orderIndex: number; name: string; sets: number; repRange: string;
   restSec: number; intensity: string; warmup: string | null;
+  equipmentType: string | null;
 }
 interface ParsedPlan { name: string; exercises: ParsedExercise[] }
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { suggestTargets, parseRepRange, WEIGHT_INCREMENT_KG } from "./progression.js";
+import { suggestTargets, parseRepRange, incrementForEquipment, DEFAULT_WEIGHT_INCREMENT_KG } from "./progression.js";
 import type { Exercise, SetLog } from "@gymcoach/shared";
 
 const exercise: Exercise = {
@@ -13,6 +13,7 @@ const exercise: Exercise = {
   restSec: 120,
   intensity: "RIR 1-2",
   warmup: null,
+  equipmentType: "machine",
 };
 
 function logs(weightReps: Array<[number, number]>): SetLog[] {
@@ -40,11 +41,27 @@ test("no history -> baseline", () => {
   assert.equal(t.suggestedWeightKg, null);
 });
 
-test("all sets at range ceiling -> +2.5kg, reps reset to bottom", () => {
+test("all sets at range ceiling -> weight jumps by the equipment's real increment, reps reset to bottom", () => {
   const t = suggestTargets(exercise, logs([[50, 10], [50, 10], [50, 11]]));
   assert.equal(t.reason, "increase_weight");
-  assert.equal(t.suggestedWeightKg, 50 + WEIGHT_INCREMENT_KG);
+  assert.equal(t.suggestedWeightKg, 50 + incrementForEquipment("machine"));
   assert.deepEqual(t.targetReps, [6, 6, 6]);
+});
+
+test("incrementForEquipment: dumbbell/machine/cable jump more than a barbell; unset falls back to the default", () => {
+  assert.equal(incrementForEquipment("barbell"), 2.5);
+  assert.equal(incrementForEquipment("dumbbell"), 5);
+  assert.equal(incrementForEquipment("machine"), 5);
+  assert.equal(incrementForEquipment("cable"), 5);
+  assert.equal(incrementForEquipment(null), DEFAULT_WEIGHT_INCREMENT_KG);
+});
+
+test("weight-increase suggestion uses the exercise's own equipment type, not a flat constant", () => {
+  const barbellSquat: Exercise = { ...exercise, equipmentType: "barbell" };
+  const dumbbellCurl: Exercise = { ...exercise, equipmentType: "dumbbell" };
+  const atCeiling = logs([[50, 10], [50, 10], [50, 11]]);
+  assert.equal(suggestTargets(barbellSquat, atCeiling).suggestedWeightKg, 52.5);
+  assert.equal(suggestTargets(dumbbellCurl, atCeiling).suggestedWeightKg, 55);
 });
 
 test("sets below ceiling -> same weight, +1 rep, capped at ceiling", () => {

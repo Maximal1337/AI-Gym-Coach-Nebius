@@ -1,4 +1,4 @@
-import type { Exercise, SetLog } from "@gymcoach/shared";
+import type { EquipmentType, Exercise, SetLog } from "@gymcoach/shared";
 
 /**
  * Progressive-overload rules (GYM-19, deterministic node).
@@ -7,7 +7,8 @@ import type { Exercise, SetLog } from "@gymcoach/shared";
  * arithmetic:
  *  - Work within the exercise's rep range.
  *  - If every work set reached the top of the range at the same weight,
- *    increase weight (+2.5kg) and reset toward the bottom of the range.
+ *    increase weight (equipment-appropriate jump, see incrementForEquipment)
+ *    and reset toward the bottom of the range.
  *  - Otherwise keep the weight and target +1 rep on the weakest sets.
  *  - No history -> baseline session: find working weights, no targets.
  */
@@ -18,7 +19,28 @@ export interface Targets {
   reason: "baseline" | "increase_weight" | "add_reps" | "hold";
 }
 
-export const WEIGHT_INCREMENT_KG = 2.5;
+/** Fallback for an unrecognized/unset equipment type — matches a barbell's
+ * real-world smallest common jump (a 1.25kg plate per side). */
+export const DEFAULT_WEIGHT_INCREMENT_KG = 2.5;
+
+/**
+ * Real-world smallest jump each equipment type can actually give the user.
+ * Dumbbell racks step per-dumbbell (2-2.5kg), so the two-hand total jumps
+ * 4-5kg at a time — noticeably more than a barbell's per-side plate jump.
+ * Machines/cables are typically pin-loaded in coarser 5kg steps.
+ */
+const INCREMENT_BY_EQUIPMENT: Record<EquipmentType, number> = {
+  barbell: 2.5,
+  dumbbell: 5,
+  machine: 5,
+  cable: 5,
+  bodyweight: DEFAULT_WEIGHT_INCREMENT_KG,
+  other: DEFAULT_WEIGHT_INCREMENT_KG,
+};
+
+export function incrementForEquipment(equipmentType: EquipmentType | null): number {
+  return equipmentType ? INCREMENT_BY_EQUIPMENT[equipmentType] : DEFAULT_WEIGHT_INCREMENT_KG;
+}
 
 export function parseRepRange(repRange: string): { min: number; max: number } {
   const m = repRange.match(/^(\d+)\s*-\s*(\d+)$/);
@@ -46,7 +68,7 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
 
   if (allAtCeiling) {
     return {
-      suggestedWeightKg: topWeight + WEIGHT_INCREMENT_KG,
+      suggestedWeightKg: topWeight + incrementForEquipment(exercise.equipmentType),
       targetReps: Array(exercise.sets).fill(min),
       reason: "increase_weight",
     };

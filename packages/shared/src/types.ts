@@ -36,6 +36,8 @@ export interface TrainingPlan {
   createdAt: string;
 }
 
+export type EquipmentType = "barbell" | "dumbbell" | "machine" | "cable" | "bodyweight" | "other";
+
 export interface Exercise {
   id: string;
   planId: string;
@@ -46,6 +48,7 @@ export interface Exercise {
   restSec: number;
   intensity: string; // e.g. "RIR 1-2", "failure"
   warmup: string | null;
+  equipmentType: EquipmentType | null;
 }
 
 export interface WorkoutSession {

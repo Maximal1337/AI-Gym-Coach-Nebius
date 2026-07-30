@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+export const equipmentTypeSchema = z.enum([
+  "barbell",
+  "dumbbell",
+  "machine",
+  "cable",
+  "bodyweight",
+  "other",
+]);
+
 export const exerciseSchema = z.object({
   id: z.string(),
   planId: z.string(),
@@ -10,6 +19,7 @@ export const exerciseSchema = z.object({
   restSec: z.number().int().min(0).max(1800),
   intensity: z.string(),
   warmup: z.string().nullable(),
+  equipmentType: equipmentTypeSchema.nullable(),
 });
 
 export const setLogSchema = z.object({
