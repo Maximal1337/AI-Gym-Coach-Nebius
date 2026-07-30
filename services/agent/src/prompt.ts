@@ -86,7 +86,7 @@ export function buildTurnPrompt(
     formatHistory(lastLogs),
     "",
     targets.reason === "baseline"
-      ? "This is the first session for this exercise: help the user find working weights, focus on technique."
+      ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
       : `Computed target for today (already validated, present it as the goal): ${targets.suggestedWeightKg}kg, sets of ${targets.targetReps?.join(", ")} reps (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
   );
   if (notes.length > 0) {
@@ -159,7 +159,7 @@ export function buildConversationPrompt(params: {
       "Last time on this exercise:",
       formatHistory(nextLastLogs),
       nextTargets.reason === "baseline"
-        ? "This is the first session for this exercise: help the user find working weights, focus on technique."
+        ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
         : `Computed target for today (already validated, present it as the goal): ${nextTargets.suggestedWeightKg}kg, sets of ${nextTargets.targetReps?.join(", ")} reps.`,
     );
   } else if (!nextExercise) {
