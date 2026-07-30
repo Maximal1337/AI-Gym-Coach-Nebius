@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
       typeof exerciseId !== "string" ||
       typeof userMessage !== "string" ||
       userMessage.length < 1 ||
-      userMessage.length > 2000
+      userMessage.length > 200
     ) throw new Error();
   } catch {
     return json(400, { error: "invalid_input" });

@@ -289,6 +289,7 @@ export default function Chat() {
               value={draft}
               onChangeText={setDraft}
               multiline
+              maxLength={200}
               style={{
                 flex: 1, backgroundColor: theme.surface, borderRadius: radius.field,
                 padding: 10, color: theme.ink, textAlign: 'right', maxHeight: 100,
