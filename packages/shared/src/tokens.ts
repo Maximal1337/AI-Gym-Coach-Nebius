@@ -1,8 +1,13 @@
 /**
  * Design tokens — single source of truth, mirrored from the
  * "GymCoach AI" Claude Design project (claude.ai/design).
- * X-meets-WhatsApp direction: monochrome ground, one blue accent,
- * semantic colors reserved for meaning (PR hit / warning / destructive).
+ * X-meets-WhatsApp direction: monochrome ground, one accent (the app
+ * icon's lime), semantic colors reserved for meaning (PR hit / warning /
+ * destructive). Dark mode's ground is a cool charcoal rather than flat
+ * black, so the lime has the same material to glow against that it does
+ * in the icon. Light mode carries the same accent hue, but deeper and
+ * more saturated — full-brightness lime fails contrast as a solid fill
+ * on white.
  */
 
 export const palette = {
@@ -11,7 +16,7 @@ export const palette = {
     surface: "#F0F1F2",
     ink: "#0F1419",
     inkSoft: "#536471",
-    accent: "#1D7FE0",
+    accent: "#6EA100",
     onAccent: "#FFFFFF",
     rule: "#E5E7E8",
     success: "#1DA34A",
@@ -19,16 +24,16 @@ export const palette = {
     critical: "#D9342B",
   },
   dark: {
-    bg: "#000000",
-    surface: "#16181C",
-    ink: "#E7E9EA",
-    inkSoft: "#71767B",
-    accent: "#3B9EFF",
-    onAccent: "#06131F",
-    rule: "#2F3336",
-    success: "#4FBE73",
-    warning: "#D9A94C",
-    critical: "#F4756A",
+    bg: "#0A0B0D",
+    surface: "#15181D",
+    ink: "#F3F6EF",
+    inkSoft: "#8A9482",
+    accent: "#C8FF3D",
+    onAccent: "#0A0D11",
+    rule: "#23272E",
+    success: "#4FE38A",
+    warning: "#E3B23C",
+    critical: "#FF6B5C",
   },
 } as const;
 
