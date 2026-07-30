@@ -177,12 +177,14 @@ export async function lastLogsForExercise(
   userId: string,
   exerciseId: string,
 ): Promise<Record<string, unknown>[]> {
+  // Any session counts toward progression, not just completed ones — an
+  // abandoned/still-in-progress session's logged sets are still real
+  // performance data the user shouldn't have to repeat.
   const { data: lastSession } = await db
     .from("set_logs")
-    .select("session_id, workout_sessions!inner(user_id, started_at, status)")
+    .select("session_id, workout_sessions!inner(user_id, started_at)")
     .eq("exercise_id", exerciseId)
     .eq("workout_sessions.user_id", userId)
-    .eq("workout_sessions.status", "completed")
     .order("started_at", {
       referencedTable: "workout_sessions",
       ascending: false,

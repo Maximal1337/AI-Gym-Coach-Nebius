@@ -64,11 +64,31 @@ test("weight-increase suggestion uses the exercise's own equipment type, not a f
   assert.equal(suggestTargets(dumbbellCurl, atCeiling).suggestedWeightKg, 55);
 });
 
-test("sets below ceiling -> same weight, +1 rep, capped at ceiling", () => {
-  const t = suggestTargets(exercise, logs([[50, 10], [50, 8], [50, 7]]));
+test("no sets below ceiling but not all reached it -> same weight, +1 rep, capped", () => {
+  const t = suggestTargets(exercise, logs([[50, 9], [50, 8], [50, 7]]));
   assert.equal(t.reason, "add_reps");
   assert.equal(t.suggestedWeightKg, 50);
   assert.deepEqual(t.targetReps, [10, 9, 8]);
+});
+
+test("real regression: 12/11/7 against a 6-10 range increases weight, not a lower rep target (GYM feedback)", () => {
+  // The freshest (first) set already exceeded the range ceiling — later
+  // sets fatiguing is normal and shouldn't produce a target BELOW what
+  // was already achieved on set 1.
+  const t = suggestTargets(exercise, logs([[50, 12], [50, 11], [50, 7]]));
+  assert.equal(t.reason, "increase_weight");
+  assert.equal(t.suggestedWeightKg, 50 + incrementForEquipment("machine"));
+  assert.deepEqual(t.targetReps, [6, 6, 6]);
+});
+
+test("a non-first set that independently exceeded ceiling holds there, not reduced, even when weight doesn't increase", () => {
+  // First set (6) is below ceiling, so overall we're not ready for more
+  // weight yet — but set 3 (11) already passed the ceiling on its own
+  // and must never be walked backward to fit the range.
+  const t = suggestTargets(exercise, logs([[50, 6], [50, 6], [50, 11]]));
+  assert.equal(t.reason, "add_reps");
+  assert.equal(t.suggestedWeightKg, 50);
+  assert.deepEqual(t.targetReps, [7, 7, 11]);
 });
 
 test("set below range floor targets the floor, not floor-minus-something", () => {

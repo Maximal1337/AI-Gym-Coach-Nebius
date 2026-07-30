@@ -6,10 +6,17 @@ import type { EquipmentType, Exercise, SetLog } from "@gymcoach/shared";
  * Encodes the coach's training rules rather than trusting the LLM with
  * arithmetic:
  *  - Work within the exercise's rep range.
- *  - If every work set reached the top of the range at the same weight,
- *    increase weight (equipment-appropriate jump, see incrementForEquipment)
- *    and reset toward the bottom of the range.
- *  - Otherwise keep the weight and target +1 rep on the weakest sets.
+ *  - Readiness for more weight is judged from the freshest work set (the
+ *    first one performed at the top weight), not every set: later sets
+ *    naturally fatigue, and once the freshest set already clears the
+ *    range's ceiling, asking for MORE reps is impossible and asking for
+ *    FEWER reads as a regression — the plan's ceiling was reached, not
+ *    "not enough". So: first set at/above ceiling -> increase weight
+ *    (equipment-appropriate jump, see incrementForEquipment) and reset
+ *    toward the bottom of the range.
+ *  - Otherwise keep the weight and target +1 rep on sets below the
+ *    ceiling — a set that already independently reached the ceiling
+ *    holds there rather than being walked backward.
  *  - No history -> baseline session: find working weights, no targets.
  */
 
@@ -62,11 +69,10 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   const topWeight = Math.max(...ordered.map((l) => l.weightKg));
   const topWeightSets = ordered.filter((l) => l.weightKg === topWeight);
 
-  const allAtCeiling =
-    topWeightSets.length >= exercise.sets &&
-    topWeightSets.every((l) => l.reps >= max);
+  const readyForMoreWeight =
+    topWeightSets.length >= exercise.sets && (topWeightSets[0]?.reps ?? 0) >= max;
 
-  if (allAtCeiling) {
+  if (readyForMoreWeight) {
     return {
       suggestedWeightKg: topWeight + incrementForEquipment(exercise.equipmentType),
       targetReps: Array(exercise.sets).fill(min),
@@ -75,10 +81,12 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   }
 
   // Same weight, nudge each set toward one more rep — clamped into the
-  // range, so a set that fell below the floor targets the floor, not
-  // another out-of-range number.
+  // range, so a set that fell below the floor targets the floor. A set
+  // that already independently reached the ceiling holds there instead
+  // of being walked backward below what was actually already performed.
   const targetReps = Array.from({ length: exercise.sets }, (_, i) => {
     const prev = topWeightSets[i]?.reps ?? min;
+    if (prev >= max) return prev;
     return Math.min(Math.max(prev + 1, min), max);
   });
 
