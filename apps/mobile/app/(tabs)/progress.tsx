@@ -129,6 +129,7 @@ export default function Progress() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [monthCount, setMonthCount] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
+  const [recentOpen, setRecentOpen] = useState(false);
   const [importText, setImportText] = useState('');
   const [importPreview, setImportPreview] = useState<{ sessions: unknown[] } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -248,95 +249,120 @@ export default function Progress() {
   return (
     <Screen>
     <View style={{ flex: 1, padding: spacing.md }}>
-      <FlatList
-        data={sessions}
-        keyExtractor={(s) => s.id}
-        contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}
-        ListHeaderComponent={
-          <View>
-            <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
-              {t('progressTitle')}
-            </Text>
-            <View style={{ flexDirection: 'row-reverse', gap: spacing.sm, marginBottom: spacing.md }}>
-              {stat(sessions.length, t('totalWorkouts'))}
-              {stat(monthCount, t('thisMonth'))}
+      <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
+          {t('progressTitle')}
+        </Text>
+        <View style={{ flexDirection: 'row-reverse', gap: spacing.sm, marginBottom: spacing.md }}>
+          {stat(sessions.length, t('totalWorkouts'))}
+          {stat(monthCount, t('thisMonth'))}
+        </View>
+
+        <Pressable
+          onPress={() => setImportOpen(true)}
+          style={{ backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md, marginBottom: spacing.md }}
+        >
+          <Text style={{ color: theme.accent, fontWeight: '700', textAlign: 'right' }}>{t('importHistory')}</Text>
+          <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('importHistorySub')}</Text>
+        </Pressable>
+
+        {plans.length > 0 && (
+          <View style={{ marginBottom: spacing.lg }}>
+            <View style={{
+              flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm,
+            }}>
+              <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 14, textAlign: 'right' }}>
+                {t('exerciseProgress')}
+              </Text>
+              <Pressable
+                onPress={() => setRecentOpen(true)}
+                style={{
+                  paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill,
+                  borderWidth: 1, borderColor: theme.rule,
+                }}
+              >
+                <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 12 }}>{t('recentWorkouts')}</Text>
+              </Pressable>
             </View>
-
-            <Pressable
-              onPress={() => setImportOpen(true)}
-              style={{ backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md, marginBottom: spacing.md }}
-            >
-              <Text style={{ color: theme.accent, fontWeight: '700', textAlign: 'right' }}>{t('importHistory')}</Text>
-              <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('importHistorySub')}</Text>
-            </Pressable>
-
-            {plans.length > 0 && (
-              <View style={{ marginBottom: spacing.lg }}>
-                <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 14, textAlign: 'right', marginBottom: spacing.sm }}>
-                  {t('exerciseProgress')}
-                </Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
-                  <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                    {plans.map((p) => (
-                      <PlanTab key={p.id} label={p.name} active={p.id === selectedPlanId} onPress={() => setSelectedPlanId(p.id)} />
-                    ))}
-                  </View>
-                </ScrollView>
-                {exercises.map((e) => (
-                  <ExerciseProgress key={e.id} name={e.name} values={series[e.id] ?? []} />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
+              <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                {plans.map((p) => (
+                  <PlanTab key={p.id} label={p.name} active={p.id === selectedPlanId} onPress={() => setSelectedPlanId(p.id)} />
                 ))}
               </View>
-            )}
+            </ScrollView>
+            {exercises.map((e) => (
+              <ExerciseProgress key={e.id} name={e.name} values={series[e.id] ?? []} />
+            ))}
+          </View>
+        )}
+      </ScrollView>
 
-            <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 14, textAlign: 'right', marginBottom: spacing.sm }}>
+      <Modal visible={recentOpen} animationType="slide" onRequestClose={() => setRecentOpen(false)}>
+        <SafeAreaProvider>
+        <Screen>
+        <View style={{ flex: 1, padding: spacing.md }}>
+          <View style={{
+            flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md,
+          }}>
+            <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: 'right' }}>
               {t('recentWorkouts')}
             </Text>
-          </View>
-        }
-        ListEmptyComponent={
-          <Text style={{ color: theme.inkSoft, textAlign: 'right' }}>{t('noData')}</Text>
-        }
-        renderItem={({ item }) => {
-          const expanded = expandedId === item.id;
-          return (
-            <Pressable onPress={() => toggleExpand(item.id)} style={{ borderBottomWidth: 1, borderBottomColor: theme.rule }}>
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingVertical: 10 }}>
-                <View>
-                  <Text style={{ color: theme.ink, fontWeight: '600', textAlign: 'right' }}>
-                    {item.training_plans?.name ?? '—'}{item.source === 'imported' ? ' ⤵' : ''}
-                  </Text>
-                  <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
-                    {new Date(item.started_at).toLocaleDateString('he-IL')}
-                  </Text>
-                </View>
-                <Text style={{ color: theme.inkSoft, fontSize: 12, alignSelf: 'center', fontVariant: ['tabular-nums'] }}>
-                  {item.set_logs.length} sets
-                </Text>
-              </View>
-              {expanded && (
-                <View style={{ paddingBottom: spacing.md, paddingRight: spacing.sm }}>
-                  {loadingDetailsId === item.id ? (
-                    <ActivityIndicator size="small" color={theme.inkSoft} />
-                  ) : (details[item.id] ?? []).length === 0 ? (
-                    <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('noData')}</Text>
-                  ) : (
-                    (details[item.id] ?? []).map((e) => (
-                      <View key={e.name} style={{ marginBottom: 6 }}>
-                        <Text style={{ color: theme.ink, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
-                          {e.name}
-                        </Text>
-                        <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
-                          {e.sets.join(', ')} ק"ג
-                        </Text>
-                      </View>
-                    ))
-                  )}
-                </View>
-              )}
+            <Pressable onPress={() => setRecentOpen(false)}>
+              <Text style={{ color: theme.accent, fontWeight: '600' }}>{t('close')}</Text>
             </Pressable>
-          );
-        }}
-      />
+          </View>
+          <FlatList
+            data={sessions}
+            keyExtractor={(s) => s.id}
+            ListEmptyComponent={
+              <Text style={{ color: theme.inkSoft, textAlign: 'right' }}>{t('noData')}</Text>
+            }
+            renderItem={({ item }) => {
+              const expanded = expandedId === item.id;
+              return (
+                <Pressable onPress={() => toggleExpand(item.id)} style={{ borderBottomWidth: 1, borderBottomColor: theme.rule }}>
+                  <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingVertical: 10 }}>
+                    <View>
+                      <Text style={{ color: theme.ink, fontWeight: '600', textAlign: 'right' }}>
+                        {item.training_plans?.name ?? '—'}{item.source === 'imported' ? ' ⤵' : ''}
+                      </Text>
+                      <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
+                        {new Date(item.started_at).toLocaleDateString('he-IL')}
+                      </Text>
+                    </View>
+                    <Text style={{ color: theme.inkSoft, fontSize: 12, alignSelf: 'center', fontVariant: ['tabular-nums'] }}>
+                      {item.set_logs.length} sets
+                    </Text>
+                  </View>
+                  {expanded && (
+                    <View style={{ paddingBottom: spacing.md, paddingRight: spacing.sm }}>
+                      {loadingDetailsId === item.id ? (
+                        <ActivityIndicator size="small" color={theme.inkSoft} />
+                      ) : (details[item.id] ?? []).length === 0 ? (
+                        <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('noData')}</Text>
+                      ) : (
+                        (details[item.id] ?? []).map((e) => (
+                          <View key={e.name} style={{ marginBottom: 6 }}>
+                            <Text style={{ color: theme.ink, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
+                              {e.name}
+                            </Text>
+                            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+                              {e.sets.join(', ')} ק"ג
+                            </Text>
+                          </View>
+                        ))
+                      )}
+                    </View>
+                  )}
+                </Pressable>
+              );
+            }}
+          />
+        </View>
+        </Screen>
+        </SafeAreaProvider>
+      </Modal>
 
       <Modal visible={importOpen} animationType="slide" onRequestClose={() => setImportOpen(false)}>
         {/* Modal content can render on a separate native surface, so it
