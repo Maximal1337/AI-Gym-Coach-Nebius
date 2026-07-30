@@ -7,6 +7,9 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn, ApiError } from '../../src/lib/api';
 import { enqueueTurn, setPendingTurnHandlers, type TurnResult } from '../../src/lib/pendingTurn';
+import {
+  enqueueSessionStart, setPendingSessionStartHandlers, type SessionStartResult,
+} from '../../src/lib/pendingSessionStart';
 import { Screen } from '../../src/components/Screen';
 import { MarkdownText } from '../../src/components/MarkdownText';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
@@ -74,12 +77,25 @@ export default function Chat() {
     }
   }
 
+  function handleSessionStartResult(res: SessionStartResult) {
+    setSessionId(res.sessionId);
+    setCurrentExerciseId(res.exerciseId);
+    push('coach', withTarget(res.message, res.suggestedWeightKg, res.targetReps));
+  }
+
   // A message that failed to send over the network retries automatically
   // on reconnect (pendingTurn.ts) — wire its outcome back into this chat.
   useEffect(() => {
     setPendingTurnHandlers({ onDelivered: handleTurnResult, onFailed: coachError });
     return () => setPendingTurnHandlers(null);
   }, [sessionId, currentExerciseId]);
+
+  // Same resilience for starting a workout — the call most likely to still
+  // be in flight when the app gets backgrounded (Fly.io cold starts).
+  useEffect(() => {
+    setPendingSessionStartHandlers({ onDelivered: handleSessionStartResult, onFailed: coachError });
+    return () => setPendingSessionStartHandlers(null);
+  }, []);
 
   async function start(plan: Plan) {
     setBusy(true);
@@ -89,15 +105,19 @@ export default function Chat() {
         .from('exercises').select('id, name, sets, order_index')
         .eq('plan_id', plan.id).order('order_index');
       setExercises(data ?? []);
-      const res = await callFn<{
-        sessionId: string; exerciseId: string; message: string;
-        suggestedWeightKg: number | null; targetReps: number[] | null;
-      }>('session-start', { planId: plan.id });
-      setSessionId(res.sessionId);
-      setCurrentExerciseId(res.exerciseId);
-      push('coach', withTarget(res.message, res.suggestedWeightKg, res.targetReps));
+      handleSessionStartResult(
+        await callFn<SessionStartResult>('session-start', { planId: plan.id }),
+      );
     } catch (e) {
-      coachError(e);
+      if (e instanceof ApiError) {
+        coachError(e);
+      } else {
+        // A network-level failure, not a server rejection — queue it and
+        // retry on reconnect instead of just giving up (pendingSessionStart.ts).
+        // session-start is idempotent server-side, so retrying is safe.
+        await enqueueSessionStart({ planId: plan.id });
+        push('system', t('queuedOffline'));
+      }
     } finally {
       setBusy(false);
     }

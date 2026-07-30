@@ -69,12 +69,20 @@ Deno.serve(async (req) => {
   const sixHoursAgo = new Date(Date.now() - 6 * 3600_000).toISOString();
   const { data: existing } = await db
     .from("workout_sessions")
-    .select("id")
+    .select("id, intro_response")
     .eq("user_id", user.id)
     .eq("plan_id", plan.id)
     .eq("status", "in_progress")
     .gte("started_at", sixHoursAgo)
     .maybeSingle();
+
+  // A client that backgrounds mid-request (killing the fetch, common during
+  // Fly.io's cold-start window) and retries would otherwise pay for a
+  // second LLM call for the same logical action — replay the cached
+  // response instead of recomputing it whenever one's already on file.
+  if (existing?.intro_response) {
+    return json(200, { sessionId: existing.id, ...(existing.intro_response as Record<string, unknown>) });
+  }
 
   let sessionId = existing?.id as string | undefined;
   if (!sessionId) {
@@ -88,5 +96,8 @@ Deno.serve(async (req) => {
   }
 
   const turn = await runExerciseTurn(db, user.id, plan.id, firstExercise);
+  if (turn.status === 200) {
+    await db.from("workout_sessions").update({ intro_response: turn.body }).eq("id", sessionId);
+  }
   return json(turn.status, { sessionId, ...turn.body });
 });
