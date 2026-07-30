@@ -41,6 +41,13 @@ test("no history -> baseline", () => {
   assert.equal(t.suggestedWeightKg, null);
 });
 
+test("a logged weight of 0 is never trusted as a real working weight -> treated as baseline, not suggested as a target", () => {
+  const t = suggestTargets(exercise, logs([[0, 8], [0, 8], [0, 8]]));
+  assert.equal(t.reason, "baseline");
+  assert.equal(t.suggestedWeightKg, null);
+  assert.equal(t.targetReps, null);
+});
+
 test("all sets at range ceiling -> weight jumps by the equipment's real increment, reps reset to bottom", () => {
   const t = suggestTargets(exercise, logs([[50, 10], [50, 10], [50, 11]]));
   assert.equal(t.reason, "increase_weight");

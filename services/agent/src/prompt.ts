@@ -112,13 +112,14 @@ export function buildConversationPrompt(params: {
   notes: string[];
   userMessage: string;
   recentHistory: Array<{ from: "coach" | "me"; text: string }>;
+  currentTargets: Targets | null;
   nextExercise: Exercise | null;
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
 }): string {
   const {
     exercise, lastLogs, notes, userMessage, recentHistory,
-    nextExercise, nextTargets, nextLastLogs,
+    currentTargets, nextExercise, nextTargets, nextLastLogs,
   } = params;
   const lines: string[] = [
     `Current exercise: ${exercise.name}`,
@@ -126,6 +127,11 @@ export function buildConversationPrompt(params: {
     "Last time:",
     formatHistory(lastLogs),
   ];
+  if (currentTargets && currentTargets.suggestedWeightKg != null) {
+    lines.push(
+      `The weight this exercise was introduced with (before any renegotiation visible below) was ${currentTargets.suggestedWeightKg}kg.`,
+    );
+  }
   if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
   if (recentHistory.length > 0) {
     lines.push("", "Recent conversation, most recent last (for context, e.g. an agreed target):");
@@ -136,7 +142,7 @@ export function buildConversationPrompt(params: {
     `The user just said: "${userMessage}"`,
     "",
     `This exercise has ${exercise.sets} work sets. Work out how many of them are now accounted for, combining this message with anything already reported earlier in the recent conversation above (the user may report sets across more than one message) — then decide:`,
-    `- If ALL ${exercise.sets} work sets are now accounted for: extract every set's weight (kg) and reps, in order, into loggedSets (include sets reported in earlier messages too, not just this one). If one weight was stated for the whole exercise, use it for every set. Set advance=true.`,
+    `- If ALL ${exercise.sets} work sets are now accounted for: extract every set's weight (kg) and reps, in order, into loggedSets (include sets reported in earlier messages too, not just this one). If one weight was stated for the whole exercise, use it for every set. If the user reports reps but this message states no weight at all, use the weight already established for this exercise instead — either one the user negotiated in the conversation above, or otherwise the introduction weight given above. weightKg=0 is only correct for a genuinely bodyweight exercise with no weight ever mentioned; never use 0 just because this particular message omitted repeating an already-established weight. If no weight can be determined at all — not in this message, not negotiated above, and no introduction weight was given above — do NOT log 0kg: set advance=false, loggedSets=[], and ask the user what weight they used before logging anything. Otherwise set advance=true.`,
     "- If the message contains no numbers at all but clearly confirms finishing what was just discussed (e.g. \"done\", \"I did it\", \"finished\") AND the recent conversation already establishes a specific weight/rep target for every set (either the suggested target, or one the user negotiated), log that agreed target as loggedSets and set advance=true.",
     `- If only SOME of the ${exercise.sets} sets are accounted for and the user has not indicated they are stopping early: set advance=false and loggedSets=[]. Acknowledge what came in so far and ask for the remaining sets — do not advance on a partial report.`,
     "- If the user explicitly moves on early (e.g. \"let's skip the rest\", \"that's enough for this one\") with fewer than the full set count: log whatever sets were reported (may be fewer than the full count, or none) and set advance=true.",

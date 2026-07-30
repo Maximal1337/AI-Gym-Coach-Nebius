@@ -67,6 +67,16 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   const { min, max } = parseRepRange(exercise.repRange);
   const ordered = [...lastLogs].sort((a, b) => a.setNo - b.setNo);
   const topWeight = Math.max(...ordered.map((l) => l.weightKg));
+
+  // A logged weight of 0 isn't a real working weight (e.g. a report that
+  // got mis-extracted, or an exercise that was never actually assigned a
+  // load) — never build a suggestion on top of it. Treat it exactly like
+  // no history: ask the user for a starting weight instead of presenting
+  // "0kg" (or a trivial +2.5kg off of it) as if it were a real target.
+  if (topWeight <= 0) {
+    return { suggestedWeightKg: null, targetReps: null, reason: "baseline" };
+  }
+
   const topWeightSets = ordered.filter((l) => l.weightKg === topWeight);
 
   const readyForMoreWeight =

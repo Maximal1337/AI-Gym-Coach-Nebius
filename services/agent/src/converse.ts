@@ -48,6 +48,7 @@ export interface ConversationOutput {
 
 const stateSchema = z.object({
   input: z.custom<ConversationInput>(),
+  currentTargets: z.custom<Targets | null>().optional(),
   nextTargets: z.custom<Targets | null>().optional(),
   output: z.custom<ConversationOutput>().optional(),
 });
@@ -57,6 +58,11 @@ type GraphState = z.infer<typeof stateSchema>;
 async function targetsNode(state: GraphState): Promise<Partial<GraphState>> {
   const { input } = state;
   return {
+    // The target this exercise was introduced with (before any in-chat
+    // renegotiation) — given to the LLM as a reliable fallback so a
+    // reps-only report ("8, 8, 8") doesn't get logged at 0kg just
+    // because this particular message didn't repeat the weight.
+    currentTargets: suggestTargets(input.exercise, input.lastLogs),
     nextTargets: input.nextExercise
       ? suggestTargets(input.nextExercise, input.nextLastLogs)
       : null,
@@ -64,7 +70,7 @@ async function targetsNode(state: GraphState): Promise<Partial<GraphState>> {
 }
 
 async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
-  const { input, nextTargets } = state;
+  const { input, currentTargets, nextTargets } = state;
   const systemPrompt = buildSystemPrompt(input.profile);
   const turnPrompt = buildConversationPrompt({
     exercise: input.exercise,
@@ -72,6 +78,7 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
     notes: input.notes,
     userMessage: input.userMessage,
     recentHistory: input.recentHistory,
+    currentTargets: currentTargets ?? null,
     nextExercise: input.nextExercise,
     nextTargets: nextTargets ?? null,
     nextLastLogs: input.nextLastLogs,
