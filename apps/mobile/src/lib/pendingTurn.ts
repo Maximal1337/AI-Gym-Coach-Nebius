@@ -23,6 +23,8 @@ export interface TurnResult {
   advance: boolean;
   nextExerciseId: string | null;
   sessionComplete: boolean;
+  nextSuggestedWeightKg: number | null;
+  nextTargetReps: number[] | null;
 }
 
 const KEY = 'gymcoach.pending-turn.v1';

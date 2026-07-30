@@ -54,6 +54,7 @@
   "addWorkoutNoteTitle": "הערה לפעם הבאה?",
   "addWorkoutNoteSub": "אופציונלי — למשל \"לעשות חימום הליכה של 10 דק' לפני האימון\"",
   "noteSaveFailed": "שמירת ההערה נכשלה — נסה שוב",
+  "targetLine": "🎯 **יעד: {{weight}} ק\"ג × {{reps}}**",
   "workoutSummary": "סיכום האימון",
   "typing": "המאמן כותב…",
   "progressTitle": "התקדמות",

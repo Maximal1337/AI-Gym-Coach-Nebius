@@ -72,8 +72,17 @@ export default function Chat() {
     else push('system', t('coachUnavailable'));
   }
 
+  // The LLM composes messages in prose and can occasionally mistranscribe
+  // a number while doing so — appending the deterministic target (from
+  // progression.ts, never touched by the LLM) guarantees the number the
+  // user actually sees is correct, regardless of what the prose says.
+  function withTarget(message: string, weightKg: number | null, reps: number[] | null) {
+    if (weightKg == null || !reps || reps.length === 0) return message;
+    return `${message}\n\n${t('targetLine', { weight: weightKg, reps: reps.join('/') })}`;
+  }
+
   function handleTurnResult(res: TurnResult) {
-    push('coach', res.message);
+    push('coach', withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps));
     if (res.advance) {
       if (res.sessionComplete) void finish();
       else setCurrentExerciseId(res.nextExerciseId);
@@ -95,12 +104,13 @@ export default function Chat() {
         .from('exercises').select('id, name, sets, order_index')
         .eq('plan_id', plan.id).order('order_index');
       setExercises(data ?? []);
-      const res = await callFn<{ sessionId: string; exerciseId: string; message: string }>(
-        'session-start', { planId: plan.id },
-      );
+      const res = await callFn<{
+        sessionId: string; exerciseId: string; message: string;
+        suggestedWeightKg: number | null; targetReps: number[] | null;
+      }>('session-start', { planId: plan.id });
       setSessionId(res.sessionId);
       setCurrentExerciseId(res.exerciseId);
-      push('coach', res.message);
+      push('coach', withTarget(res.message, res.suggestedWeightKg, res.targetReps));
     } catch (e) {
       coachError(e);
     } finally {

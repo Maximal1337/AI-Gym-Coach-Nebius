@@ -34,6 +34,15 @@ export interface ConversationOutput {
   advance: boolean;
   usage: LlmUsage;
   degraded: boolean;
+  /**
+   * The deterministic target for the exercise the reply is introducing
+   * (null if there's no next exercise, or a baseline session). Returned
+   * separately from `message` because the LLM composes the message in
+   * prose and can occasionally mistranscribe a number while doing so —
+   * the client should render these, not parse them back out of the text.
+   */
+  nextSuggestedWeightKg: number | null;
+  nextTargetReps: number[] | null;
 }
 
 const stateSchema = z.object({
@@ -68,7 +77,15 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
   });
 
   const reply = await composeConversationTurn(systemPrompt, turnPrompt);
-  if (reply) return { output: reply };
+  if (reply) {
+    return {
+      output: {
+        ...reply,
+        nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
+        nextTargetReps: nextTargets?.targetReps ?? null,
+      },
+    };
+  }
 
   // No API key (local dev): a safe no-op so the pipeline stays
   // exercisable without spending a token or losing the user's report.
@@ -79,6 +96,8 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
       advance: true,
       usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 },
       degraded: true,
+      nextSuggestedWeightKg: null,
+      nextTargetReps: null,
     },
   };
 }

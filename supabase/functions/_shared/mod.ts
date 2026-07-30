@@ -300,6 +300,8 @@ export async function runConversationExerciseTurn(
       nextExerciseId: turn.advance ? (nextRow?.id ?? null) : exercise.id,
       sessionComplete: !!turn.advance && !nextRow,
       degraded: !!turn.degraded,
+      nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
+      nextTargetReps: turn.nextTargetReps ?? null,
     },
   };
 }
