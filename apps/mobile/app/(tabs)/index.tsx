@@ -12,6 +12,7 @@ import {
 } from '../../src/lib/pendingSessionStart';
 import { Screen } from '../../src/components/Screen';
 import { MarkdownText } from '../../src/components/MarkdownText';
+import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
@@ -29,6 +30,7 @@ export default function Chat() {
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [showConfetti, setShowConfetti] = useState(false);
   const list = useRef<FlatList>(null);
   const nextId = useRef(0);
 
@@ -186,6 +188,8 @@ export default function Chat() {
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
       setCurrentExerciseId(null);
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 2600);
     } catch (e) {
       // Keep the session so "finish" can be retried once back online —
       // clearing it here would strand an in_progress session server-side.
@@ -309,6 +313,7 @@ export default function Chat() {
         </View>
       )}
     </KeyboardAvoidingView>
+    <ConfettiBurst active={showConfetti} />
     </Screen>
   );
 }
