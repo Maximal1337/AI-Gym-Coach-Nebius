@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
+  ActivityIndicator, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -42,28 +42,6 @@ export default function Chat() {
   function push(from: Msg['from'], text: string) {
     setMsgs((m) => [...m, { id: String(nextId.current++), from, text }]);
     setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
-  }
-
-  async function saveNote(note: string, exerciseId: string | null) {
-    try {
-      await callFn('coach-note', { note, exerciseId: exerciseId ?? undefined });
-    } catch (e) {
-      // Same distinction as coachError: a server rejection vs. no connection at all.
-      Alert.alert(e instanceof ApiError ? t('noteSaveFailed') : t('coachUnavailable'));
-    }
-  }
-
-  // Alert.prompt is iOS-only, matching this app's current iOS-only scope.
-  function promptForNote(exerciseId: string | null) {
-    Alert.prompt(
-      exerciseId ? t('addExerciseNoteTitle') : t('addWorkoutNoteTitle'),
-      exerciseId ? t('addExerciseNoteSub') : t('addWorkoutNoteSub'),
-      [
-        { text: t('cancel'), style: 'cancel' },
-        { text: t('save'), onPress: (text?: string) => { if (text?.trim()) void saveNote(text.trim(), exerciseId); } },
-      ],
-      'plain-text',
-    );
   }
 
   function coachError(e: unknown) {
@@ -159,7 +137,6 @@ export default function Chat() {
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
       setCurrentExerciseId(null);
-      promptForNote(null);
     } catch (e) {
       // Keep the session so "finish" can be retried once back online —
       // clearing it here would strand an in_progress session server-side.
@@ -184,18 +161,9 @@ export default function Chat() {
           {t('chatTitle')}
         </Text>
         {inWorkout && currentEx && (
-          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
-              {currentEx.name} · {currentExPos}/{exercises.length}
-            </Text>
-            <Pressable
-              onPress={() => promptForNote(currentEx.id)}
-              hitSlop={8}
-              accessibilityLabel={t('addExerciseNoteTitle')}
-            >
-              <Text style={{ fontSize: 13 }}>📝</Text>
-            </Pressable>
-          </View>
+          <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+            {currentEx.name} · {currentExPos}/{exercises.length}
+          </Text>
         )}
       </View>
 

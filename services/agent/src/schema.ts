@@ -100,4 +100,11 @@ export const conversationReplySchema = z.object({
     .max(20)
     .default([]),
   advance: z.boolean(),
+  noteToSave: z
+    .object({
+      text: z.string().min(1).max(500),
+      general: z.boolean(),
+    })
+    .nullable()
+    .default(null),
 });

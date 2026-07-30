@@ -141,6 +141,8 @@ export function buildConversationPrompt(params: {
     `- If only SOME of the ${exercise.sets} sets are accounted for and the user has not indicated they are stopping early: set advance=false and loggedSets=[]. Acknowledge what came in so far and ask for the remaining sets — do not advance on a partial report.`,
     "- If the user explicitly moves on early (e.g. \"let's skip the rest\", \"that's enough for this one\") with fewer than the full set count: log whatever sets were reported (may be fewer than the full count, or none) and set advance=true.",
     "- Otherwise (a question, a request to change the target, reporting pain, general chat, nothing about performance): set advance=false and loggedSets=[]. Respond directly to what the user said — if they're proposing a different weight/reps, acknowledge and confirm the new target for this same exercise; if they report pain, follow the safety rules; do not introduce a new exercise.",
+    "",
+    "Separately from the above (a message can be both a report AND contain a note): if any part of what the user said is worth remembering for a future session — a technique cue (\"remind me to keep my elbows tucked\"), a request for next time (\"do a 10 minute warm-up walk before we start\"), something about how the exercise felt worth flagging next time — set noteToSave to {\"text\": <the note, written as a short second-person reminder, in the user's language>, \"general\": <true if it's about the workout/session as a whole or a future session, not this specific exercise; false if it's specific to this exercise>}. Acknowledge in your message that you'll remember it, the way a real trainer would. If there's nothing worth remembering, set noteToSave to null.",
   );
   if (nextExercise && nextTargets) {
     lines.push(
@@ -162,7 +164,7 @@ export function buildConversationPrompt(params: {
   }
   lines.push(
     "",
-    'Reply with ONLY valid JSON matching: {"message": string, "loggedSets": [{"weightKg": number, "reps": number}], "advance": boolean}. "message" is what the user reads — write it in your coaching voice per the rules and tone above, and always restate any numbers you record.',
+    'Reply with ONLY valid JSON matching: {"message": string, "loggedSets": [{"weightKg": number, "reps": number}], "advance": boolean, "noteToSave": {"text": string, "general": boolean} | null}. "message" is what the user reads — write it in your coaching voice per the rules and tone above, and always restate any numbers you record.',
   );
   return lines.join("\n");
 }

@@ -43,6 +43,7 @@ export interface ConversationOutput {
    */
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;
+  noteToSave: { text: string; general: boolean } | null;
 }
 
 const stateSchema = z.object({
@@ -98,6 +99,7 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
       degraded: true,
       nextSuggestedWeightKg: null,
       nextTargetReps: null,
+      noteToSave: null,
     },
   };
 }

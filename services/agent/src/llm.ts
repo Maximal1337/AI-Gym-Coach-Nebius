@@ -64,6 +64,7 @@ export interface ComposedConversationReply {
   advance: boolean;
   usage: LlmUsage;
   degraded: boolean;
+  noteToSave: { text: string; general: boolean } | null;
 }
 
 /**

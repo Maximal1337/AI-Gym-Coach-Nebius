@@ -294,6 +294,23 @@ export async function runConversationExerciseTurn(
     }
   }
 
+  // Notes surfaced naturally in conversation (GYM feedback): the LLM
+  // extracts these the same way it extracts a set report — no separate
+  // UI action from the user, just talking to the coach like a trainer.
+  if (
+    turn.noteToSave && typeof turn.noteToSave.text === "string" &&
+    turn.noteToSave.text.length > 0 && turn.noteToSave.text.length <= 500
+  ) {
+    const { error } = await db.from("coach_notes").insert({
+      user_id: userId,
+      exercise_id: turn.noteToSave.general ? null : exercise.id,
+      note: turn.noteToSave.text,
+    });
+    if (error) {
+      console.error("coach_notes insert failed", { userId, sessionId, error: error.message });
+    }
+  }
+
   return {
     status: 200,
     body: {
