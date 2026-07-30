@@ -92,6 +92,16 @@ export default function ManagePlans() {
         >
           <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('addNewPlanType')}</Text>
         </Pressable>
+
+        <Pressable
+          onPress={() => router.push('/plan-build')}
+          style={{
+            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
+            padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
+          }}
+        >
+          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('buildOwnPlan')}</Text>
+        </Pressable>
       </ScrollView>
     </Screen>
   );
