@@ -23,7 +23,7 @@ export default function ManagePlans() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   function confirmArchive(plan: Plan) {
-    Alert.alert(t('archiveConfirmTitle'), t('archiveConfirmBody', { name: plan.name }), [
+    Alert.alert(t('archiveConfirmTitle', { name: plan.name }), t('archiveConfirmBody', { name: plan.name }), [
       { text: t('cancel'), style: 'cancel' },
       {
         text: t('archivePlan'),
