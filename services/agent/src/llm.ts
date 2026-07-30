@@ -73,6 +73,42 @@ export interface ComposedConversationReply {
  * the narrative reply, so a turn stays at one LLM call regardless of
  * whether the user is reporting a set or renegotiating.
  */
+/**
+ * Genuine few-shot turns (not prose description of the rule) for the one
+ * failure mode that survived two rounds of tightening the prose instead:
+ * a pure note/reminder request getting logged as if it were a completed
+ * report. Modeled as real conversation turns — Gemini "having already
+ * produced" the correct JSON once tends to pin down an exact input-shape
+ * decision far more reliably than describing the rule in words, which
+ * this project already tried twice on this exact bug.
+ */
+const FEW_SHOT_TURNS: Array<["human" | "ai", string]> = [
+  [
+    "human",
+    'EXAMPLE (not the real conversation, just showing you the correct output shape) — user message: "תזכיר לי ללחוץ עד הסוף עם המשקולת" — no numbers, purely a reminder request, even though a target was already suggested earlier. What JSON do you output?',
+  ],
+  [
+    "ai",
+    '{"message":"רשמתי לי את זה — אזכיר לך בפעם הבאה! 💪","loggedSets":[],"advance":false,"noteToSave":{"text":"ללחוץ עד הסוף עם המשקולת","general":false}}',
+  ],
+  [
+    "human",
+    'EXAMPLE — user message: "סיימתי" — a bare standalone confirmation, nothing else, and a target of 16kg x 8/8/8 was already agreed. What JSON do you output?',
+  ],
+  [
+    "ai",
+    '{"message":"מעולה, רשמתי 16 קילו לשלושה סטים של 8! 💪","loggedSets":[{"weightKg":16,"reps":8},{"weightKg":16,"reps":8},{"weightKg":16,"reps":8}],"advance":true,"noteToSave":null}',
+  ],
+  [
+    "human",
+    'EXAMPLE — user message: "עשיתי 58 קילו ל-10, 10, ו-9 חזרות" — an actual numeric report. What JSON do you output?',
+  ],
+  [
+    "ai",
+    '{"message":"כל הכבוד! רשמתי 58 קילו ל-10, 10, 9 חזרות 💪","loggedSets":[{"weightKg":58,"reps":10},{"weightKg":58,"reps":10},{"weightKg":58,"reps":9}],"advance":true,"noteToSave":null}',
+  ],
+];
+
 export async function composeConversationTurn(
   systemPrompt: string,
   turnPrompt: string,
@@ -88,6 +124,7 @@ export async function composeConversationTurn(
 
   const res = await model.invoke([
     ["system", systemPrompt],
+    ...FEW_SHOT_TURNS,
     ["human", turnPrompt],
   ]);
 
