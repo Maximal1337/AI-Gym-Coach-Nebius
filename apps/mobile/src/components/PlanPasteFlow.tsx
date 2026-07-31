@@ -45,6 +45,7 @@ export function PlanPasteFlow({
           .from('exercises')
           .select('order_index, name, sets, rep_range, rest_sec, intensity, warmup, equipment_type')
           .eq('plan_id', editPlanId)
+          .eq('source', 'plan') // exclude session-only substitutions (System Design §20)
           .order('order_index'),
       ]);
       if (cancelled) return;

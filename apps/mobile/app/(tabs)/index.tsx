@@ -17,7 +17,6 @@ import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
-interface Exercise { id: string; name: string; sets: number; order_index: number }
 interface SuggestedAction { exerciseId: string; weightKg: number; targetReps: number[] }
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
 
@@ -34,9 +33,14 @@ export default function Chat() {
   const theme = useTheme();
   const { t } = useTranslation();
   const [plans, setPlans] = useState<Plan[]>([]);
-  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentExerciseId, setCurrentExerciseId] = useState<string | null>(null);
+  // Server-provided (System Design §20): the current exercise may be a
+  // session-only substitution the client never fetched, and its position
+  // can't be a fixed order_index lookup once the flow can reorder/defer —
+  // both come from the turn response, not derived from a local list.
+  const [currentExerciseName, setCurrentExerciseName] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [msgs, setMsgs] = useState<Msg[]>([]);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -84,6 +88,7 @@ export default function Chat() {
       ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps)
       : res.message;
     push('coach', text);
+    setProgress(res.progress ?? null);
     if (!res.advance) return; // same exercise still in play — leave pendingAction as-is
     if (res.sessionComplete) {
       setPendingAction(null);
@@ -91,6 +96,7 @@ export default function Chat() {
       return;
     }
     setCurrentExerciseId(res.nextExerciseId);
+    setCurrentExerciseName(res.nextExerciseName);
     setPendingAction(
       res.nextExerciseId && res.nextSuggestedWeightKg != null &&
         res.nextTargetReps && res.nextTargetReps.length > 0
@@ -149,10 +155,13 @@ export default function Chat() {
     setBusy(true);
     push('me', plan.name);
     try {
+      // session-start (unchanged by §20 — see the design doc's open
+      // questions) always begins at the first plan exercise, so its name
+      // is safe to read positionally here.
       const { data } = await supabase
-        .from('exercises').select('id, name, sets, order_index')
-        .eq('plan_id', plan.id).order('order_index');
-      setExercises(data ?? []);
+        .from('exercises').select('name')
+        .eq('plan_id', plan.id).eq('source', 'plan').order('order_index').limit(1);
+      setCurrentExerciseName(data?.[0]?.name ?? null);
       handleSessionStartResult(
         await callFn<SessionStartResult>('session-start', { planId: plan.id }),
       );
@@ -206,16 +215,17 @@ export default function Chat() {
   // stops an accidental early finish (e.g. an ambiguous coach message
   // after the previous exercise reading like a wrap-up).
   function confirmFinish() {
-    // currentExPos is 1-based and points at the exercise not yet
-    // reported, so it counts toward "remaining" too.
-    const remaining = exercises.length - currentExPos + 1;
+    // §20: "remaining" is derived from the server's attempted-count
+    // (progress), not a fixed order_index position — the flow can defer
+    // or reorder exercises, so a position-based count would drift.
+    const remaining = progress ? progress.total - progress.done : 0;
     if (remaining <= 0) {
       void finish();
       return;
     }
     Alert.alert(
       t('finishEarlyTitle'),
-      t('finishEarlySub', { count: remaining, name: currentEx?.name ?? '' }),
+      t('finishEarlySub', { count: remaining, name: currentExerciseName ?? '' }),
       [
         { text: t('cancel'), style: 'cancel' },
         { text: t('finishWorkout'), style: 'destructive', onPress: () => void finish() },
@@ -234,6 +244,8 @@ export default function Chat() {
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
       setCurrentExerciseId(null);
+      setCurrentExerciseName(null);
+      setProgress(null);
       setPendingAction(null);
       setShowConfetti(true);
       setTimeout(() => setShowConfetti(false), 2600);
@@ -247,8 +259,6 @@ export default function Chat() {
   }
 
   const inWorkout = sessionId !== null;
-  const currentEx = exercises.find((e) => e.id === currentExerciseId);
-  const currentExPos = currentEx ? exercises.findIndex((e) => e.id === currentEx.id) + 1 : 0;
 
   return (
     <Screen>
@@ -270,9 +280,10 @@ export default function Chat() {
           <Text style={{ color: theme.ink, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>
             {t('chatTitle')}
           </Text>
-          {inWorkout && currentEx && (
+          {inWorkout && currentExerciseName && (
             <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
-              {currentEx.name} · {currentExPos}/{exercises.length}
+              {currentExerciseName}
+              {progress ? ` · ${Math.min(progress.done + 1, progress.total)}/${progress.total}` : ''}
             </Text>
           )}
         </View>

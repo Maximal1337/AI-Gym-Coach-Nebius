@@ -1,19 +1,23 @@
-import { StateGraph, START, END } from "@langchain/langgraph";
-import { z } from "zod";
+import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { AIMessage, ToolMessage } from "@langchain/core/messages";
+import type { BaseMessageLike } from "@langchain/core/messages";
 import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
 import { suggestTargets, type Targets } from "./progression.js";
 import { buildSystemPrompt, buildConversationPrompt, buildConfirmPrompt } from "./prompt.js";
-import { composeConversationTurn, composeWithLlm, type LlmUsage } from "./llm.js";
+import { composeWithLlm, costCents, type LlmUsage } from "./llm.js";
+import { llmConfig } from "./config.js";
+import { buildTurnTools, emptyOutcome, type RemainingExerciseCandidate } from "./tools.js";
 
 /**
- * Free-text mid-workout turn graph (GYM-61/67):
- *   computeNextTargets (deterministic, only if a next exercise exists)
- *   -> composeReply (Gemini: interpret + narrate in one structured call)
- *
- * Kept as its own graph rather than folded into the intro-only
- * runCoachingTurn: that flow always introduces `input.exercise` and never
- * takes user free text, so mixing concerns there would make both paths
- * harder to reason about.
+ * Free-text mid-workout turn (GYM-61/67, revised for §20's tool-calling
+ * rework — see the System Design doc for why the original single
+ * JSON-blob call got replaced): a real multi-step agent loop instead of
+ * one structured-output guess. The model calls tools (logCompletedSets,
+ * stopExerciseEarly, deferCurrentExercise, switchToExercise,
+ * substituteExercise, saveNote), sees each one's real result, and only
+ * composes its final reply once it has nothing left to decide — which is
+ * what makes the reply and the resulting state structurally unable to
+ * disagree, unlike the old single-shot JSON output.
  */
 
 export interface ConversationInput {
@@ -23,54 +27,123 @@ export interface ConversationInput {
   notes: string[];
   userMessage: string;
   recentHistory: Array<{ from: "coach" | "me"; text: string }>;
+  /** §20: real structured progress on this exercise so far this session. */
+  thisSessionLogs: SetLog[];
   nextExercise: Exercise | null;
   nextLastLogs: SetLog[];
   nextNotes: string[];
+  /** §20: other fresh/deferred exercises the model may look up and switch to. */
+  remainingExercises: RemainingExerciseCandidate[];
 }
 
 export interface ConversationOutput {
   message: string;
-  loggedSets: Array<{ weightKg: number; reps: number }>;
-  advance: boolean;
   usage: LlmUsage;
   degraded: boolean;
+  /** This turn's newly reported sets only — the caller already knows what was logged before. */
+  loggedSets: Array<{ weightKg: number; reps: number }>;
+  stoppedEarly: boolean;
+  stopReason: string | null;
+  /** True when deferCurrentExercise was called (nothing logged, set aside). */
+  deferred: boolean;
+  deferReason: string | null;
+  /** Caller must still validate against real DB state before trusting this. */
+  switchToExerciseId: string | null;
+  substituteExercise: {
+    name: string;
+    sets: number;
+    repRange: string;
+    restSec: number;
+    equipmentType: Exercise["equipmentType"] | null;
+  } | null;
+  noteToSave: { text: string; general: boolean } | null;
   /**
-   * The deterministic target for the exercise the reply is introducing
-   * (null if there's no next exercise, or a baseline session). Returned
-   * separately from `message` because the LLM composes the message in
-   * prose and can occasionally mistranscribe a number while doing so —
-   * the client should render these, not parse them back out of the text.
+   * The target for whichever exercise is actually next — the default, or
+   * whatever switchToExercise/substituteExercise resolved to. Returned
+   * separately from `message` because the LLM composes prose and can
+   * occasionally mistranscribe a number — the client renders these, not
+   * numbers parsed back out of the text.
    */
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;
-  noteToSave: { text: string; general: boolean } | null;
 }
 
-const stateSchema = z.object({
-  input: z.custom<ConversationInput>(),
-  currentTargets: z.custom<Targets | null>().optional(),
-  nextTargets: z.custom<Targets | null>().optional(),
-  output: z.custom<ConversationOutput>().optional(),
-});
+const MAX_TOOL_ITERATIONS = 6;
 
-type GraphState = z.infer<typeof stateSchema>;
+/**
+ * Genuine few-shot exchange (not prose describing the rule) for the one
+ * failure mode that survived two rounds of tightening prose-only
+ * instructions before this project ever had tool-calling (§18.C): a pure
+ * note/reminder request getting logged as if it were a completed report.
+ * Tool-calling fixes *whether the final state agrees with the reply*, not
+ * whether the model's initial read of an ambiguous message is right — so
+ * this specific guardrail still needs its own demonstration, now shaped
+ * as a real tool call rather than a raw JSON example.
+ */
+const FEW_SHOT_MESSAGES: BaseMessageLike[] = [
+  [
+    "human",
+    'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "תזכיר לי ללחוץ עד הסוף עם המשקולת" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+  ],
+  new AIMessage({
+    content: "",
+    tool_calls: [
+      { id: "example_note_1", name: "saveNote", args: { text: "ללחוץ עד הסוף עם המשקולת", general: false } },
+    ],
+  }),
+  new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+  new AIMessage("רשמתי לי את זה — אזכיר לך בפעם הבאה! 💪"),
+  [
+    "human",
+    'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "המכונה של חזה בשיפוע התפנתה" ("the incline chest machine freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+  ],
+  new AIMessage({
+    content: "",
+    tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+  }),
+  new ToolMessage(
+    'id: ex_incline_chest_press — "לחיצת חזה בשיפוע חיובי עם משקולות" (previously deferred), 3 sets of 8-10 reps',
+    "example_switch_1",
+    "listAvailableExercises",
+  ),
+  new AIMessage({
+    content: "",
+    tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+  }),
+  new ToolMessage(
+    "Switching to לחיצת חזה בשיפוע חיובי עם משקולות (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+    "example_switch_2",
+    "switchToExercise",
+  ),
+  new AIMessage("מעולה! אז בוא ננצל את ההזדמנות ונחזור לתרגיל הקודם שרצינו לעשות: לחיצת חזה בשיפוע חיובי עם משקולות. היעד שלך: 21 קילו ל-10, 10, 10 חזרות 🎯"),
+];
 
-async function targetsNode(state: GraphState): Promise<Partial<GraphState>> {
-  const { input } = state;
-  return {
-    // The target this exercise was introduced with (before any in-chat
-    // renegotiation) — given to the LLM as a reliable fallback so a
-    // reps-only report ("8, 8, 8") doesn't get logged at 0kg just
-    // because this particular message didn't repeat the weight.
-    currentTargets: suggestTargets(input.exercise, input.lastLogs),
-    nextTargets: input.nextExercise
-      ? suggestTargets(input.nextExercise, input.nextLastLogs)
-      : null,
-  };
-}
+export async function runConversationTurn(input: ConversationInput): Promise<ConversationOutput> {
+  const currentTargets = suggestTargets(input.exercise, input.lastLogs);
+  const defaultNextTargets: Targets | null = input.nextExercise
+    ? suggestTargets(input.nextExercise, input.nextLastLogs)
+    : null;
 
-async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
-  const { input, currentTargets, nextTargets } = state;
+  if (!process.env.GEMINI_API_KEY) {
+    // No API key (local dev): a safe no-op so the pipeline stays
+    // exercisable without spending a token or losing the user's report.
+    return {
+      message: "Got it — recorded. Let's keep going!",
+      usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 },
+      degraded: true,
+      loggedSets: [],
+      stoppedEarly: false,
+      stopReason: null,
+      deferred: false,
+      deferReason: null,
+      switchToExerciseId: null,
+      substituteExercise: null,
+      noteToSave: null,
+      nextSuggestedWeightKg: null,
+      nextTargetReps: null,
+    };
+  }
+
   const systemPrompt = buildSystemPrompt(input.profile);
   const turnPrompt = buildConversationPrompt({
     exercise: input.exercise,
@@ -78,52 +151,99 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
     notes: input.notes,
     userMessage: input.userMessage,
     recentHistory: input.recentHistory,
-    currentTargets: currentTargets ?? null,
+    currentTargets,
+    thisSessionLogs: input.thisSessionLogs,
     nextExercise: input.nextExercise,
-    nextTargets: nextTargets ?? null,
+    nextTargets: defaultNextTargets,
     nextLastLogs: input.nextLastLogs,
   });
 
-  const reply = await composeConversationTurn(systemPrompt, turnPrompt);
-  if (reply) {
-    return {
-      output: {
-        ...reply,
-        nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
-        nextTargetReps: nextTargets?.targetReps ?? null,
-      },
-    };
+  const outcome = emptyOutcome();
+  const tools = buildTurnTools(
+    { exercise: input.exercise, thisSessionLogs: input.thisSessionLogs, remainingExercises: input.remainingExercises },
+    outcome,
+  );
+  const toolsByName = new Map<string, (typeof tools)[number]>(tools.map((t) => [t.name, t]));
+
+  const model = new ChatGoogleGenerativeAI({
+    model: llmConfig.model,
+    apiKey: process.env.GEMINI_API_KEY,
+    maxOutputTokens: llmConfig.maxOutputTokens,
+    temperature: llmConfig.temperature,
+  }).bindTools(tools);
+
+  const messages: BaseMessageLike[] = [
+    ["system", systemPrompt],
+    ...FEW_SHOT_MESSAGES,
+    ["human", turnPrompt],
+  ];
+
+  let tokensInput = 0;
+  let tokensOutput = 0;
+  let finalMessage = "";
+
+  for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
+    const res = await model.invoke(messages);
+    tokensInput += res.usage_metadata?.input_tokens ?? 0;
+    tokensOutput += res.usage_metadata?.output_tokens ?? 0;
+
+    if (!res.tool_calls || res.tool_calls.length === 0) {
+      finalMessage = typeof res.content === "string" ? res.content : JSON.stringify(res.content);
+      break;
+    }
+
+    messages.push(res);
+    for (const call of res.tool_calls) {
+      const toolFn = toolsByName.get(call.name);
+      let resultText: string;
+      if (!toolFn) {
+        resultText = `Unknown tool: ${call.name}`;
+      } else {
+        try {
+          resultText = (await toolFn.invoke(call.args)) as string;
+        } catch (e) {
+          resultText = `Invalid arguments — ${(e as Error).message}. Try again with corrected arguments.`;
+        }
+      }
+      messages.push(new ToolMessage(resultText, call.id ?? "", call.name));
+    }
+
+    // Ran out of iterations without a final text reply — compose a safe
+    // fallback rather than returning nothing to the user.
+    if (i === MAX_TOOL_ITERATIONS - 1) {
+      finalMessage = "Got it — recorded. Let's keep going!";
+    }
   }
 
-  // No API key (local dev): a safe no-op so the pipeline stays
-  // exercisable without spending a token or losing the user's report.
+  // Whichever exercise is actually next: an explicit switch/substitute
+  // override, or the default already computed above.
+  let nextSuggestedWeightKg = defaultNextTargets?.suggestedWeightKg ?? null;
+  let nextTargetReps = defaultNextTargets?.targetReps ?? null;
+  if (outcome.switchTarget) {
+    const t = suggestTargets(outcome.switchTarget.exercise, outcome.switchTarget.lastLogs);
+    nextSuggestedWeightKg = t.suggestedWeightKg;
+    nextTargetReps = t.targetReps;
+  } else if (outcome.substituteExercise) {
+    // Brand-new exercise, no history — always baseline, nothing to suggest.
+    nextSuggestedWeightKg = null;
+    nextTargetReps = null;
+  }
+
   return {
-    output: {
-      message: "Got it — recorded. Let's keep going!",
-      loggedSets: [],
-      advance: true,
-      usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 },
-      degraded: true,
-      nextSuggestedWeightKg: null,
-      nextTargetReps: null,
-      noteToSave: null,
-    },
+    message: finalMessage,
+    usage: { tokensInput, tokensOutput, costCents: costCents(tokensInput, tokensOutput) },
+    degraded: false,
+    loggedSets: outcome.loggedSets,
+    stoppedEarly: outcome.stoppedEarly,
+    stopReason: outcome.stopReason,
+    deferred: outcome.deferred,
+    deferReason: outcome.deferReason,
+    switchToExerciseId: outcome.switchToExerciseId,
+    substituteExercise: outcome.substituteExercise,
+    noteToSave: outcome.noteToSave,
+    nextSuggestedWeightKg,
+    nextTargetReps,
   };
-}
-
-const graph = new StateGraph(stateSchema)
-  .addNode("targets", targetsNode)
-  .addNode("compose", composeNode)
-  .addEdge(START, "targets")
-  .addEdge("targets", "compose")
-  .addEdge("compose", END)
-  .compile();
-
-export async function runConversationTurn(
-  input: ConversationInput,
-): Promise<ConversationOutput> {
-  const result = await graph.invoke({ input });
-  return result.output!;
 }
 
 export interface ConfirmInput {
@@ -134,6 +254,8 @@ export interface ConfirmInput {
   nextExercise: Exercise | null;
   nextLastLogs: SetLog[];
   nextNotes: string[];
+  /** §20: nextExercise is being resurfaced from the deferred pool. */
+  isRevisit?: boolean;
 }
 
 export interface ConfirmOutput {
@@ -151,7 +273,8 @@ export interface ConfirmOutput {
  * (composeWithLlm + plain-text output), so quality matches the
  * free-text path. Chosen over a canned template after direct feedback
  * that a flat sentence read as a noticeably worse response than a
- * typed report gets.
+ * typed report gets. Unaffected by the §20 tool-calling rework — there's
+ * no ambiguity here for a tool loop to help resolve.
  */
 export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput> {
   const nextTargets: Targets | null = input.nextExercise
@@ -167,6 +290,7 @@ export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput
     nextTargets,
     nextLastLogs: input.nextLastLogs,
     nextNotes: input.nextNotes,
+    isRevisit: input.isRevisit ?? false,
   });
 
   const reply = await composeWithLlm(systemPrompt, turnPrompt);

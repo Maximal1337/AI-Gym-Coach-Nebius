@@ -62,6 +62,22 @@ export const turnInputSchema = z.object({
 });
 
 /**
+ * §20 (tool-calling revision): a candidate the model can look up via the
+ * `listAvailableExercises` tool and pick as next instead of the
+ * deterministic default. Carries full data (not just id/name) so the tool
+ * result can include a real computed target — the whole turn resolves in
+ * one loop, no bolted-on second call — but this data only ever reaches
+ * the model's context if it actually calls the tool, keeping an ordinary
+ * set-report turn exactly as lean as before (§20's cost story).
+ */
+export const remainingExerciseSchema = z.object({
+  exercise: exerciseSchema,
+  lastLogs: z.array(setLogSchema).max(200),
+  notes: z.array(z.string().max(1000)).max(50),
+  deferred: z.boolean(),
+});
+
+/**
  * Free-text mid-workout turn (GYM-61/67): the user reports what they
  * actually did (which may diverge from the suggested target) or asks to
  * renegotiate it. `recentHistory` gives the model short-term memory of
@@ -83,9 +99,19 @@ export const conversationTurnInputSchema = z.object({
     )
     .max(12)
     .default([]),
+  // §20 (tool-calling revision): real, structured progress on the CURRENT
+  // exercise this session — replaces asking the model to reconstruct
+  // partial completion by re-reading `recentHistory` prose, the exact
+  // fragility that motivated the tool-calling rework in the first place.
+  thisSessionLogs: z.array(setLogSchema).max(20).default([]),
   nextExercise: exerciseSchema.nullable(),
   nextLastLogs: z.array(setLogSchema).max(200).default([]),
   nextNotes: z.array(z.string().max(1000)).max(50).default([]),
+  // Dynamic session orchestration (§20): other fresh/deferred exercises the
+  // model may look up (via the listAvailableExercises tool) and pick as
+  // next instead of `nextExercise` (the deterministic default) — only
+  // when the user's message actually asks for a change.
+  remainingExercises: z.array(remainingExerciseSchema).max(30).default([]),
 });
 
 /**
@@ -105,25 +131,47 @@ export const confirmTurnInputSchema = z.object({
   nextExercise: exerciseSchema.nullable(),
   nextLastLogs: z.array(setLogSchema).max(200).default([]),
   nextNotes: z.array(z.string().max(1000)).max(50).default([]),
+  // §20: whether `nextExercise` is being resurfaced from the deferred pool
+  // rather than introduced for the first time — changes how it's phrased.
+  isRevisit: z.boolean().default(false),
 });
 
-export const conversationReplySchema = z.object({
-  message: z.string().min(1),
-  loggedSets: z
-    .array(
-      z.object({
-        weightKg: z.number().min(0).max(500),
-        reps: z.number().int().min(0).max(200),
-      }),
-    )
-    .max(20)
-    .default([]),
-  advance: z.boolean(),
-  noteToSave: z
-    .object({
-      text: z.string().min(1).max(500),
-      general: z.boolean(),
-    })
-    .nullable()
-    .default(null),
+/**
+ * §20 (tool-calling revision): argument schemas for each tool the
+ * free-text turn's agent loop can call. Each one is both the JSON-schema
+ * handed to Gemini's native function-calling API (via `tool()`) AND the
+ * validator run on the arguments it actually sends back — the same
+ * "never trust a hallucinated value" discipline as the rest of this
+ * codebase, just applied per tool call instead of per JSON field.
+ */
+export const logCompletedSetsArgsSchema = z.object({
+  sets: z
+    .array(z.object({ weightKg: z.number().min(0).max(500), reps: z.number().int().min(0).max(200) }))
+    .min(1)
+    .max(20),
+});
+
+export const stopExerciseEarlyArgsSchema = z.object({
+  reason: z.string().max(300).nullable().default(null),
+});
+
+export const deferCurrentExerciseArgsSchema = z.object({
+  reason: z.string().max(300).nullable().default(null),
+});
+
+export const switchToExerciseArgsSchema = z.object({
+  exerciseId: z.string(),
+});
+
+export const substituteExerciseArgsSchema = z.object({
+  name: z.string().min(1).max(200),
+  sets: z.number().int().min(1).max(20),
+  repRange: z.string().min(1).max(20),
+  restSec: z.number().int().min(0).max(1800),
+  equipmentType: equipmentTypeSchema.nullable(),
+});
+
+export const saveNoteArgsSchema = z.object({
+  text: z.string().min(1).max(500),
+  general: z.boolean(),
 });

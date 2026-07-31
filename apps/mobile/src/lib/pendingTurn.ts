@@ -22,9 +22,12 @@ export interface TurnResult {
   message: string;
   advance: boolean;
   nextExerciseId: string | null;
+  /** §20: the current/next exercise may be a session-only substitution the client has never fetched — carry its name so the header doesn't need a lookup that can miss. */
+  nextExerciseName: string | null;
   sessionComplete: boolean;
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;
+  progress: { done: number; total: number } | null;
 }
 
 const KEY = 'gymcoach.pending-turn.v1';

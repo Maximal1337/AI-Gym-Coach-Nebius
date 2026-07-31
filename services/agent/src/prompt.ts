@@ -114,8 +114,10 @@ export function buildConfirmPrompt(params: {
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
   nextNotes: string[];
+  /** §20: nextExercise is being resurfaced from the deferred pool, not introduced fresh. */
+  isRevisit?: boolean;
 }): string {
-  const { exercise, confirmedSets, notes, nextExercise, nextTargets, nextLastLogs, nextNotes } = params;
+  const { exercise, confirmedSets, notes, nextExercise, nextTargets, nextLastLogs, nextNotes, isRevisit } = params;
   const setsDesc = confirmedSets.map((s) => `${s.weightKg}kg x ${s.reps}`).join(", ");
   const lines: string[] = [
     `The user just confirmed they completed ${exercise.name}: ${setsDesc}. This came from a quick-confirm UI button, not typed text — there is nothing to interpret or extract, these numbers are already final and logged. Restate them exactly; never alter them.`,
@@ -125,7 +127,9 @@ export function buildConfirmPrompt(params: {
   if (nextExercise && nextTargets) {
     lines.push(
       "",
-      `Then weave in a CLEAR introduction to the next exercise: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`,
+      isRevisit
+        ? `Then weave in a CLEAR note that you're coming back to a deferred exercise: ${nextExercise.name} — say plainly that this is the one that got put off earlier, not a brand-new exercise. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`
+        : `Then weave in a CLEAR introduction to the next exercise: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`,
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
@@ -149,11 +153,55 @@ export function buildConfirmPrompt(params: {
 }
 
 /**
- * Free-text mid-workout turn (GYM-61/67): interpret what the user just
- * said about the current exercise, decide whether it's a completed
- * report (advance) or something else (renegotiation, a question, an
- * issue), and — if advancing and another exercise follows — weave in its
- * introduction using an already-computed (deterministic) target.
+ * §20 follow-up compose-only call: used only when a free-text turn's
+ * chosen next exercise diverges from the deterministic default it was
+ * given full targets for — that first reply deliberately doesn't state
+ * numbers for the override (it has none), so this composes the short
+ * standalone introduction with the numbers now that they're known.
+ */
+export function buildOrchestrationIntroPrompt(params: {
+  isRevisit: boolean;
+  deferReason: string | null;
+  nextExercise: Exercise;
+  nextTargets: Targets;
+  nextLastLogs: SetLog[];
+  nextNotes: string[];
+}): string {
+  const { isRevisit, deferReason, nextExercise, nextTargets, nextLastLogs, nextNotes } = params;
+  const lines: string[] = [
+    isRevisit
+      ? `The user is coming back to ${nextExercise.name}, an exercise deferred earlier this session${deferReason ? ` (reason given at the time: "${deferReason}")` : ""}. Write a short note that plainly says you're returning to it — not introducing it as brand new — then its target.`
+      : `The user just asked to switch to a different exercise: ${nextExercise.name}, in place of what was originally planned. Write a short, natural acknowledgment of the switch, then its target.`,
+    `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
+    nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
+    "Last time on this exercise:",
+    formatHistory(nextLastLogs),
+    nextTargets.reason === "baseline"
+      ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
+      : `Computed target for today (already validated, present it as the goal): ${nextTargets.suggestedWeightKg}kg, sets of ${nextTargets.targetReps?.join(", ")} reps.`,
+  ];
+  if (nextNotes.length > 0) lines.push("", "Saved notes about this exercise:", ...nextNotes.map((n) => `- ${n}`));
+  lines.push(
+    "",
+    "Do not use any wrap-up/completion language — there is more workout left right now.",
+    "Write the message directly as plain text (not JSON), in your coaching voice per the rules and tone above, keeping it brief since this follows directly after another message in the same turn.",
+  );
+  return lines.join("\n");
+}
+
+/**
+ * Free-text mid-workout turn (GYM-61/67, revised for §20's tool-calling
+ * rework): describes the situation; the *decisions* — did they finish,
+ * did they stop early, are they deferring/switching/substituting, is
+ * there a note to save — are made by calling tools (see llm.ts's tool
+ * definitions), not by filling in a JSON contract. Tool descriptions
+ * carry most of the "when to call what" instructions; this prompt only
+ * covers what tool schemas can't: situational context, and the one
+ * genuinely ambiguous judgment call (note vs. completion) that survived
+ * two rounds of prose-only tightening before (§18.C) — tool-calling
+ * fixes *whether the result is internally consistent*, not whether the
+ * model's initial read of an ambiguous message is correct, so that
+ * specific guardrail still earns its own explicit callout here.
  */
 export function buildConversationPrompt(params: {
   exercise: Exercise;
@@ -162,13 +210,14 @@ export function buildConversationPrompt(params: {
   userMessage: string;
   recentHistory: Array<{ from: "coach" | "me"; text: string }>;
   currentTargets: Targets | null;
+  thisSessionLogs: SetLog[];
   nextExercise: Exercise | null;
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
 }): string {
   const {
     exercise, lastLogs, notes, userMessage, recentHistory,
-    currentTargets, nextExercise, nextTargets, nextLastLogs,
+    currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs,
   } = params;
   const lines: string[] = [
     `Current exercise: ${exercise.name}`,
@@ -181,6 +230,11 @@ export function buildConversationPrompt(params: {
       `The weight this exercise was introduced with (before any renegotiation visible below) was ${currentTargets.suggestedWeightKg}kg.`,
     );
   }
+  lines.push(
+    thisSessionLogs.length > 0
+      ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `${l.weightKg}kg x ${l.reps}`).join(", ")}.`
+      : `Nothing logged yet this session for this exercise (0 of ${exercise.sets} work sets).`,
+  );
   if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
   if (recentHistory.length > 0) {
     lines.push("", "Recent conversation, most recent last (for context, e.g. an agreed target):");
@@ -190,21 +244,25 @@ export function buildConversationPrompt(params: {
     "",
     `The user just said: "${userMessage}"`,
     "",
-    "STOP — check this FIRST, before anything else below: is this message a pure request/reminder for the future (\"remind me...\", \"note that...\", \"write down...\", \"don't forget...\", \"next time...\") with NOTHING in it describing what the user actually did this set — no numbers, and no plain statement like \"done\"/\"finished\" that stands on its own without needing a reminder framing? If so, this is ONLY a note. It is NOT a completion, NOT a confirmation, and must NEVER be logged as if the suggested target was performed — even though it names this exercise, even though a target was already suggested. Set advance=false, loggedSets=[], and skip straight to the noteToSave instructions below. Do this check even if the message sounds positive or on-topic — mentioning the exercise is not the same as reporting having done it.",
+    "STOP — check this FIRST, before anything else: is this message a pure request/reminder for the future (\"remind me...\", \"note that...\", \"write down...\", \"don't forget...\", \"next time...\") with NOTHING in it describing what the user actually did this set — no numbers, and no plain statement like \"done\"/\"finished\" that stands on its own without needing a reminder framing? If so, this is ONLY a note — call saveNote and do NOT call logCompletedSets. It is NOT a completion, NOT a confirmation, even though it names this exercise, even though a target was already suggested. Do this check even if the message sounds positive or on-topic — mentioning the exercise is not the same as reporting having done it.",
     "",
-    `Otherwise, work out how many of this exercise's ${exercise.sets} work sets are now accounted for, combining this message with anything already reported earlier in the recent conversation above (the user may report sets across more than one message) — then decide:`,
-    `- If ALL ${exercise.sets} work sets are now accounted for: extract every set's weight (kg) and reps, in order, into loggedSets (include sets reported in earlier messages too, not just this one). If one weight was stated for the whole exercise, use it for every set. If the user reports reps but this message states no weight at all, use the weight already established for this exercise instead — either one the user negotiated in the conversation above, or otherwise the introduction weight given above. weightKg=0 is only correct for a genuinely bodyweight exercise with no weight ever mentioned; never use 0 just because this particular message omitted repeating an already-established weight. If no weight can be determined at all — not in this message, not negotiated above, and no introduction weight was given above — do NOT log 0kg: set advance=false, loggedSets=[], and ask the user what weight they used before logging anything. Otherwise set advance=true.`,
-    "- If the message contains no numbers at all but is a plain, standalone statement that the exercise is done (e.g. only \"done\", \"I did it\", \"finished\", nothing else) AND the recent conversation already establishes a specific weight/rep target for every set (either the suggested target, or one the user negotiated), log that agreed target as loggedSets and set advance=true. (This is different from the note check above — a bare confirmation with no reminder/request framing at all.)",
-    `- If only SOME of the ${exercise.sets} sets are accounted for and the user has not indicated they are stopping early: set advance=false and loggedSets=[]. Acknowledge what came in so far and ask for the remaining sets — do not advance on a partial report.`,
-    "- If the user explicitly moves on early (e.g. \"let's skip the rest\", \"that's enough for this one\") with fewer than the full set count: log whatever sets were reported (may be fewer than the full count, or none) and set advance=true.",
-    "- Otherwise (a question, a request to change the target, reporting pain, general chat, nothing about performance): set advance=false and loggedSets=[]. Respond directly to what the user said — if they're proposing a different weight/reps, acknowledge and confirm the new target for this same exercise; if they report pain, follow the safety rules; do not introduce a new exercise.",
+    "Otherwise, extract whatever sets THIS message reports (weight in kg, reps) and call logCompletedSets with them — its result tells you how many of this exercise's sets are now accounted for in total (combining what's already logged this session with what you just added), so you don't need to track that yourself. If one weight was stated for the whole exercise, use it for every set reported. If the user reports reps but this message states no weight at all, use the weight already established for this exercise instead — either one negotiated in the conversation above, or the introduction weight given above. weightKg=0 is only correct for a genuinely bodyweight exercise with no weight ever mentioned; never use 0 just because this message omitted repeating an already-established weight. If no weight can be determined at all — not in this message, not negotiated above, no introduction weight given — do not call logCompletedSets with a guess: ask the user what weight they used instead, and wait for their answer.",
+    "A bare standalone confirmation with no numbers at all (\"done\", \"finished\", nothing else — not a reminder/request) still counts as a report if the conversation above already establishes a specific weight/rep target for every set: call logCompletedSets with that agreed target.",
+    `If the full ${exercise.sets} sets aren't accounted for yet and the user hasn't indicated they're stopping early, just call logCompletedSets with what this message reports (if anything) and acknowledge what came in — ask for the rest, don't call stopExerciseEarly or anything else.`,
+    "If the user explicitly moves on early — either directly (\"let's skip the rest\", \"that's enough for this one\") or by giving a reason that makes clear they want to stop now, not just complaining (\"the machine's taken\", \"someone's using it\", \"this is hurting my shoulder\", \"I'm short on time\") — call stopExerciseEarly (after logCompletedSets, if this message also reported anything).",
+    "Otherwise (a question, a request to change the target, reporting pain, general chat, nothing about performance) — call no tool at all. Respond directly to what the user said in your final message: if they're proposing a different weight/reps, acknowledge and confirm the new target for this same exercise; if they report pain, follow the safety rules; do not introduce a new exercise.",
     "",
-    "Separately from all of the above (a message can be both a report AND contain a note): if any part of what the user said is worth remembering for a future session — a technique cue (\"remind me to keep my elbows tucked\"), a request for next time (\"do a 10 minute warm-up walk before we start\"), something about how the exercise felt worth flagging next time — set noteToSave to {\"text\": <the note, written as a short second-person reminder, in the user's language>, \"general\": <true if it's about the workout/session as a whole or a future session, not this specific exercise; false if it's specific to this exercise>}. Acknowledge in your message that you'll remember it, the way a real trainer would. If the same note (in substance) already appears in \"Saved notes about this exercise\" above, it's already recorded — acknowledge it conversationally if relevant, but set noteToSave to null rather than saving a duplicate. If there's nothing new worth remembering, set noteToSave to null.",
+    "Separately from all of the above (a message can be both a report AND contain a note): if any part of what the user said is worth remembering for a future session — a technique cue, a request for next time, something about how the exercise felt — call saveNote too, in the same turn as any other tool call. If the same note (in substance) already appears in \"Saved notes about this exercise\" above, it's already recorded — acknowledge it conversationally if relevant, don't call saveNote again for it.",
+  );
+  lines.push(
+    "",
+    `Session flow: by default, once this exercise is done (full sets logged, or you called stopExerciseEarly), the next one is already decided — ${nextExercise ? nextExercise.name : "nothing, this is the last one"} — and its numbers are given below; just narrate it, no tool call needed for that. Only look up switchToExercise/substituteExercise/deferCurrentExercise if the user's message right now explicitly asks to skip/defer/reorder/swap what's coming — this includes a stated REASON to move on (equipment busy, something hurts) just as much as a stated reason something is now AVAILABLE again (a machine/equipment freed up, someone finished using it) — both are the user telling you to act, not making small talk. A plain set report, a question, or small talk must never touch these — this is a hard rule, not a preference. If they clearly want to change what's next but haven't said what to switch to, ask what they'd like instead — call no flow-changing tool yet.`,
+    "CRITICAL: never describe a switch, defer, or substitution in your final reply unless the matching tool call actually succeeded this turn (its result confirmed it, not an error). If a tool call fails or you never call one, your reply must reflect that nothing changed — do not narrate an action you didn't successfully take, even if the user's intent seemed clear. A reply that promises a switch which didn't really happen leaves the app pointing at the wrong exercise.",
   );
   if (nextExercise && nextTargets) {
     lines.push(
       "",
-      `If advance=true, weave in a CLEAR introduction to the next exercise after acknowledging what was just logged: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.) here, that would be misleading; the message must make it unambiguous that another exercise follows right now.`,
+      `Once this exercise is done, IF you haven't called switchToExercise/substituteExercise (the default stands), weave in a CLEAR introduction to the next exercise after acknowledging what was just logged: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.) here, that would be misleading; the message must make it unambiguous that another exercise follows right now.`,
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
@@ -216,12 +274,12 @@ export function buildConversationPrompt(params: {
   } else if (!nextExercise) {
     lines.push(
       "",
-      "This is the LAST exercise in the plan. If advance=true, warmly wrap up the workout instead of introducing a new exercise — do not fabricate a summary of numbers, that is handled separately.",
+      "This is the LAST exercise in the plan. Once it's done, warmly wrap up the workout instead of introducing a new exercise — do not fabricate a summary of numbers, that is handled separately.",
     );
   }
   lines.push(
     "",
-    'Reply with ONLY valid JSON matching: {"message": string, "loggedSets": [{"weightKg": number, "reps": number}], "advance": boolean, "noteToSave": {"text": string, "general": boolean} | null}. "message" is what the user reads — write it in your coaching voice per the rules and tone above, and always restate any numbers you record.',
+    "Once you're done calling any tools you need (or if none apply), write your final reply directly as plain text — in your coaching voice per the rules and tone above, always restating any numbers you recorded.",
   );
   return lines.join("\n");
 }
