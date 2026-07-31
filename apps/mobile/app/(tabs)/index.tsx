@@ -258,7 +258,8 @@ export default function Chat() {
     >
       <View style={{
         flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
-        padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule,
+        paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+        borderBottomWidth: 1, borderBottomColor: theme.rule,
       }}>
         {inWorkout && (
           <Pressable disabled={busy} onPress={confirmFinish}>
@@ -324,13 +325,6 @@ export default function Chat() {
           weightKg={pendingAction.weightKg}
           targetReps={pendingAction.targetReps}
           disabled={busy}
-          onConfirmExact={() => {
-            const action = pendingAction;
-            void confirmSets(
-              action.exerciseId,
-              action.targetReps.map((reps) => ({ weightKg: action.weightKg, reps })),
-            );
-          }}
           onSubmitSets={(sets) => void confirmSets(pendingAction.exerciseId, sets)}
         />
       )}

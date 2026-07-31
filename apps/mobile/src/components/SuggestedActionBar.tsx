@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme, spacing, radius } from '../theme';
 
@@ -15,13 +16,12 @@ function clampStep(n: number): number {
 }
 
 function Stepper({
-  value, onChange, step, disabled, suffix,
+  value, onChange, step, disabled,
 }: {
   value: string;
   onChange: (v: string) => void;
   step: number;
   disabled?: boolean;
-  suffix: string;
 }) {
   const theme = useTheme();
 
@@ -31,15 +31,15 @@ function Stepper({
   }
 
   const btnStyle = {
-    width: 28, height: 28, borderRadius: radius.field, backgroundColor: theme.bg,
+    width: 32, height: 32, borderRadius: radius.field, backgroundColor: theme.bg,
     alignItems: 'center' as const, justifyContent: 'center' as const,
     opacity: disabled ? 0.5 : 1,
   };
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
       <Pressable disabled={disabled} onPress={() => bump(-step)} style={btnStyle} hitSlop={4}>
-        <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 15 }}>−</Text>
+        <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 17 }}>−</Text>
       </Pressable>
       <TextInput
         value={value}
@@ -47,14 +47,13 @@ function Stepper({
         keyboardType="numeric"
         editable={!disabled}
         style={{
-          width: 44, backgroundColor: theme.bg, borderRadius: radius.field, padding: 6,
-          color: theme.ink, textAlign: 'center', fontSize: 13,
+          flex: 1, marginHorizontal: 4, backgroundColor: theme.bg, borderRadius: radius.field, padding: 6,
+          color: theme.ink, textAlign: 'center', fontSize: 15,
         }}
       />
       <Pressable disabled={disabled} onPress={() => bump(step)} style={btnStyle} hitSlop={4}>
-        <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 15 }}>+</Text>
+        <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 17 }}>+</Text>
       </Pressable>
-      <Text style={{ color: theme.inkSoft, fontSize: 12 }}>{suffix}</Text>
     </View>
   );
 }
@@ -65,23 +64,21 @@ function Stepper({
  * input controls, not as just another chat bubble. Pure props in, pure
  * callbacks out — no Supabase/session knowledge here.
  *
- * Both actions are deterministic on the server for the numbers (only the
- * reply text goes through the LLM). Fields are pre-filled with the
- * suggested numbers as real, editable values (not placeholders) so "send
- * exactly this" needs zero taps, while +/- steppers make a quick nudge
- * (a plate short, one more rep) faster than retyping the whole number.
+ * The numbers are deterministic on the server (only the reply text goes
+ * through the LLM). Fields are pre-filled with the suggested numbers as
+ * real, editable values (not placeholders) so "send exactly this" needs
+ * zero taps, while +/- steppers make a quick nudge (a plate short, one
+ * more rep) faster than retyping the whole number.
  */
 export function SuggestedActionBar({
   weightKg,
   targetReps,
   disabled,
-  onConfirmExact,
   onSubmitSets,
 }: {
   weightKg: number;
   targetReps: number[];
   disabled?: boolean;
-  onConfirmExact: () => void;
   onSubmitSets: (sets: Array<{ weightKg: number; reps: number }>) => void;
 }) {
   const theme = useTheme();
@@ -106,51 +103,52 @@ export function SuggestedActionBar({
   return (
     <View style={{
       backgroundColor: theme.surface, borderTopWidth: 1, borderTopColor: theme.rule,
-      padding: spacing.md, gap: 8,
+      paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: 2,
     }}>
-      <Pressable
-        disabled={disabled}
-        onPress={onConfirmExact}
-        style={{
-          backgroundColor: theme.accent, paddingVertical: 12, borderRadius: radius.pill,
-          alignItems: 'center', opacity: disabled ? 0.5 : 1,
-        }}
-      >
-        <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('confirmExactAction')}</Text>
-      </Pressable>
-
-      <View style={{ gap: 6 }}>
-        {rows.map((row, i) => (
-          <View key={i} style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
-            <Text style={{ color: theme.inkSoft, fontSize: 12, width: 14, textAlign: 'center' }}>{i + 1}.</Text>
-            <Stepper
-              value={row.kg}
-              onChange={(v) => updateRow(i, { kg: v })}
-              step={1}
-              disabled={disabled}
-              suffix={t('kgLabel')}
-            />
-            <Stepper
-              value={row.reps}
-              onChange={(v) => updateRow(i, { reps: v })}
-              step={1}
-              disabled={disabled}
-              suffix={t('repsLabel')}
-            />
-          </View>
-        ))}
+      <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+        <Text style={{ width: 14 }} />
+        <Text style={{ flex: 1, color: theme.inkSoft, fontSize: 11, lineHeight: 13, textAlign: 'center' }}>
+          {t('kgLabel')}
+        </Text>
+        <Text style={{ flex: 1, color: theme.inkSoft, fontSize: 11, lineHeight: 13, textAlign: 'center' }}>
+          {t('repsLabel')}
+        </Text>
+        <View style={{ width: 48 }} />
       </View>
 
-      <Pressable
-        disabled={disabled || !allValid}
-        onPress={() => onSubmitSets(parsedSets)}
-        style={{
-          backgroundColor: allValid ? theme.accent : theme.rule, paddingVertical: 10,
-          borderRadius: radius.pill, alignItems: 'center',
-        }}
-      >
-        <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('send')}</Text>
-      </Pressable>
+      <View style={{ flexDirection: 'row-reverse', gap: 10, alignItems: 'stretch' }}>
+        <View style={{ flex: 1, gap: 6 }}>
+          {rows.map((row, i) => (
+            <View key={i} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+              <Text style={{ color: theme.inkSoft, fontSize: 12, width: 14, textAlign: 'center' }}>{i + 1}.</Text>
+              <Stepper
+                value={row.kg}
+                onChange={(v) => updateRow(i, { kg: v })}
+                step={1}
+                disabled={disabled}
+              />
+              <Stepper
+                value={row.reps}
+                onChange={(v) => updateRow(i, { reps: v })}
+                step={1}
+                disabled={disabled}
+              />
+            </View>
+          ))}
+        </View>
+
+        <Pressable
+          disabled={disabled || !allValid}
+          onPress={() => onSubmitSets(parsedSets)}
+          style={{
+            width: 48,
+            backgroundColor: allValid ? theme.accent : theme.rule,
+            borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center',
+          }}
+        >
+          <Ionicons name="send" size={20} color={theme.onAccent} style={{ transform: [{ scaleX: -1 }] }} />
+        </Pressable>
+      </View>
     </View>
   );
 }

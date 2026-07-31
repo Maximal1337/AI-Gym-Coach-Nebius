@@ -134,8 +134,15 @@ export default function SignIn() {
       >
         <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('signIn')}</Text>
       </Pressable>
-      <Pressable disabled={busy} onPress={() => signInEmail(true)} style={{ padding: spacing.md, alignItems: 'center' }}>
-        <Text style={{ color: theme.accent, fontWeight: '600' }}>{t('signUp')}</Text>
+      <Pressable
+        disabled={busy}
+        onPress={() => signInEmail(true)}
+        style={{
+          borderWidth: 1.5, borderColor: theme.accent, borderRadius: radius.pill,
+          padding: 14, alignItems: 'center', marginTop: spacing.sm,
+        }}
+      >
+        <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('signUp')}</Text>
       </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
