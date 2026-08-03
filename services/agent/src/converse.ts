@@ -71,13 +71,18 @@ export interface ConversationOutput {
 const MAX_TOOL_ITERATIONS = 6;
 
 /**
- * Genuine few-shot exchange (not prose describing the rule) for two
+ * Genuine few-shot exchange (not prose describing the rule) for three
  * failure modes prose-only instructions weren't reliable for on their own:
  * a pure note/reminder request getting logged as if it were a completed
- * report (§18.C), and narrating a switch that never actually succeeded
- * (§20, bug 3). Tool-calling fixes *whether the final state agrees with
- * the reply*, not whether the model's initial read of an ambiguous
- * message is right — so both guardrails still need their own real
+ * report (§18.C), narrating a switch that never actually succeeded (§20,
+ * bug 3), and a bare "yes" answering a READINESS question ("ready to
+ * start?") getting logged as a completed set instead of just acknowledged
+ * — the same ambiguous-bare-confirmation family as the first bug, but a
+ * distinct real production case, so it earns its own example rather than
+ * assuming the first one generalizes. Tool-calling fixes *whether the
+ * final state agrees with the reply*, not whether the model's initial
+ * read of an ambiguous
+ * message is right — so all three guardrails still need their own real
  * demonstration, not just prose.
  *
  * One full example set PER LANGUAGE, not a single fixed one — a Hebrew
@@ -130,6 +135,11 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
       "switchToExercise",
     ),
     new AIMessage("Great, let's take the opportunity and go back to the exercise we wanted to do earlier: Incline Chest Press (Dumbbell). Your target: 21kg for 10, 10, 10 reps 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "Ready to start?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg for 8, 8, 8 reps. User message: "Yes" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("Let's go! 💪 Report back once you've finished your first set."),
   ],
   he: [
     [
@@ -167,6 +177,11 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
       "switchToExercise",
     ),
     new AIMessage("מעולה! אז בוא ננצל את ההזדמנות ונחזור לתרגיל הקודם שרצינו לעשות: לחיצת חזה בשיפוע חיובי עם משקולות. היעד שלך: 21 קילו ל-10, 10, 10 חזרות 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "מוכן להתחיל?" ("ready to start?" — a READINESS question, not a request to report back after the set), with a target already given: 60 ק"ג ל-8, 8, 8 חזרות. User message: "כן" ("yes") — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("בוא נתחיל! 💪 תעדכן אותי אחרי שתסיים את הסט הראשון."),
   ],
   ar: [
     [
@@ -204,6 +219,11 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
       "switchToExercise",
     ),
     new AIMessage("ممتاز! لنغتنم الفرصة ونعود للتمرين الذي أردنا القيام به سابقًا: ضغط صدر مائل بالدمبل. هدفك: 21 كغ لـ 10، 10، 10 تكرارات 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "هل أنت جاهز للبدء؟" ("ready to start?" — a READINESS question, not a request to report back after the set), with a target already given: 60 كغ لـ 8، 8، 8 تكرارات. User message: "نعم" ("yes") — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("هيا بنا! 💪 أخبرني بعد أن تنهي مجموعتك الأولى."),
   ],
 };
 
