@@ -66,6 +66,19 @@ export default function Chat() {
     setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
   }
 
+  // A reply covering more than one topic gets a blank line between them
+  // from the model itself (prompt.ts's FORMATTING_GUIDE — a real signal,
+  // not a guess) — split on that and stagger the bubbles in, rather than
+  // rendering one long block. A single-topic reply (the common case) is
+  // one chunk, pushed immediately, unchanged from before.
+  function pushCoachMessage(text: string) {
+    const chunks = text.split(/\n{2,}/).map((c) => c.trim()).filter(Boolean);
+    chunks.forEach((chunk, i) => {
+      if (i === 0) push('coach', chunk);
+      else setTimeout(() => push('coach', chunk), i * 550);
+    });
+  }
+
   function coachError(e: unknown) {
     if (e instanceof ApiError && e.code === 'monthly_budget_exhausted') push('system', t('budgetExhausted'));
     else if (e instanceof ApiError && e.code === 'session_expired') push('system', t('sessionExpired'));
@@ -89,7 +102,7 @@ export default function Chat() {
     const text = res.advance
       ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps)
       : res.message;
-    push('coach', text);
+    pushCoachMessage(text);
     setProgress(res.progress ?? null);
     if (!res.advance) return; // same exercise still in play — leave pendingAction as-is
     if (res.sessionComplete) {
@@ -110,7 +123,7 @@ export default function Chat() {
   function handleSessionStartResult(res: SessionStartResult) {
     setSessionId(res.sessionId);
     setCurrentExerciseId(res.exerciseId);
-    push('coach', withTarget(res.message, res.suggestedWeightKg, res.targetReps));
+    pushCoachMessage(withTarget(res.message, res.suggestedWeightKg, res.targetReps));
     setPendingAction(
       res.suggestedWeightKg != null && res.targetReps && res.targetReps.length > 0
         ? { exerciseId: res.exerciseId, weightKg: res.suggestedWeightKg, targetReps: res.targetReps }

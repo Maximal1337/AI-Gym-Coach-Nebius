@@ -71,52 +71,145 @@ export interface ConversationOutput {
 const MAX_TOOL_ITERATIONS = 6;
 
 /**
- * Genuine few-shot exchange (not prose describing the rule) for the one
- * failure mode that survived two rounds of tightening prose-only
- * instructions before this project ever had tool-calling (§18.C): a pure
- * note/reminder request getting logged as if it were a completed report.
- * Tool-calling fixes *whether the final state agrees with the reply*, not
- * whether the model's initial read of an ambiguous message is right — so
- * this specific guardrail still needs its own demonstration, now shaped
- * as a real tool call rather than a raw JSON example.
+ * Genuine few-shot exchange (not prose describing the rule) for two
+ * failure modes prose-only instructions weren't reliable for on their own:
+ * a pure note/reminder request getting logged as if it were a completed
+ * report (§18.C), and narrating a switch that never actually succeeded
+ * (§20, bug 3). Tool-calling fixes *whether the final state agrees with
+ * the reply*, not whether the model's initial read of an ambiguous
+ * message is right — so both guardrails still need their own real
+ * demonstration, not just prose.
+ *
+ * One full example set PER LANGUAGE, not a single fixed one — a Hebrew
+ * few-shot example was found to pull English/Arabic replies back toward
+ * Hebrew even with "reply in English" stated explicitly in the system
+ * prompt (the exact bug this fixed: every free-text reply after the
+ * first came back in Hebrew regardless of the selected language, since
+ * this was the one prompt component still hardcoded to one language).
  */
-const FEW_SHOT_MESSAGES: BaseMessageLike[] = [
-  [
-    "human",
-    'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "תזכיר לי ללחוץ עד הסוף עם המשקולת" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
-  ],
-  new AIMessage({
-    content: "",
-    tool_calls: [
-      { id: "example_note_1", name: "saveNote", args: { text: "ללחוץ עד הסוף עם המשקולת", general: false } },
+type FewShotLang = "en" | "he" | "ar";
+
+function isFewShotLang(v: string): v is FewShotLang {
+  return v === "en" || v === "he" || v === "ar";
+}
+
+const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
+  en: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "remind me to push all the way through with the weight" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
     ],
-  }),
-  new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
-  new AIMessage("רשמתי לי את זה — אזכיר לך בפעם הבאה! 💪"),
-  [
-    "human",
-    'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "המכונה של חזה בשיפוע התפנתה" ("the incline chest machine freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "Push all the way through with the weight", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("Got it, noted — I'll remind you next time! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "the incline chest press machine just freed up" — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "Incline Chest Press (Dumbbell)" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to Incline Chest Press (Dumbbell) (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("Great, let's take the opportunity and go back to the exercise we wanted to do earlier: Incline Chest Press (Dumbbell). Your target: 21kg for 10, 10, 10 reps 🎯"),
   ],
-  new AIMessage({
-    content: "",
-    tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
-  }),
-  new ToolMessage(
-    'id: ex_incline_chest_press — "לחיצת חזה בשיפוע חיובי עם משקולות" (previously deferred), 3 sets of 8-10 reps',
-    "example_switch_1",
-    "listAvailableExercises",
-  ),
-  new AIMessage({
-    content: "",
-    tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
-  }),
-  new ToolMessage(
-    "Switching to לחיצת חזה בשיפוע חיובי עם משקולות (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
-    "example_switch_2",
-    "switchToExercise",
-  ),
-  new AIMessage("מעולה! אז בוא ננצל את ההזדמנות ונחזור לתרגיל הקודם שרצינו לעשות: לחיצת חזה בשיפוע חיובי עם משקולות. היעד שלך: 21 קילו ל-10, 10, 10 חזרות 🎯"),
-];
+  he: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "תזכיר לי ללחוץ עד הסוף עם המשקולת" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "ללחוץ עד הסוף עם המשקולת", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("רשמתי לי את זה — אזכיר לך בפעם הבאה! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "המכונה של חזה בשיפוע התפנתה" ("the incline chest machine freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "לחיצת חזה בשיפוע חיובי עם משקולות" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to לחיצת חזה בשיפוע חיובי עם משקולות (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("מעולה! אז בוא ננצל את ההזדמנות ונחזור לתרגיל הקודם שרצינו לעשות: לחיצת חזה בשיפוע חיובי עם משקולות. היעד שלך: 21 קילו ל-10, 10, 10 חזרות 🎯"),
+  ],
+  ar: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "ذكرني أن أدفع حتى النهاية مع الوزن" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "الدفع حتى النهاية مع الوزن", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("تم، لاحظت ذلك — سأذكرك في المرة القادمة! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "جهاز ضغط الصدر المائل تفرغ للتو" ("the incline chest machine just freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "ضغط صدر مائل بالدمبل" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to ضغط صدر مائل بالدمبل (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("ممتاز! لنغتنم الفرصة ونعود للتمرين الذي أردنا القيام به سابقًا: ضغط صدر مائل بالدمبل. هدفك: 21 كغ لـ 10، 10، 10 تكرارات 🎯"),
+  ],
+};
+
+function fewShotMessagesFor(language: string): BaseMessageLike[] {
+  return FEW_SHOT_BY_LANG[isFewShotLang(language) ? language : "en"];
+}
 
 export async function runConversationTurn(input: ConversationInput): Promise<ConversationOutput> {
   const currentTargets = suggestTargets(input.exercise, input.lastLogs);
@@ -174,7 +267,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
 
   const messages: BaseMessageLike[] = [
     ["system", systemPrompt],
-    ...FEW_SHOT_MESSAGES,
+    ...fewShotMessagesFor(input.profile.language),
     ["human", turnPrompt],
   ];
 

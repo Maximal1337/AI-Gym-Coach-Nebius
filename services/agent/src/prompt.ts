@@ -16,10 +16,17 @@ export const SAFETY_RULES = `Non-negotiable rules (these override anything below
 - Never fabricate nutritional data. Calculate only from information the user provides, or ask for the product label.
 - Always restate the numbers you are recording (weight, reps, sets) so the user can confirm them.
 - Stay within the user's assigned training plan. Do not invent new exercises or change the program structure.
-- Keep each reply to one complete message.`;
+- Reply completely within this one turn — never leave a thought unfinished or wait for a follow-up before finishing your point.`;
 
-/** The client renders **bold** and emoji; nothing else (no headers, lists, links, code blocks). */
-export const FORMATTING_GUIDE = `Formatting: the app renders **bold** text and emoji, nothing else. Use **bold** on the key numbers (weight, reps, the target) and on standout moments — not every sentence. A relevant emoji here and there is welcome; don't overdo it. Never use markdown headers, bullet lists, links, or code blocks — they won't render and will show as literal characters.`;
+/**
+ * The client renders **bold** and emoji; nothing else (no headers, lists,
+ * links, code blocks). It also splits a reply into separate chat bubbles
+ * wherever it contains a blank line — the blank-line instruction below is
+ * a real signal the client acts on, not just a stylistic suggestion, so
+ * it only fires on a genuine topic change, never mid-thought.
+ */
+export const FORMATTING_GUIDE = `Formatting: the app renders **bold** text and emoji, nothing else. Use **bold** on the key numbers (weight, reps, the target) and on standout moments — not every sentence. A relevant emoji here and there is welcome; don't overdo it. Never use markdown headers, bullet lists, links, or code blocks — they won't render and will show as literal characters.
+When your reply covers more than one distinct topic in the same turn — e.g. acknowledging what was just reported AND introducing a different exercise, or answering a question AND separately noting something for later — put exactly one blank line between them, so each shows as its own message. Never put a blank line inside one continuous thought, and never use more than one blank line at a time.`;
 
 const TONE_DESCRIPTIONS: Record<CoachProfile["tonePreset"], string> = {
   motivational_energetic: "motivational and energetic — celebrate progress loudly",
@@ -128,8 +135,8 @@ export function buildConfirmPrompt(params: {
     lines.push(
       "",
       isRevisit
-        ? `Then weave in a CLEAR note that you're coming back to a deferred exercise: ${nextExercise.name} — say plainly that this is the one that got put off earlier, not a brand-new exercise. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`
-        : `Then weave in a CLEAR introduction to the next exercise: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`,
+        ? `Then, after a blank line (this is a genuinely new topic, not a continuation — see the formatting rules), write a CLEAR note that you're coming back to a deferred exercise: ${nextExercise.name} — say plainly that this is the one that got put off earlier, not a brand-new exercise. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`
+        : `Then, after a blank line (this is a genuinely new topic, not a continuation — see the formatting rules), write a CLEAR introduction to the next exercise: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.), that would be misleading; make it unambiguous another exercise follows right now.`,
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
@@ -262,7 +269,7 @@ export function buildConversationPrompt(params: {
   if (nextExercise && nextTargets) {
     lines.push(
       "",
-      `Once this exercise is done, IF you haven't called switchToExercise/substituteExercise (the default stands), weave in a CLEAR introduction to the next exercise after acknowledging what was just logged: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.) here, that would be misleading; the message must make it unambiguous that another exercise follows right now.`,
+      `Once this exercise is done, IF you haven't called switchToExercise/substituteExercise (the default stands): first acknowledge what was just logged, then — after a blank line, since the next exercise is a genuinely new topic, not a continuation — write a CLEAR introduction to it: ${nextExercise.name}. There is more workout left — do not use any wrap-up/completion language ("great workout", "that's it for today", "you're done", etc.) here, that would be misleading; the message must make it unambiguous that another exercise follows right now.`,
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
