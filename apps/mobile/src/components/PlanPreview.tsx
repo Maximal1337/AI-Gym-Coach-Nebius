@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../lib/api';
+import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
 export interface ParsedExercise {
@@ -33,6 +34,7 @@ export function PlanPreview({
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [busy, setBusy] = useState(false);
 
   function updatePlanName(planIdx: number, name: string) {
@@ -79,19 +81,19 @@ export function PlanPreview({
             <TextInput
               value={plan.name}
               onChangeText={(v) => updatePlanName(planIdx, v)}
-              style={{ color: theme.ink, fontWeight: '700', textAlign: 'right', padding: 0 }}
+              style={{ color: theme.ink, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left', padding: 0 }}
             />
-            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right', marginBottom: 6 }}>
+            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
               {t('exercisesCount', { count: plan.exercises.length })}
             </Text>
             {plan.exercises.map((e, exIdx) => (
               <View key={e.orderIndex} style={{ marginBottom: 8 }}>
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6 }}>
                   <Text style={{ color: theme.inkSoft, fontSize: 13 }}>{e.orderIndex}.</Text>
                   <TextInput
                     value={e.name}
                     onChangeText={(v) => updateExercise(planIdx, exIdx, { name: v })}
-                    style={{ flex: 1, color: theme.ink, fontSize: 13, textAlign: 'right', padding: 0 }}
+                    style={{ flex: 1, color: theme.ink, fontSize: 13, textAlign: dir === 'rtl' ? 'right' : 'left', padding: 0 }}
                   />
                   <TextInput
                     value={String(e.sets)}
@@ -114,7 +116,7 @@ export function PlanPreview({
                   onChangeText={(v) => updateExercise(planIdx, exIdx, { warmup: v.length > 0 ? v : null })}
                   placeholder={t('warmupPlaceholder')}
                   placeholderTextColor={theme.inkSoft}
-                  style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right', padding: 0, marginTop: 2 }}
+                  style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left', padding: 0, marginTop: 2 }}
                 />
               </View>
             ))}

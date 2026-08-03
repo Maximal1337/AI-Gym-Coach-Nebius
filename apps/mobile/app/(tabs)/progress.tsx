@@ -10,7 +10,10 @@ import { callFn } from '../../src/lib/api';
 import { DismissKeyboardView } from '../../src/components/DismissKeyboardView';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
+import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
+
+const DATE_LOCALE: Record<string, string> = { he: 'he-IL', ar: 'ar', en: 'en-US' };
 
 interface SessionRow {
   id: string; started_at: string; source: string;
@@ -111,16 +114,17 @@ function PlanTab({ label, active, onPress }: { label: string; active: boolean; o
 function ExerciseProgress({ name, values }: { name: string; values: number[] }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const last = values[values.length - 1];
   return (
     <View style={{
-      flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+      flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between',
       backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.sm, marginBottom: spacing.sm, gap: spacing.sm,
     }}>
       <View style={{ flex: 1 }}>
-        <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: 'right' }}>{name}</Text>
-        <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
-          {values.length === 0 ? t('noData') : values.length === 1 ? `${last} ק"ג · ${t('needOneMore')}` : `${last} ק"ג`}
+        <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{name}</Text>
+        <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+          {values.length === 0 ? t('noData') : values.length === 1 ? `${last} ${t('kgLabel')} · ${t('needOneMore')}` : `${last} ${t('kgLabel')}`}
         </Text>
       </View>
       {values.length > 0 && <LineChart values={values} />}
@@ -131,6 +135,8 @@ function ExerciseProgress({ name, values }: { name: string; values: number[] }) 
 export default function Progress() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir, language } = useLanguage();
+  const dateLocale = DATE_LOCALE[language] ?? 'en-US';
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [monthCount, setMonthCount] = useState(0);
   const [importOpen, setImportOpen] = useState(false);
@@ -255,10 +261,10 @@ export default function Progress() {
     <Screen>
     <View style={{ flex: 1, padding: spacing.md }}>
       <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
           {t('progressTitle')}
         </Text>
-        <View style={{ flexDirection: 'row-reverse', gap: spacing.sm, marginBottom: spacing.md }}>
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm, marginBottom: spacing.md }}>
           {stat(sessions.length, t('totalWorkouts'))}
           {stat(monthCount, t('thisMonth'))}
         </View>
@@ -267,16 +273,16 @@ export default function Progress() {
           onPress={() => setImportOpen(true)}
           style={{ backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md, marginBottom: spacing.md }}
         >
-          <Text style={{ color: theme.accent, fontWeight: '700', textAlign: 'right' }}>{t('importHistory')}</Text>
-          <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('importHistorySub')}</Text>
+          <Text style={{ color: theme.accent, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('importHistory')}</Text>
+          <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('importHistorySub')}</Text>
         </Pressable>
 
         {plans.length > 0 && (
           <View style={{ marginBottom: spacing.lg }}>
             <View style={{
-              flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm,
+              flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm,
             }}>
-              <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 14, textAlign: 'right' }}>
+              <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 14, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
                 {t('exerciseProgress')}
               </Text>
               <Pressable
@@ -290,7 +296,7 @@ export default function Progress() {
               </Pressable>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
-              <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+              <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
                 {plans.map((p) => (
                   <PlanTab key={p.id} label={p.name} active={p.id === selectedPlanId} onPress={() => setSelectedPlanId(p.id)} />
                 ))}
@@ -308,9 +314,9 @@ export default function Progress() {
         <Screen>
         <View style={{ flex: 1, padding: spacing.md }}>
           <View style={{
-            flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md,
+            flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md,
           }}>
-            <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: 'right' }}>
+            <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
               {t('recentWorkouts')}
             </Text>
             <Pressable onPress={() => setRecentOpen(false)}>
@@ -321,19 +327,19 @@ export default function Progress() {
             data={sessions}
             keyExtractor={(s) => s.id}
             ListEmptyComponent={
-              <Text style={{ color: theme.inkSoft, textAlign: 'right' }}>{t('noData')}</Text>
+              <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('noData')}</Text>
             }
             renderItem={({ item }) => {
               const expanded = expandedId === item.id;
               return (
                 <Pressable onPress={() => toggleExpand(item.id)} style={{ borderBottomWidth: 1, borderBottomColor: theme.rule }}>
-                  <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', paddingVertical: 10 }}>
+                  <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between', paddingVertical: 10 }}>
                     <View>
-                      <Text style={{ color: theme.ink, fontWeight: '600', textAlign: 'right' }}>
+                      <Text style={{ color: theme.ink, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
                         {item.training_plans?.name ?? '—'}{item.source === 'imported' ? ' ⤵' : ''}
                       </Text>
-                      <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: 'right' }}>
-                        {new Date(item.started_at).toLocaleDateString('he-IL')}
+                      <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+                        {new Date(item.started_at).toLocaleDateString(dateLocale)}
                       </Text>
                     </View>
                     <Text style={{ color: theme.inkSoft, fontSize: 12, alignSelf: 'center', fontVariant: ['tabular-nums'] }}>
@@ -345,15 +351,15 @@ export default function Progress() {
                       {loadingDetailsId === item.id ? (
                         <ActivityIndicator size="small" color={theme.inkSoft} />
                       ) : (details[item.id] ?? []).length === 0 ? (
-                        <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>{t('noData')}</Text>
+                        <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('noData')}</Text>
                       ) : (
                         (details[item.id] ?? []).map((e) => (
                           <View key={e.name} style={{ marginBottom: 6 }}>
-                            <Text style={{ color: theme.ink, fontSize: 13, fontWeight: '600', textAlign: 'right' }}>
+                            <Text style={{ color: theme.ink, fontSize: 13, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
                               {e.name}
                             </Text>
-                            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
-                              {e.sets.join(', ')} ק"ג
+                            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+                              {e.sets.join(', ')} {t('kgLabel')}
                             </Text>
                           </View>
                         ))
@@ -378,7 +384,7 @@ export default function Progress() {
         <SafeAreaProvider>
         <Screen>
         <DismissKeyboardView style={{ padding: spacing.lg }}>
-          <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
+          <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
             {importPreview ? t('confirmPlanTitle') : t('importHistory')}
           </Text>
           {!importPreview ? (
@@ -391,7 +397,7 @@ export default function Progress() {
                 placeholderTextColor={theme.inkSoft}
                 style={{
                   flex: 1, backgroundColor: theme.surface, borderRadius: radius.card,
-                  padding: spacing.md, color: theme.ink, textAlign: 'right', textAlignVertical: 'top',
+                  padding: spacing.md, color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', textAlignVertical: 'top',
                 }}
               />
               <Pressable
@@ -418,23 +424,23 @@ export default function Progress() {
                       backgroundColor: theme.surface, borderRadius: radius.card,
                       padding: spacing.md, marginBottom: spacing.sm,
                     }}>
-                      <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: 'right' }}>
+                      <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
                         {s.date && /^\d{4}-\d{2}-\d{2}/.test(s.date)
-                          ? new Date(s.date).toLocaleDateString('he-IL')
+                          ? new Date(s.date).toLocaleDateString(dateLocale)
                           : t('importNoDate')}
                       </Text>
                       {[...groups.entries()].map(([key, logs]) => (
                         <View key={key} style={{ marginTop: 6 }}>
                           <Text style={{
                             color: key === 'unmatched' ? theme.critical : theme.accent,
-                            fontWeight: '700', fontSize: 12, textAlign: 'right', marginBottom: 2,
+                            fontWeight: '700', fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 2,
                           }}>
                             {key === 'unmatched'
                               ? t('importUnmatched')
                               : t('importMatchedTo', { name: logs[0]?.matchedPlanName ?? '' })}
                           </Text>
                           {logs.map((l, lIdx) => (
-                            <Text key={lIdx} style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+                            <Text key={lIdx} style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
                               {l.exerciseName}: {l.weightKg}×{l.reps}
                             </Text>
                           ))}

@@ -5,6 +5,7 @@ import { callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
+import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
 /**
@@ -21,6 +22,7 @@ export function PlanPasteFlow({
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
@@ -85,18 +87,18 @@ export function PlanPasteFlow({
 
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
-      <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700', textAlign: 'right' }}>
+      <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {stepLabel}
       </Text>
-      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginVertical: spacing.sm, textAlign: 'right' }}>
+      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginVertical: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {preview ? t('confirmPlanTitle') : t('planTitle')}
       </Text>
 
       {loadingExisting ? (
-        <Text style={{ color: theme.inkSoft, textAlign: 'right' }}>{t('loading')}</Text>
+        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('loading')}</Text>
       ) : !preview ? (
         <>
-          <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: 'right' }}>
+          <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
             {t('planSub')}
           </Text>
           <TextInput
@@ -108,7 +110,7 @@ export function PlanPasteFlow({
             blurOnSubmit={false}
             style={{
               flex: 1, backgroundColor: theme.surface, borderRadius: radius.card,
-              padding: spacing.md, color: theme.ink, textAlign: 'right', textAlignVertical: 'top',
+              padding: spacing.md, color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', textAlignVertical: 'top',
             }}
           />
           <Pressable

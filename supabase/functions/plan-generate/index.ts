@@ -3,10 +3,11 @@ import { admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, jso
 const GOALS = ["strength", "hypertrophy", "general_fitness", "fat_loss"];
 const LEVELS = ["beginner", "intermediate", "advanced"];
 const GENDERS = ["male", "female", "other"];
+const LANGUAGES = ["en", "he", "ar"];
 
 /**
  * AI-generated training plans (System Design §21).
- *  POST { primaryGoal, experienceLevel, daysPerWeek, gender?, age?, weightKg?, heightCm?, injuryNotes? }
+ *  POST { primaryGoal, experienceLevel, daysPerWeek, gender?, age?, weightKg?, heightCm?, injuryNotes?, language? }
  *    -> { plans, linterChecks }  (preview only — nothing written to training_plans/exercises)
  *
  * The client commits the result through the EXISTING plan-import `commit`
@@ -51,6 +52,7 @@ Deno.serve(async (req) => {
     weightKg?: number | null;
     heightCm?: number | null;
     injuryNotes?: string | null;
+    language?: string;
   };
   try {
     body = await req.json();
@@ -61,12 +63,13 @@ Deno.serve(async (req) => {
   if (
     typeof body.primaryGoal !== "string" || !GOALS.includes(body.primaryGoal) ||
     typeof body.experienceLevel !== "string" || !LEVELS.includes(body.experienceLevel) ||
-    !Number.isInteger(body.daysPerWeek) || body.daysPerWeek! < 2 || body.daysPerWeek! > 6 ||
+    !Number.isInteger(body.daysPerWeek) || body.daysPerWeek! < 1 || body.daysPerWeek! > 6 ||
     (body.gender !== undefined && body.gender !== null && !GENDERS.includes(body.gender)) ||
     (body.age !== undefined && body.age !== null && (!Number.isInteger(body.age) || body.age < 10 || body.age > 100)) ||
     (body.weightKg !== undefined && body.weightKg !== null && (typeof body.weightKg !== "number" || body.weightKg < 20 || body.weightKg > 400)) ||
     (body.heightCm !== undefined && body.heightCm !== null && (typeof body.heightCm !== "number" || body.heightCm < 100 || body.heightCm > 250)) ||
-    (body.injuryNotes !== undefined && body.injuryNotes !== null && (typeof body.injuryNotes !== "string" || body.injuryNotes.length > 500))
+    (body.injuryNotes !== undefined && body.injuryNotes !== null && (typeof body.injuryNotes !== "string" || body.injuryNotes.length > 500)) ||
+    (body.language !== undefined && !LANGUAGES.includes(body.language))
   ) {
     return json(400, { error: "invalid_input" });
   }
@@ -80,6 +83,9 @@ Deno.serve(async (req) => {
     weightKg: body.weightKg ?? null,
     heightCm: body.heightCm ?? null,
     injuryNotes: body.injuryNotes ?? null,
+    // Which language the generated plan/exercise names must come back in —
+    // the client's currently selected UI language, not a fixed default.
+    language: body.language ?? "en",
   };
 
   // Persisted (§21) — reusable if the user regenerates or adds another plan

@@ -7,11 +7,14 @@ import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
+import { LanguagePicker } from '../src/components/LanguagePicker';
+import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius, typography } from '../src/theme';
 
 export default function SignIn() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -113,7 +116,7 @@ export default function SignIn() {
         onChangeText={setEmail}
         style={{
           borderWidth: 1, borderColor: theme.rule, borderRadius: radius.field,
-          padding: 12, color: theme.ink, marginBottom: spacing.sm, textAlign: 'right',
+          padding: 12, color: theme.ink, marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left',
         }}
       />
       <TextInput
@@ -124,7 +127,7 @@ export default function SignIn() {
         onChangeText={setPassword}
         style={{
           borderWidth: 1, borderColor: theme.rule, borderRadius: radius.field,
-          padding: 12, color: theme.ink, marginBottom: spacing.md, textAlign: 'right',
+          padding: 12, color: theme.ink, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left',
         }}
       />
       <Pressable
@@ -145,6 +148,9 @@ export default function SignIn() {
         <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('signUp')}</Text>
       </Pressable>
       </ScrollView>
+      <View style={{ alignItems: 'center', paddingVertical: spacing.sm }}>
+        <LanguagePicker />
+      </View>
     </KeyboardAvoidingView>
     </Screen>
   );

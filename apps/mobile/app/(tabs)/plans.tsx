@@ -2,16 +2,18 @@ import { useCallback, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '../src/lib/supabase';
-import { callFn } from '../src/lib/api';
-import { Screen } from '../src/components/Screen';
-import { useTheme, spacing, radius } from '../src/theme';
+import { supabase } from '../../src/lib/supabase';
+import { callFn } from '../../src/lib/api';
+import { Screen } from '../../src/components/Screen';
+import { useLanguage } from '../../src/lib/language';
+import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
 
 export default function ManagePlans() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
 
@@ -45,13 +47,13 @@ export default function ManagePlans() {
 
   return (
     <Screen>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }}>
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
           {t('managePlansTitle')}
         </Text>
 
         {plans.length === 0 && (
-          <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.md }}>
+          <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
             {t('noActivePlans')}
           </Text>
         )}
@@ -61,10 +63,10 @@ export default function ManagePlans() {
             backgroundColor: theme.surface, borderRadius: radius.card,
             padding: spacing.md, marginBottom: spacing.sm,
           }}>
-            <Text style={{ color: theme.ink, fontWeight: '700', textAlign: 'right', marginBottom: spacing.sm }}>
+            <Text style={{ color: theme.ink, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.sm }}>
               {p.name}
             </Text>
-            <View style={{ flexDirection: 'row-reverse', gap: spacing.sm }}>
+            <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm }}>
               <Pressable
                 disabled={busyId === p.id}
                 onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'edit', planId: p.id, planName: p.name } })}

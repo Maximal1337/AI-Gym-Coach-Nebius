@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../src/lib/api';
 import { Screen } from '../src/components/Screen';
+import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
 export const TERMS_VERSION = '2026-07-26';
@@ -11,6 +12,7 @@ export const TERMS_VERSION = '2026-07-26';
 export default function Consent() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -29,19 +31,19 @@ export default function Consent() {
   return (
     <Screen>
     <View style={{ flex: 1, padding: spacing.lg }}>
-      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: 'right' }}>
+      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {t('consentTitle')}
       </Text>
       <ScrollView style={{ flex: 1, backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md }}>
         {[t('consentBody1'), t('consentBody2'), t('consentBody3')].map((p, i) => (
-          <Text key={i} style={{ color: theme.ink, lineHeight: 22, marginBottom: spacing.sm, textAlign: 'right' }}>
+          <Text key={i} style={{ color: theme.ink, lineHeight: 22, marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
             {p}
           </Text>
         ))}
       </ScrollView>
       <Pressable
         onPress={() => setChecked(!checked)}
-        style={{ flexDirection: 'row-reverse', gap: spacing.sm, marginVertical: spacing.md, alignItems: 'flex-start' }}
+        style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm, marginVertical: spacing.md, alignItems: 'flex-start' }}
       >
         <View style={{
           width: 22, height: 22, borderRadius: 5, borderWidth: 2,
@@ -51,7 +53,7 @@ export default function Consent() {
         }}>
           {checked && <Text style={{ color: theme.onAccent, fontWeight: '700' }}>✓</Text>}
         </View>
-        <Text style={{ color: theme.ink, flex: 1, textAlign: 'right' }}>{t('consentCheckbox')}</Text>
+        <Text style={{ color: theme.ink, flex: 1, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('consentCheckbox')}</Text>
       </Pressable>
       <Pressable
         disabled={!checked || busy}

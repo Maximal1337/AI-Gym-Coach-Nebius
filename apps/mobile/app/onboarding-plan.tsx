@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { PlanPasteFlow } from '../src/components/PlanPasteFlow';
 import { GeneratePlanFlow } from '../src/components/GeneratePlanFlow';
 import { Screen } from '../src/components/Screen';
+import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
 type Choice = 'generate' | 'paste' | null;
@@ -17,6 +18,7 @@ type Choice = 'generate' | 'paste' | null;
 export default function OnboardingPlan() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [choice, setChoice] = useState<Choice>(null);
 
   if (choice === 'generate') {
@@ -38,10 +40,10 @@ export default function OnboardingPlan() {
   return (
     <Screen>
       <View style={{ flex: 1, padding: spacing.lg, justifyContent: 'center' }}>
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.xs }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
           {t('chooseHowTitle')}
         </Text>
-        <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.lg }}>{t('chooseHowSub')}</Text>
+        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.lg }}>{t('chooseHowSub')}</Text>
 
         <Pressable
           onPress={() => setChoice('generate')}

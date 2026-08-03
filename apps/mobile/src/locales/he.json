@@ -74,7 +74,7 @@
   "noData": "אין עדיין נתונים — תתחיל אימון!",
   "settingsTitle": "הגדרות",
   "myCoach": "המאמן שלי",
-  "trainingPlans": "תוכניות אימון",
+  "trainingPlans": "אימונים",
   "managePlans": "ניהול תוכניות אימון",
   "managePlansTitle": "תוכניות האימון שלי",
   "noActivePlans": "אין תוכניות פעילות",
@@ -113,7 +113,6 @@
   "delete": "מחק",
   "save": "שמור",
   "loading": "טוען…",
-
   "profileSection": "פרופיל",
   "editProfileTitle": "עריכת פרופיל",
   "generatePlanCta": "בנה לי תוכנית",
@@ -122,22 +121,18 @@
   "chooseHowSub": "אפשר לתת ל-AI לבנות לך תוכנית, להדביק תוכנית קיימת, או לבנות בעצמך.",
   "choosePaste": "יש לי תוכנית קיימת",
   "chooseManual": "אבנה בעצמי",
-
   "goalTitle": "מה המטרה שלך?",
   "goalSub": "זה יעזור לבנות לך תוכנית מתאימה",
   "goal_strength": "כוח",
   "goal_hypertrophy": "מסת שריר",
   "goal_general_fitness": "כושר כללי",
   "goal_fat_loss": "ירידה במשקל",
-
   "experienceTitle": "מה רמת הניסיון שלך?",
   "level_beginner": "מתחיל",
   "level_intermediate": "בינוני",
   "level_advanced": "מתקדם",
-
   "daysTitle": "כמה ימים בשבוע?",
   "daysSub": "כמה פעמים בשבוע תרצה להתאמן",
-
   "aboutTitle": "קצת עליך",
   "aboutSub": "לא חובה — עוזר לחדד את התוכנית",
   "genderLabel": "מין",
@@ -151,12 +146,10 @@
   "heightLabel": "גובה (ס\"מ)",
   "heightPlaceholder": "למשל 178",
   "skipStep": "דלג על השלב הזה",
-
   "injuriesTitle": "משהו שכדאי להימנע ממנו?",
   "injuriesSub": "פציעות או מגבלות (לא חובה)",
   "injuriesPlaceholder": "לדוגמה: כאב בכתף ימין, להימנע מהרמות מעל הראש",
   "finishIntake": "צור תוכנית",
-
   "genLine1": "בוחר לך תרגילים ראשונים…",
   "genLine2": "מכייל עצימות התחלתית…",
   "genLine3": "כמעט מוכן…",
@@ -168,5 +161,9 @@
   "pattern_push": "דחיפה",
   "pattern_pull": "משיכה",
   "pattern_squat": "סקוואט",
-  "pattern_hinge": "כפיפת מותניים"
+  "pattern_hinge": "כפיפת מותניים",
+  "lang_en": "English",
+  "lang_he": "עברית",
+  "lang_ar": "العربية",
+  "startingWeightLabel": "משקל התחלתי"
 }

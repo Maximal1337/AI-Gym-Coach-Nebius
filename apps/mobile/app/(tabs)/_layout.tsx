@@ -1,10 +1,17 @@
 import { Tabs } from 'expo-router';
 import { Text, useColorScheme, View } from 'react-native';
 import { BlurView } from 'expo-blur';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
-function TabIcon({ emoji, label, focused }: { emoji: string; label: string; focused: boolean }) {
+function TabIcon({
+  name, label, focused,
+}: {
+  name: keyof typeof Ionicons.glyphMap;
+  label: string;
+  focused: boolean;
+}) {
   const theme = useTheme();
   return (
     <View style={{
@@ -13,7 +20,7 @@ function TabIcon({ emoji, label, focused }: { emoji: string; label: string; focu
       borderRadius: 20,
       backgroundColor: focused ? theme.surface : 'transparent',
     }}>
-      <Text style={{ fontSize: 18 }}>{emoji}</Text>
+      <Ionicons name={name} size={20} color={focused ? theme.accent : theme.inkSoft} />
       <Text style={{ fontSize: 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
         {label}
       </Text>
@@ -72,21 +79,36 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: t('chatTitle'),
-          tabBarIcon: ({ focused }) => <TabIcon emoji="💬" label={t('chatTitle')} focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} label={t('chatTitle')} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="progress"
         options={{
           title: t('progressTitle'),
-          tabBarIcon: ({ focused }) => <TabIcon emoji="📈" label={t('progressTitle')} focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} label={t('progressTitle')} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="plans"
+        options={{
+          title: t('trainingPlans'),
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'barbell' : 'barbell-outline'} label={t('trainingPlans')} focused={focused} />
+          ),
         }}
       />
       <Tabs.Screen
         name="settings"
         options={{
           title: t('settingsTitle'),
-          tabBarIcon: ({ focused }) => <TabIcon emoji="⚙️" label={t('settingsTitle')} focused={focused} />,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'settings' : 'settings-outline'} label={t('settingsTitle')} focused={focused} />
+          ),
         }}
       />
     </Tabs>

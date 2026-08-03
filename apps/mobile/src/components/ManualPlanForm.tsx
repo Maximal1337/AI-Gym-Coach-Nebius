@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import { useTranslation } from 'react-i18next';
 import { callFn, ApiError } from '../lib/api';
 import { DismissKeyboardView } from './DismissKeyboardView';
+import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
 interface ManualExercise {
@@ -18,9 +19,9 @@ function emptyExercise(): ManualExercise {
   return { name: '', sets: '', repRange: '', kg: '', note: '', warmup: '' };
 }
 
-function buildIntensity(kg: string, note: string): string {
+function buildIntensity(kg: string, note: string, startingWeightLabel: string, kgLabel: string): string {
   const parts: string[] = [];
-  if (kg.trim()) parts.push(`משקל התחלתי: ${kg.trim()} ק"ג`);
+  if (kg.trim()) parts.push(`${startingWeightLabel}: ${kg.trim()} ${kgLabel}`);
   if (note.trim()) parts.push(note.trim());
   return parts.join(' | ');
 }
@@ -35,6 +36,7 @@ function buildIntensity(kg: string, note: string): string {
 export function ManualPlanForm({ onDone }: { onDone: () => void }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [planName, setPlanName] = useState('');
   const [exercises, setExercises] = useState<ManualExercise[]>([emptyExercise()]);
   const [busy, setBusy] = useState(false);
@@ -79,7 +81,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
               sets: parseInt(e.sets, 10),
               repRange: e.repRange.trim(),
               restSec: 60,
-              intensity: buildIntensity(e.kg, e.note),
+              intensity: buildIntensity(e.kg, e.note, t('startingWeightLabel'), t('kgLabel')),
               warmup: e.warmup.trim() ? e.warmup.trim() : null,
               equipmentType: null,
             })),
@@ -96,10 +98,10 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
 
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
-      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.sm, textAlign: 'right' }}>
+      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {t('manualPlanTitle')}
       </Text>
-      <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: 'right' }}>
+      <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {t('manualPlanSub')}
       </Text>
 
@@ -110,7 +112,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
         placeholderTextColor={theme.inkSoft}
         style={{
           backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md,
-          color: theme.ink, textAlign: 'right', fontWeight: '700', marginBottom: spacing.md,
+          color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontWeight: '700', marginBottom: spacing.md,
         }}
       />
 
@@ -120,21 +122,21 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
             backgroundColor: theme.surface, borderRadius: radius.card,
             padding: spacing.md, marginBottom: spacing.sm, gap: 8,
           }}>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+            <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
               <Text style={{ color: theme.inkSoft, fontSize: 12 }}>{idx + 1}.</Text>
               <TextInput
                 value={e.name}
                 onChangeText={(v) => updateExercise(idx, { name: v })}
                 placeholder={t('exerciseNamePlaceholder')}
                 placeholderTextColor={theme.inkSoft}
-                style={{ flex: 1, color: theme.ink, fontWeight: '700', textAlign: 'right', padding: 0 }}
+                style={{ flex: 1, color: theme.ink, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left', padding: 0 }}
               />
               <Pressable onPress={() => removeExercise(idx)} hitSlop={8}>
                 <Text style={{ color: theme.critical, fontSize: 16 }}>✕</Text>
               </Pressable>
             </View>
 
-            <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+            <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
               <TextInput
                 value={e.sets}
                 onChangeText={(v) => updateExercise(idx, { sets: v })}
@@ -143,7 +145,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
                 keyboardType="number-pad"
                 style={{
                   flex: 1, backgroundColor: theme.bg, borderRadius: radius.field, padding: 8,
-                  color: theme.ink, textAlign: 'right', fontSize: 13,
+                  color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontSize: 13,
                 }}
               />
               <TextInput
@@ -153,7 +155,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
                 placeholderTextColor={theme.inkSoft}
                 style={{
                   flex: 1, backgroundColor: theme.bg, borderRadius: radius.field, padding: 8,
-                  color: theme.ink, textAlign: 'right', fontSize: 13,
+                  color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontSize: 13,
                 }}
               />
             </View>
@@ -167,7 +169,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
               maxLength={20}
               style={{
                 backgroundColor: theme.bg, borderRadius: radius.field, padding: 8,
-                color: theme.ink, textAlign: 'right', fontSize: 13,
+                color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontSize: 13,
               }}
             />
             <TextInput
@@ -177,7 +179,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
               placeholderTextColor={theme.inkSoft}
               style={{
                 backgroundColor: theme.bg, borderRadius: radius.field, padding: 8,
-                color: theme.ink, textAlign: 'right', fontSize: 13,
+                color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontSize: 13,
               }}
             />
             <TextInput
@@ -188,7 +190,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
               maxLength={150}
               style={{
                 backgroundColor: theme.bg, borderRadius: radius.field, padding: 8,
-                color: theme.ink, textAlign: 'right', fontSize: 13,
+                color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontSize: 13,
               }}
             />
           </View>

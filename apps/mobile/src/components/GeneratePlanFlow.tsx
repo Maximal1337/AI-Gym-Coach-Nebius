@@ -1,11 +1,12 @@
-import { useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { ApiError, callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
 import { ConfettiBurst } from './ConfettiBurst';
+import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
 type PrimaryGoal = 'strength' | 'hypertrophy' | 'general_fitness' | 'fat_loss';
@@ -21,8 +22,31 @@ interface LinterCheck {
 
 const GOALS: PrimaryGoal[] = ['strength', 'hypertrophy', 'general_fitness', 'fat_loss'];
 const LEVELS: ExperienceLevel[] = ['beginner', 'intermediate', 'advanced'];
-const DAY_OPTIONS = [2, 3, 4, 5, 6];
+const DAY_OPTIONS = [1, 2, 3, 4, 5, 6];
 const GENERATING_LINES = ['genLine1', 'genLine2', 'genLine3'];
+
+function Spinner() {
+  const theme = useTheme();
+  const spin = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const loop = Animated.loop(
+      Animated.timing(spin, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }),
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [spin]);
+
+  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
+
+  return (
+    <Animated.View style={{
+      width: 54, height: 54, borderRadius: 27, borderWidth: 3,
+      borderColor: theme.rule, borderTopColor: theme.accent,
+      transform: [{ rotate }],
+    }} />
+  );
+}
 
 /**
  * AI-generated training plans (System Design §21): a short structured
@@ -39,6 +63,7 @@ export function GeneratePlanFlow({
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir, language } = useLanguage();
 
   const [step, setStep] = useState<Step>('goal');
   const [primaryGoal, setPrimaryGoal] = useState<PrimaryGoal | null>(null);
@@ -96,6 +121,7 @@ export function GeneratePlanFlow({
         weightKg: weightKg.trim() ? parseFloat(weightKg) : null,
         heightCm: heightCm.trim() ? parseFloat(heightCm) : null,
         injuryNotes: injuryNotes.trim() ? injuryNotes.trim() : null,
+        language,
       });
       setPreview(res.plans);
       setLinterChecks(res.linterChecks);
@@ -117,7 +143,7 @@ export function GeneratePlanFlow({
 
   function Header({ progress }: { progress: number }) {
     return (
-      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
+      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
         <Pressable onPress={onCancel}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
         </Pressable>
@@ -135,7 +161,7 @@ export function GeneratePlanFlow({
       <Pressable
         onPress={onPress}
         style={{
-          flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+          flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between',
           backgroundColor: selected ? theme.surface : theme.surface,
           borderWidth: 1.5, borderColor: selected ? theme.accent : 'transparent',
           borderRadius: radius.card, padding: spacing.md, marginBottom: spacing.sm,
@@ -158,10 +184,10 @@ export function GeneratePlanFlow({
     return (
       <DismissKeyboardView style={{ padding: spacing.lg }}>
         <Header progress={progressStep} />
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.xs }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
           {t('goalTitle')}
         </Text>
-        <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.md }}>{t('goalSub')}</Text>
+        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>{t('goalSub')}</Text>
         {GOALS.map((g) => (
           <ChoiceCard
             key={g}
@@ -181,7 +207,7 @@ export function GeneratePlanFlow({
     return (
       <DismissKeyboardView style={{ padding: spacing.lg }}>
         <Header progress={progressStep} />
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
           {t('experienceTitle')}
         </Text>
         {LEVELS.map((lvl) => (
@@ -203,11 +229,11 @@ export function GeneratePlanFlow({
     return (
       <DismissKeyboardView style={{ padding: spacing.lg }}>
         <Header progress={progressStep} />
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.xs }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
           {t('daysTitle')}
         </Text>
-        <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.md }}>{t('daysSub')}</Text>
-        <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: spacing.sm }}>
+        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>{t('daysSub')}</Text>
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.sm }}>
           {DAY_OPTIONS.map((d) => (
             <Pressable
               key={d}
@@ -233,15 +259,15 @@ export function GeneratePlanFlow({
     return (
       <DismissKeyboardView style={{ padding: spacing.lg }}>
         <Header progress={progressStep} />
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.xs }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
           {t('aboutTitle')}
         </Text>
-        <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.md }}>{t('aboutSub')}</Text>
+        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>{t('aboutSub')}</Text>
 
-        <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: 'right', marginBottom: 6 }}>
+        <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
           {t('genderLabel')}
         </Text>
-        <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: spacing.md }}>
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 6, marginBottom: spacing.md }}>
           {(['male', 'female', 'other'] as Gender[]).map((g) => (
             <Pressable
               key={g}
@@ -263,7 +289,7 @@ export function GeneratePlanFlow({
           { label: t('heightLabel'), placeholder: t('heightPlaceholder'), value: heightCm, onChange: setHeightCm },
         ].map((f) => (
           <View key={f.label} style={{ marginBottom: spacing.sm }}>
-            <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: 'right', marginBottom: 6 }}>
+            <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
               {f.label}
             </Text>
             <TextInput
@@ -274,7 +300,7 @@ export function GeneratePlanFlow({
               keyboardType="number-pad"
               style={{
                 backgroundColor: theme.surface, borderRadius: radius.field, padding: 12,
-                color: theme.ink, textAlign: 'right',
+                color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left',
               }}
             />
           </View>
@@ -303,10 +329,10 @@ export function GeneratePlanFlow({
     return (
       <DismissKeyboardView style={{ padding: spacing.lg }}>
         <Header progress={progressStep} />
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.xs }}>
+        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
           {t('injuriesTitle')}
         </Text>
-        <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.md }}>{t('injuriesSub')}</Text>
+        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>{t('injuriesSub')}</Text>
         <TextInput
           multiline
           value={injuryNotes}
@@ -315,7 +341,7 @@ export function GeneratePlanFlow({
           placeholderTextColor={theme.inkSoft}
           style={{
             minHeight: 100, backgroundColor: theme.surface, borderRadius: radius.card,
-            padding: spacing.md, color: theme.ink, textAlign: 'right', textAlignVertical: 'top',
+            padding: spacing.md, color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', textAlignVertical: 'top',
             marginBottom: spacing.md,
           }}
         />
@@ -343,10 +369,7 @@ export function GeneratePlanFlow({
   if (step === 'generating') {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg }}>
-        <View style={{
-          width: 54, height: 54, borderRadius: 27, borderWidth: 3,
-          borderColor: theme.rule, borderTopColor: theme.accent,
-        }} />
+        <Spinner />
         <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t(GENERATING_LINES[lineIdx])}</Text>
       </View>
     );
@@ -374,7 +397,7 @@ export function GeneratePlanFlow({
   const uncovered = linterChecks.filter((c) => !c.covered);
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
-      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: 'right', marginBottom: spacing.md }}>
+      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
         {t('generatedTitle')}
       </Text>
       <PlanPreview
@@ -386,12 +409,12 @@ export function GeneratePlanFlow({
         extraNote={
           <View style={{ marginBottom: spacing.sm }}>
             {uncovered.map((c) => (
-              <Text key={c.pattern} style={{ color: theme.warning, fontSize: 12, textAlign: 'right', marginBottom: 4 }}>
+              <Text key={c.pattern} style={{ color: theme.warning, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 4 }}>
                 {t('linterWarning', { pattern: t(`pattern_${c.pattern}`) })}
               </Text>
             ))}
             <View style={{ borderWidth: 1, borderColor: theme.rule, borderRadius: radius.card, padding: spacing.sm }}>
-              <Text style={{ textAlign: 'right' }}>
+              <Text style={{ textAlign: dir === 'rtl' ? 'right' : 'left' }}>
                 <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('aiDisclaimerLabel')} — </Text>
                 <Text style={{ color: theme.ink }}>{t('aiDisclaimerBody')}</Text>
               </Text>

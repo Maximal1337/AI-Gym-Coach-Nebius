@@ -1,13 +1,19 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
+import en from './locales/en.json';
 import he from './locales/he.json';
+import ar from './locales/ar.json';
 
-// GYM-50: every UI string goes through i18next from day one. Only Hebrew
-// ships in v1 — adding a language later is a new JSON file, not a refactor.
+// English by default, with Hebrew and Arabic as real switchable languages
+// (see src/lib/language.tsx for how the active one is chosen/persisted).
 i18n.use(initReactI18next).init({
-  resources: { he: { translation: he } },
-  lng: 'he',
-  fallbackLng: 'he',
+  resources: {
+    en: { translation: en },
+    he: { translation: he },
+    ar: { translation: ar },
+  },
+  lng: 'en',
+  fallbackLng: 'en',
   interpolation: { escapeValue: false },
 });
 

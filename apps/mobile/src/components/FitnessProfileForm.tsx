@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
 type Gender = 'male' | 'female' | 'other';
@@ -27,6 +28,7 @@ export function FitnessProfileForm({
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [gender, setGender] = useState<Gender | null>(initial.gender);
   const [age, setAge] = useState(initial.age);
   const [weightKg, setWeightKg] = useState(initial.weightKg);
@@ -57,14 +59,14 @@ export function FitnessProfileForm({
       keyboardShouldPersistTaps="handled"
       keyboardDismissMode="on-drag"
     >
-      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: 'right' }}>
+      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {t('editProfileTitle')}
       </Text>
 
-      <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: 'right', marginBottom: 6 }}>
+      <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
         {t('genderLabel')}
       </Text>
-      <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: spacing.md }}>
+      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 6, marginBottom: spacing.md }}>
         {(['male', 'female', 'other'] as Gender[]).map((g) => (
           <Pressable
             key={g}
@@ -86,7 +88,7 @@ export function FitnessProfileForm({
         { label: t('heightLabel'), placeholder: t('heightPlaceholder'), value: heightCm, onChange: setHeightCm },
       ].map((f) => (
         <View key={f.label} style={{ marginBottom: spacing.sm }}>
-          <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: 'right', marginBottom: 6 }}>
+          <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
             {f.label}
           </Text>
           <TextInput
@@ -97,7 +99,7 @@ export function FitnessProfileForm({
             keyboardType="number-pad"
             style={{
               backgroundColor: theme.surface, borderRadius: radius.field, padding: 12,
-              color: theme.ink, textAlign: 'right',
+              color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left',
             }}
           />
         </View>

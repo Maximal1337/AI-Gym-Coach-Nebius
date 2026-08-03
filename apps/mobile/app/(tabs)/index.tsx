@@ -14,17 +14,18 @@ import { Screen } from '../../src/components/Screen';
 import { MarkdownText } from '../../src/components/MarkdownText';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
+import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
 interface SuggestedAction { exerciseId: string; weightKg: number; targetReps: number[] }
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
 
-/** "58 ק"ג × 8/8/8" when every set shares a weight (the common case), else a per-set list. */
-function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>): string {
+/** "58kg × 8/8/8" when every set shares a weight (the common case), else a per-set list. */
+function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>, kgLabel: string): string {
   const sameWeight = sets.every((s) => s.weightKg === sets[0].weightKg);
   return sameWeight
-    ? `${sets[0].weightKg} ק"ג × ${sets.map((s) => s.reps).join('/')}`
+    ? `${sets[0].weightKg} ${kgLabel} × ${sets.map((s) => s.reps).join('/')}`
     : sets.map((s) => `${s.weightKg}×${s.reps}`).join(', ');
 }
 
@@ -32,6 +33,7 @@ function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>): s
 export default function Chat() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentExerciseId, setCurrentExerciseId] = useState<string | null>(null);
@@ -125,7 +127,7 @@ export default function Chat() {
   // the bar in place, tappable again.
   async function confirmSets(exerciseId: string, sets: Array<{ weightKg: number; reps: number }>) {
     if (!sessionId || busy) return;
-    push('me', formatConfirmedSets(sets));
+    push('me', formatConfirmedSets(sets, t('kgLabel')));
     setBusy(true);
     try {
       const res = await callFn<TurnResult>('coach-turn', { sessionId, exerciseId, confirmedSets: sets });
@@ -267,7 +269,13 @@ export default function Chat() {
       style={{ flex: 1 }}
     >
       <View style={{
-        flexDirection: 'row', alignItems: 'center', gap: spacing.sm,
+        // Inverted from the usual dir ternary elsewhere in this file: DOM
+        // order here is [action button, title block], so RTL needs plain
+        // 'row' (button leading/right... i.e. button first = visually
+        // rightmost only under row-reverse — here 'row' already puts the
+        // button on the left and the title flush right, which is the
+        // correct RTL reading, so LTR is the one that needs reversing).
+        flexDirection: dir === 'rtl' ? 'row' : 'row-reverse', alignItems: 'center', gap: spacing.sm,
         paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
         borderBottomWidth: 1, borderBottomColor: theme.rule,
       }}>
@@ -276,12 +284,12 @@ export default function Chat() {
             <Text style={{ color: theme.critical, fontWeight: '600', fontSize: 13 }}>{t('finishWorkout')}</Text>
           </Pressable>
         )}
-        <View style={{ flex: 1, alignItems: 'flex-end' }}>
-          <Text style={{ color: theme.ink, fontWeight: '800', fontSize: 16, textAlign: 'right' }}>
+        <View style={{ flex: 1, alignItems: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+          <Text style={{ color: theme.ink, fontWeight: '800', fontSize: 16, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
             {t('chatTitle')}
           </Text>
           {inWorkout && currentExerciseName && (
-            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: 'right' }}>
+            <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
               {currentExerciseName}
               {progress ? ` · ${Math.min(progress.done + 1, progress.total)}/${progress.total}` : ''}
             </Text>
@@ -310,7 +318,7 @@ export default function Chat() {
                   color: item.from === 'me' ? theme.onAccent : item.from === 'system' ? theme.inkSoft : theme.ink,
                   fontSize: typography.message.size,
                   lineHeight: typography.message.lineHeight,
-                  textAlign: 'right' as const,
+                  textAlign: (dir === 'rtl' ? 'right' : 'left') as 'right' | 'left',
                 };
                 // Only actual coach replies are LLM output — 'me' is the
                 // user's own raw text and 'system' is static app copy,
@@ -325,7 +333,7 @@ export default function Chat() {
       />
 
       {busy && (
-        <View style={{ flexDirection: 'row-reverse', gap: 8, padding: spacing.sm, alignItems: 'center' }}>
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8, padding: spacing.sm, alignItems: 'center' }}>
           <ActivityIndicator size="small" color={theme.inkSoft} />
           <Text style={{ color: theme.inkSoft, fontSize: 12 }}>{t('typing')}</Text>
         </View>
@@ -342,10 +350,10 @@ export default function Chat() {
 
       {!inWorkout ? (
         <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
-          <Text style={{ color: theme.inkSoft, textAlign: 'right', marginBottom: spacing.sm }}>
+          <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.sm }}>
             {t('startWorkout')}
           </Text>
-          <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+          <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8 }}>
             {plans.map((p) => (
               <Pressable
                 key={p.id}
@@ -360,7 +368,7 @@ export default function Chat() {
         </View>
       ) : (
         <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule }}>
-          <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+          <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
             <TextInput
               placeholder={t('messagePlaceholder')}
               placeholderTextColor={theme.inkSoft}
@@ -370,7 +378,7 @@ export default function Chat() {
               maxLength={200}
               style={{
                 flex: 1, backgroundColor: theme.surface, borderRadius: radius.field,
-                padding: 10, color: theme.ink, textAlign: 'right', maxHeight: 100,
+                padding: 10, color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', maxHeight: 100,
               }}
             />
             <Pressable

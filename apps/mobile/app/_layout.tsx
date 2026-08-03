@@ -2,6 +2,7 @@ import { Stack } from 'expo-router';
 import { useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { palette } from '@gymcoach/shared';
+import { LanguageProvider } from '../src/lib/language';
 import '../src/i18n';
 
 export default function RootLayout() {
@@ -10,12 +11,14 @@ export default function RootLayout() {
 
   return (
     <SafeAreaProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: theme.bg },
-        }}
-      />
+      <LanguageProvider>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: theme.bg },
+          }}
+        />
+      </LanguageProvider>
     </SafeAreaProvider>
   );
 }

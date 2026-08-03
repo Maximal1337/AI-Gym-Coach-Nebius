@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
 interface SetRow { kg: string; reps: string }
@@ -83,6 +84,7 @@ export function SuggestedActionBar({
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { dir } = useLanguage();
   const [rows, setRows] = useState<SetRow[]>(() => initialRows(weightKg, targetReps));
 
   // A new suggestion (different exercise, or a renegotiated target) should
@@ -105,7 +107,7 @@ export function SuggestedActionBar({
       backgroundColor: theme.surface, borderTopWidth: 1, borderTopColor: theme.rule,
       paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: 2,
     }}>
-      <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
         <Text style={{ width: 14 }} />
         <Text style={{ flex: 1, color: theme.inkSoft, fontSize: 11, lineHeight: 13, textAlign: 'center' }}>
           {t('kgLabel')}
@@ -116,10 +118,10 @@ export function SuggestedActionBar({
         <View style={{ width: 48 }} />
       </View>
 
-      <View style={{ flexDirection: 'row-reverse', gap: 10, alignItems: 'stretch' }}>
+      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 10, alignItems: 'stretch' }}>
         <View style={{ flex: 1, gap: 6 }}>
           {rows.map((row, i) => (
-            <View key={i} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+            <View key={i} style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
               <Text style={{ color: theme.inkSoft, fontSize: 12, width: 14, textAlign: 'center' }}>{i + 1}.</Text>
               <Stepper
                 value={row.kg}
@@ -146,7 +148,7 @@ export function SuggestedActionBar({
             borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center',
           }}
         >
-          <Ionicons name="send" size={20} color={theme.onAccent} style={{ transform: [{ scaleX: -1 }] }} />
+          <Ionicons name="send" size={20} color={theme.onAccent} style={dir === 'rtl' ? { transform: [{ scaleX: -1 }] } : undefined} />
         </Pressable>
       </View>
     </View>
