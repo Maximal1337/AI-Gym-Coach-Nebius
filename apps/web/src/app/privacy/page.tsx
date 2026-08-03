@@ -40,6 +40,13 @@ export default function Privacy() {
             Coach persona settings: the name, tone, and preferences you
             configure for your coach.
           </li>
+          <li>
+            Fitness profile (optional): if you use the "AI-generated plan"
+            feature, the goal, experience level, and days-per-week you
+            select, plus gender, age, weight, height, and injury notes if
+            you choose to share them — used only to personalize the
+            generated plan. All of these fields are optional and skippable.
+          </li>
         </ul>
 
         <h2>How we use it</h2>

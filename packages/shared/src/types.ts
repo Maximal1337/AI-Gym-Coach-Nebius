@@ -89,3 +89,32 @@ export interface UsageLedgerEntry {
   /** Fractional cents (numeric(10,4) in SQL) — a Flash-Lite session costs ~0.2¢. */
   costCents: number;
 }
+
+export type PrimaryGoal = "strength" | "hypertrophy" | "general_fitness" | "fat_loss";
+export type ExperienceLevel = "beginner" | "intermediate" | "advanced";
+export type Gender = "male" | "female" | "other";
+
+/** Intake facts for AI plan generation (System Design §21) — persisted, reusable. */
+export interface FitnessProfile {
+  userId: string;
+  primaryGoal: PrimaryGoal;
+  experienceLevel: ExperienceLevel;
+  daysPerWeek: number;
+  gender: Gender | null;
+  age: number | null;
+  weightKg: number | null;
+  heightCm: number | null;
+  injuryNotes: string | null;
+}
+
+export type MovementPattern = "push" | "pull" | "squat" | "hinge" | "lunge" | "core" | "isolation";
+
+/** Small hand-curated seed list — ground truth for the plan-quality linter, not model knowledge. */
+export interface CommonExercise {
+  id: string;
+  name: string;
+  muscleGroup: string;
+  movementPattern: MovementPattern;
+  equipmentType: EquipmentType;
+  isCompound: boolean;
+}

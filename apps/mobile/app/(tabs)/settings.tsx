@@ -15,17 +15,25 @@ export default function Settings() {
   const { t } = useTranslation();
   const [coach, setCoach] = useState<{ coach_name: string; tone_preset: string } | null>(null);
   const [spentCents, setSpentCents] = useState(0);
+  // null = not loaded yet / no row at all — the section only renders once
+  // this is a real row (System Design §21: appears only if the user
+  // actually typed something in "קצת עליך", never as an empty prompt).
+  const [fitnessProfile, setFitnessProfile] = useState<{
+    gender: string | null; age: number | null; weight_kg: number | null; height_cm: number | null;
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
       (async () => {
         const period = new Date().toISOString().slice(0, 7);
-        const [{ data: profile }, { data: usage }] = await Promise.all([
+        const [{ data: profile }, { data: usage }, { data: fitness }] = await Promise.all([
           supabase.from('coach_profiles').select('coach_name, tone_preset').maybeSingle(),
           supabase.from('usage_ledger').select('cost_cents').eq('period', period).maybeSingle(),
+          supabase.from('fitness_profiles').select('gender, age, weight_kg, height_cm').maybeSingle(),
         ]);
         setCoach(profile);
         setSpentCents(Number(usage?.cost_cents ?? 0));
+        setFitnessProfile(fitness ?? null);
       })();
     }, []),
   );
@@ -90,6 +98,20 @@ export default function Settings() {
         {row(t('coachName'), coach?.coach_name ?? '—', () => router.push('/edit-persona'))}
         {row(t('tone'), coach ? t(`tone_${coach.tone_preset}`) : '—', () => router.push('/edit-persona'))}
       </View>
+
+      {fitnessProfile && (
+        <>
+          <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>
+            {t('profileSection')}
+          </Text>
+          <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
+            {row(t('genderLabel'), fitnessProfile.gender ? t(`gender_${fitnessProfile.gender}`) : '—', () => router.push('/edit-fitness-profile'))}
+            {row(t('ageLabel'), fitnessProfile.age != null ? String(fitnessProfile.age) : '—', () => router.push('/edit-fitness-profile'))}
+            {row(t('weightLabel'), fitnessProfile.weight_kg != null ? String(fitnessProfile.weight_kg) : '—', () => router.push('/edit-fitness-profile'))}
+            {row(t('heightLabel'), fitnessProfile.height_cm != null ? String(fitnessProfile.height_cm) : '—', () => router.push('/edit-fitness-profile'))}
+          </View>
+        </>
+      )}
 
       <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textAlign: 'right', marginBottom: 6 }}>
         {t('trainingPlans')}

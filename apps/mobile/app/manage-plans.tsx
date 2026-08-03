@@ -102,6 +102,21 @@ export default function ManagePlans() {
         >
           <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('buildOwnPlan')}</Text>
         </Pressable>
+
+        {/* Pinned separately from the two above (System Design §21) — a
+            distinct third option, not grouped with paste/manual. */}
+        <Pressable
+          onPress={() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } })}
+          style={{
+            backgroundColor: theme.accent, borderRadius: radius.pill,
+            padding: spacing.md, alignItems: 'center', marginTop: spacing.lg,
+          }}
+        >
+          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('generatePlanCta')}</Text>
+        </Pressable>
+        <Text style={{ color: theme.inkSoft, fontSize: 10.5, textAlign: 'center', marginTop: spacing.xs, lineHeight: 15 }}>
+          {t('generatePlanCaption')}
+        </Text>
       </ScrollView>
     </Screen>
   );

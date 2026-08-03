@@ -4,13 +4,28 @@ import { z } from "zod";
 import { agentDisabled } from "./config.js";
 import { runCoachingTurn } from "./graph.js";
 import { runConversationTurn, runConfirmTurn } from "./converse.js";
-import { turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema } from "./schema.js";
+import { turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema, equipmentTypeSchema } from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
+import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
 
 const parsePlanInput = z.object({ text: z.string().min(10).max(20000) });
 const parseSummaryInput = z.object({
   text: z.string().min(10).max(20000),
   knownExercises: z.array(z.string().max(200)).max(100).default([]),
+});
+const generatePlanRequestSchema = z.object({
+  intake: generatePlanInputSchema,
+  commonExercises: z
+    .array(
+      z.object({
+        name: z.string(),
+        muscleGroup: z.string(),
+        movementPattern: z.enum(["push", "pull", "squat", "hinge", "lunge", "core", "isolation"]),
+        equipmentType: equipmentTypeSchema,
+        isCompound: z.boolean(),
+      }),
+    )
+    .max(300),
 });
 
 const PORT = Number(process.env.PORT ?? 8787);
@@ -167,6 +182,32 @@ const server = createServer(async (req, res) => {
     } catch (e) {
       console.error("parse failed:", (e as Error)?.message);
       json(422, { error: "unparseable" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/generate-plan") {
+    if (!checkAuth(req, json)) return;
+    try {
+      const body = await readBody(req);
+      if (!body) {
+        json(413, { error: "body_too_large" });
+        return;
+      }
+      const parsed = generatePlanRequestSchema.safeParse(JSON.parse(body.toString()));
+      if (!parsed.success) {
+        json(400, { error: "invalid_input" });
+        return;
+      }
+      const result = await generateWorkoutPlan(parsed.data.intake, parsed.data.commonExercises);
+      if (!result) {
+        json(503, { error: "llm_not_configured" });
+        return;
+      }
+      json(200, result);
+    } catch (e) {
+      console.error("generate-plan failed:", (e as Error)?.message);
+      json(422, { error: "ungeneratable" });
     }
     return;
   }

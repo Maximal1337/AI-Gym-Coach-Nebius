@@ -67,10 +67,14 @@ export function currentPeriod(): string {
 
 /**
  * GYM-21: monthly budget check — done once per session start.
- * Units are CENTS: the default of 8¢/user/month ≈ 12-13 sessions on
- * Gemini 3.1 Flash-Lite at ~0.6¢ each. Deliberately advisory-precision:
- * concurrent starts within one rate-limit window can overshoot by a few
- * sessions, which at these prices is a fraction of a cent.
+ * Units are CENTS: the default of 8¢/user/month. The ~0.6¢/session figure
+ * this cap was sized against holds up against real usage: recorded cost
+ * (usage_ledger, July 2026) came in at ≈0.07¢ per exercise turn, almost
+ * exactly the ~0.06¢/call this was originally estimated at, so 8¢ still
+ * covers the originally-estimated ~12-13 full workouts a month, not more.
+ * Deliberately advisory-precision either way: concurrent starts within one
+ * rate-limit window can overshoot by a few sessions, which at these prices
+ * is a fraction of a cent.
  */
 export async function budgetRemaining(
   db: SupabaseClient,
