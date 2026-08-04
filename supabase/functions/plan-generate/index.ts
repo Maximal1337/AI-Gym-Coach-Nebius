@@ -1,4 +1,4 @@
-import { admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage } from "../_shared/mod.ts";
+import { admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage, withSentry } from "../_shared/mod.ts";
 
 const GOALS = ["strength", "hypertrophy", "general_fitness", "fat_loss"];
 const LEVELS = ["beginner", "intermediate", "advanced"];
@@ -18,7 +18,7 @@ const LANGUAGES = ["en", "he", "ar"];
  * generation call is a real LLM call, drawing from the same monthly cap,
  * not a separate cost model.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -130,4 +130,4 @@ Deno.serve(async (req) => {
   await recordUsage(db, user.id, result.usage);
 
   return json(200, { plans: result.plans, linterChecks: result.linterChecks });
-});
+}));

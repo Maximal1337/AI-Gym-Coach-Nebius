@@ -1,10 +1,10 @@
-import { admin, allowRate, corsHeaders, getUser, json } from "../_shared/mod.ts";
+import { admin, allowRate, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-22 (write side): save a note about an exercise ("knee felt tight").
  * The read side is folded into every coaching turn via notesForExercise.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -46,4 +46,4 @@ Deno.serve(async (req) => {
   if (error) return json(500, { error: "write_failed" });
 
   return json(200, { saved: true });
-});
+}));

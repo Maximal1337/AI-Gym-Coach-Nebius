@@ -6,5 +6,6 @@
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test"
-  }
+  },
+  "workspaces": ["apps/*", "services/*", "packages/*"]
 }

@@ -1,11 +1,11 @@
-import { admin, corsHeaders, getUser, json } from "../_shared/mod.ts";
+import { admin, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-46: record legal consent. Server-written by design — the client has
  * no column grant on terms_accepted_at/terms_version, so the consent
  * audit trail can only be produced by this endpoint.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -32,4 +32,4 @@ Deno.serve(async (req) => {
   if (error) return json(500, { error: "write_failed" });
 
   return json(200, { accepted: true, version });
-});
+}));

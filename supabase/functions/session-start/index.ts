@@ -6,6 +6,7 @@ import {
   getUser,
   json,
   runExerciseTurn,
+  withSentry,
 } from "../_shared/mod.ts";
 
 /**
@@ -17,7 +18,7 @@ import {
  * Idempotent against retries: an open session on the same plan is reused,
  * so a client that got a 503 mid-start doesn't strand orphan sessions.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -100,4 +101,4 @@ Deno.serve(async (req) => {
     await db.from("workout_sessions").update({ intro_response: turn.body }).eq("id", sessionId);
   }
   return json(turn.status, { sessionId, ...turn.body });
-});
+}));

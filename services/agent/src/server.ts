@@ -1,3 +1,21 @@
+import * as Sentry from "@sentry/node";
+
+// GYM-14: crash/error reporting. Initialized before any other local import
+// so a throw during module load elsewhere still has Sentry available. An
+// unset SENTRY_DSN leaves the SDK disabled (documented behavior) rather
+// than throwing, so local dev without it configured still runs fine.
+// No tracing, no auto-instrumentation: this is a raw node:http server (no
+// framework Sentry auto-instruments anyway), and the OpenTelemetry-based
+// default integrations are heavy enough for tsx to JIT-transpile on boot
+// that they stalled startup on the 256mb Fly machine. captureException
+// works fine with zero integrations — this is manual capture only.
+Sentry.init({
+  dsn: process.env.SENTRY_DSN,
+  environment: process.env.SENTRY_ENVIRONMENT ?? "production",
+  tracesSampleRate: 0,
+  defaultIntegrations: false,
+});
+
 import { createServer, type IncomingMessage } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
@@ -7,6 +25,10 @@ import { runConversationTurn, runConfirmTurn } from "./converse.js";
 import { turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema, equipmentTypeSchema } from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
 import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
+
+// Safety net for anything that slips past every route's own try/catch below.
+process.on("uncaughtException", (err) => Sentry.captureException(err));
+process.on("unhandledRejection", (err) => Sentry.captureException(err));
 
 const parsePlanInput = z.object({ text: z.string().min(10).max(20000) });
 const parseSummaryInput = z.object({
@@ -99,7 +121,8 @@ const server = createServer(async (req, res) => {
         return;
       }
       json(200, await runCoachingTurn(parsed.data));
-    } catch {
+    } catch (e) {
+      Sentry.captureException(e);
       json(400, { error: "bad_request" });
     }
     return;
@@ -119,7 +142,8 @@ const server = createServer(async (req, res) => {
         return;
       }
       json(200, await runConversationTurn(parsed.data));
-    } catch {
+    } catch (e) {
+      Sentry.captureException(e);
       json(400, { error: "bad_request" });
     }
     return;
@@ -139,7 +163,8 @@ const server = createServer(async (req, res) => {
         return;
       }
       json(200, await runConfirmTurn(parsed.data));
-    } catch {
+    } catch (e) {
+      Sentry.captureException(e);
       json(400, { error: "bad_request" });
     }
     return;
@@ -181,6 +206,7 @@ const server = createServer(async (req, res) => {
       }
     } catch (e) {
       console.error("parse failed:", (e as Error)?.message);
+      Sentry.captureException(e);
       json(422, { error: "unparseable" });
     }
     return;
@@ -207,6 +233,7 @@ const server = createServer(async (req, res) => {
       json(200, result);
     } catch (e) {
       console.error("generate-plan failed:", (e as Error)?.message);
+      Sentry.captureException(e);
       json(422, { error: "ungeneratable" });
     }
     return;

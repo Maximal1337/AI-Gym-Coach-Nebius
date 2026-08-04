@@ -1,10 +1,10 @@
-import { admin, allowRate, corsHeaders, getUser, json } from "../_shared/mod.ts";
+import { admin, allowRate, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-18: POST /session/complete — close the session, return the summary
  * the coach echoes back for user confirmation.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -57,4 +57,4 @@ Deno.serve(async (req) => {
       .sort((a, b) => a.orderIndex - b.orderIndex)
       .map(({ name, sets }) => ({ name, sets })),
   });
-});
+}));

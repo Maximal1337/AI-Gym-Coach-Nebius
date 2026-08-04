@@ -1,4 +1,4 @@
-import { admin, allowRate, callAgent, corsHeaders, getUser, json } from "../_shared/mod.ts";
+import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-26: paste-and-parse plan onboarding. Also covers adding/editing
@@ -12,7 +12,7 @@ import { admin, allowRate, callAgent, corsHeaders, getUser, json } from "../_sha
  * Two steps by design for commit: the user always confirms what the
  * parser understood before anything is saved.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -189,4 +189,4 @@ Deno.serve(async (req) => {
   }
 
   return json(400, { error: "unknown_action" });
-});
+}));

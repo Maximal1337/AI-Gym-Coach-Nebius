@@ -6,6 +6,7 @@ import {
   getUser,
   json,
   runConversationExerciseTurn,
+  withSentry,
 } from "../_shared/mod.ts";
 
 /** A workout session older than this can no longer drive coaching turns. */
@@ -22,7 +23,7 @@ const SESSION_MAX_AGE_MS = 6 * 3600_000;
  * rejected, so a parked "in_progress" session can't become an unmetered
  * LLM faucet.
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -124,4 +125,4 @@ Deno.serve(async (req) => {
     recentHistory: cleanHistory,
   });
   return json(turn.status, turn.body);
-});
+}));

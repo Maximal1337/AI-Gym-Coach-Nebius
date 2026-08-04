@@ -1,11 +1,11 @@
-import { admin, allowRate, callAgent, corsHeaders, getUser, json } from "../_shared/mod.ts";
+import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-48: import a pasted workout summary as historical set_logs.
  *  { action: "parse", text }    -> parsed preview, matched to current exercises
  *  { action: "commit", sessions } -> insert completed sessions (source=imported)
  */
-Deno.serve(async (req) => {
+Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
 
@@ -126,4 +126,4 @@ Deno.serve(async (req) => {
   }
 
   return json(400, { error: "unknown_action" });
-});
+}));

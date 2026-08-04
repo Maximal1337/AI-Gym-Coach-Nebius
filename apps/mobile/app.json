@@ -31,7 +31,8 @@
       "expo-router",
       "expo-apple-authentication",
       "expo-notifications",
-      "expo-localization"
+      "expo-localization",
+      "@sentry/react-native/expo"
     ],
     "extra": {
       "router": {},

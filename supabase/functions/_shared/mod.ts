@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
+import * as Sentry from "npm:@sentry/deno@^10";
 
 /**
  * Shared plumbing for all Edge Functions.
@@ -7,6 +8,36 @@ import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
  * MUST filter by the authenticated user's id explicitly — treat a missing
  * `.eq("user_id", user.id)` (or ownership check) as a data leak.
  */
+
+// GYM-14: crash/error reporting, once per isolate (this module is imported
+// by every function, and ES module bodies only run once per warm isolate).
+// An unset SENTRY_DSN leaves the SDK disabled (documented behavior) rather
+// than throwing, so local dev without it configured still runs fine.
+// defaultIntegrations: false — same reasoning as the agent service: no
+// framework here for the OpenTelemetry-based auto-instrumentation to hook,
+// and it's needless weight to load per cold-start in a resource-constrained
+// Deno isolate. captureException works fine with zero integrations.
+Sentry.init({
+  dsn: Deno.env.get("SENTRY_DSN"),
+  environment: Deno.env.get("SENTRY_ENVIRONMENT") ?? "production",
+  tracesSampleRate: 0,
+  defaultIntegrations: false,
+});
+
+/** Wraps a Deno.serve handler: uncaught errors are reported to Sentry before still 500ing. */
+export function withSentry(
+  handler: (req: Request) => Promise<Response>,
+): (req: Request) => Promise<Response> {
+  return async (req: Request) => {
+    try {
+      return await handler(req);
+    } catch (error) {
+      Sentry.captureException(error, { tags: { function: new URL(req.url).pathname } });
+      await Sentry.flush(2000);
+      return json(500, { error: "internal_error" });
+    }
+  };
+}
 
 export const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
