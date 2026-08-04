@@ -12,6 +12,9 @@ import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 const BUDGET_CENTS = Number(process.env.EXPO_PUBLIC_MONTHLY_BUDGET_CENTS ?? '8');
 const APPROX_CENTS_PER_WORKOUT = 0.6;
+// Notch is free during the wider TestFlight beta — the paywall (app/subscribe.tsx)
+// stays built but hidden until RevenueCat is actually wired up (System Design §15).
+const SUBSCRIPTION_UI_ENABLED = false;
 
 export default function Settings() {
   const theme = useTheme();
@@ -134,6 +137,7 @@ export default function Settings() {
 
       {sectionTitle(t('account'))}
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
+        {SUBSCRIPTION_UI_ENABLED && row(t('subscription'), undefined, () => router.push('/subscribe'), false, 'star-outline')}
         {row(t('usageThisMonth'), t('workoutsApprox', { used, total }))}
         {row(t('renewsOn'))}
       </View>
