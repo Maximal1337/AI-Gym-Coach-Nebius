@@ -1,4 +1,4 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenRouter } from "@langchain/openrouter";
 import { z } from "zod";
 import { llmConfig } from "./config.js";
 import { extractJson } from "./util.js";
@@ -61,13 +61,14 @@ export const parsedSummarySchema = z.object({
 });
 export type ParsedSummary = z.infer<typeof parsedSummarySchema>;
 
-function parseModel(): ChatGoogleGenerativeAI | null {
-  if (!process.env.GEMINI_API_KEY) return null;
-  return new ChatGoogleGenerativeAI({
+function parseModel(): ChatOpenRouter | null {
+  if (!process.env.OPENROUTER_API_KEY) return null;
+  return new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.GEMINI_API_KEY,
-    maxOutputTokens: 4096, // parsing a full plan legitimately needs more than a chat reply
+    apiKey: process.env.OPENROUTER_API_KEY,
+    maxTokens: 4096, // parsing a full plan legitimately needs more than a chat reply
     temperature: 0,
+    siteName: "Notch",
   });
 }
 

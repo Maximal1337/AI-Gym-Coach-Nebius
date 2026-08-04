@@ -1,4 +1,4 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenRouter } from "@langchain/openrouter";
 import { z } from "zod";
 import { extractJson } from "./util.js";
 import { equipmentTypeSchema } from "./schema.js";
@@ -250,13 +250,14 @@ function buildHumanPrompt(input: GeneratePlanInput): string {
   return lines.join("\n");
 }
 
-function generateModel(): ChatGoogleGenerativeAI | null {
-  if (!process.env.GEMINI_API_KEY) return null;
-  return new ChatGoogleGenerativeAI({
-    model: "gemini-3.1-flash-lite",
-    apiKey: process.env.GEMINI_API_KEY,
-    maxOutputTokens: 3072, // a 2-3 plan program, comparable to parse.ts's 4096 cap for parsing up to 10
+function generateModel(): ChatOpenRouter | null {
+  if (!process.env.OPENROUTER_API_KEY) return null;
+  return new ChatOpenRouter({
+    model: "google/gemini-3.1-flash-lite",
+    apiKey: process.env.OPENROUTER_API_KEY,
+    maxTokens: 3072, // a 2-3 plan program, comparable to parse.ts's 4096 cap for parsing up to 10
     temperature: 0.3, // low but non-zero: follow the decision rules closely, allow some exercise-selection variety
+    siteName: "Notch",
   });
 }
 

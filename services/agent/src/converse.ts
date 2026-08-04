@@ -1,4 +1,4 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenRouter } from "@langchain/openrouter";
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessageLike } from "@langchain/core/messages";
 import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
@@ -330,7 +330,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     ? suggestTargets(input.nextExercise, input.nextLastLogs)
     : null;
 
-  if (!process.env.GEMINI_API_KEY) {
+  if (!process.env.OPENROUTER_API_KEY) {
     // No API key (local dev): a safe no-op so the pipeline stays
     // exercisable without spending a token or losing the user's report.
     return {
@@ -382,11 +382,12 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
   );
   const toolsByName = new Map<string, (typeof tools)[number]>(tools.map((t) => [t.name, t]));
 
-  const model = new ChatGoogleGenerativeAI({
+  const model = new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.GEMINI_API_KEY,
-    maxOutputTokens: llmConfig.maxOutputTokens,
+    apiKey: process.env.OPENROUTER_API_KEY,
+    maxTokens: llmConfig.maxOutputTokens,
     temperature: llmConfig.temperature,
+    siteName: "Notch",
   }).bindTools(tools);
 
   const messages: BaseMessageLike[] = [

@@ -12,8 +12,8 @@
   "dependencies": {
     "@gymcoach/shared": "workspace:*",
     "@langchain/core": "^1.2.3",
-    "@langchain/google-genai": "^2.2.0",
     "@langchain/langgraph": "^1.4.8",
+    "@langchain/openrouter": "^0.4.5",
     "@sentry/node": "^10.69.0",
     "zod": "^3.23.0"
   },

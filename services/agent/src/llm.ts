@@ -1,4 +1,4 @@
-import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
+import { ChatOpenRouter } from "@langchain/openrouter";
 import { llmConfig } from "./config.js";
 
 export interface LlmUsage {
@@ -20,7 +20,7 @@ export function costCents(tokensInput: number, tokensOutput: number): number {
 export interface ComposedReply {
   message: string;
   usage: LlmUsage;
-  /** True when no GEMINI_API_KEY is configured and a deterministic fallback answered. */
+  /** True when no OPENROUTER_API_KEY is configured and a deterministic fallback answered. */
   degraded: boolean;
 }
 
@@ -28,14 +28,15 @@ export async function composeWithLlm(
   systemPrompt: string,
   turnPrompt: string,
 ): Promise<ComposedReply | null> {
-  if (!process.env.GEMINI_API_KEY) return null;
+  if (!process.env.OPENROUTER_API_KEY) return null;
 
-  const model = new ChatGoogleGenerativeAI({
+  const model = new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.OPENROUTER_API_KEY,
     // GYM-51: hard per-call output ceiling — enforced at the API level.
-    maxOutputTokens: llmConfig.maxOutputTokens,
+    maxTokens: llmConfig.maxOutputTokens,
     temperature: llmConfig.temperature,
+    siteName: "Notch",
   });
 
   const res = await model.invoke([
