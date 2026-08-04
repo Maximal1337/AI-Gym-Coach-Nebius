@@ -14,11 +14,13 @@ import { useTheme, spacing, radius } from '../theme';
  * different commit semantics server-side (see plan-import's `mode`).
  */
 export function PlanPasteFlow({
-  mode, editPlanId, onDone,
+  mode, editPlanId, onDone, onCancel,
 }: {
   mode: 'onboarding' | 'add' | 'edit';
   editPlanId?: string;
   onDone: () => void;
+  /** Only meaningful where there's no real screen to navigate back to (onboarding's local-state flow) — 'add'/'edit' are pushed routes with native back already. */
+  onCancel?: () => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -87,6 +89,11 @@ export function PlanPasteFlow({
 
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
+      {onCancel && !preview && (
+        <Pressable onPress={onCancel} style={{ marginBottom: spacing.sm, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+          <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
+        </Pressable>
+      )}
       <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {stepLabel}
       </Text>

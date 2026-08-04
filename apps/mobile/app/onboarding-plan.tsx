@@ -32,7 +32,7 @@ export default function OnboardingPlan() {
   if (choice === 'paste') {
     return (
       <Screen>
-        <PlanPasteFlow mode="onboarding" onDone={() => router.replace('/')} />
+        <PlanPasteFlow mode="onboarding" onDone={() => router.replace('/')} onCancel={() => setChoice(null)} />
       </Screen>
     );
   }
