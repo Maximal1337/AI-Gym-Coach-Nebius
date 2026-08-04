@@ -34,6 +34,9 @@ export interface ConversationInput {
   nextNotes: string[];
   /** §20: other fresh/deferred exercises the model may look up and switch to. */
   remainingExercises: RemainingExerciseCandidate[];
+  /** The exercise (if any) most recently logged this session before the current one — see correctPreviousExerciseSet. */
+  previousExercise: Exercise | null;
+  previousExerciseLogs: SetLog[];
 }
 
 export interface ConversationOutput {
@@ -57,6 +60,12 @@ export interface ConversationOutput {
     equipmentType: Exercise["equipmentType"] | null;
   } | null;
   noteToSave: { text: string; general: boolean } | null;
+  /** Caller must re-validate the setNo against real set_logs rows before trusting this. */
+  correctedSet: { setNo: number; weightKg: number | null; reps: number | null } | null;
+  /** Caller resolves which real coach_notes row this applies to — the agent has no note ids. */
+  correctedNote: { newText: string } | null;
+  /** Caller must re-validate the setNo against the PREVIOUS exercise's real set_logs rows before trusting this. */
+  correctedPreviousExerciseSet: { exerciseId: string; setNo: number; weightKg: number | null; reps: number | null } | null;
   /**
    * The target for whichever exercise is actually next — the default, or
    * whatever switchToExercise/substituteExercise resolved to. Returned
@@ -140,6 +149,20 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
       'EXAMPLE — a real production bug this fixes: your own last message asked "Ready to start?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg for 8, 8, 8 reps. User message: "Yes" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
     ],
     new AIMessage("Let's go! 💪 Report back once you've finished your first set."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is Leg Press (nothing logged for it yet this session). The PREVIOUS exercise this session was Goblet Squat, logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "In goblet squats i did 12kg x 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Goblet Squat set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Goblet Squat set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("Got it, fixed your Goblet Squat numbers — 12kg for 8, 7, and 7 reps. Since you're on Leg Press now, whenever you're ready let me know your numbers for that! 💪"),
   ],
   he: [
     [
@@ -182,6 +205,20 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
       'EXAMPLE — a real production bug this fixes: your own last message asked "מוכן להתחיל?" ("ready to start?" — a READINESS question, not a request to report back after the set), with a target already given: 60 ק"ג ל-8, 8, 8 חזרות. User message: "כן" ("yes") — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
     ],
     new AIMessage("בוא נתחיל! 💪 תעדכן אותי אחרי שתסיים את הסט הראשון."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is לחיצת רגליים (Leg Press, nothing logged for it yet this session). The PREVIOUS exercise this session was סקוואט גובלט (Goblet Squat), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "בסקוואט גובלט עשיתי 12 קילו על 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected סקוואט גובלט set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected סקוואט גובלט set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("קיבלתי, תיקנתי את המספרים של סקוואט גובלט — 12 קילו ל-8, 7, ו-7 חזרות. עכשיו כשאתה בלחיצת רגליים, תעדכן אותי במספרים שלך שם כשתהיה מוכן! 💪"),
   ],
   ar: [
     [
@@ -224,6 +261,20 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
       'EXAMPLE — a real production bug this fixes: your own last message asked "هل أنت جاهز للبدء؟" ("ready to start?" — a READINESS question, not a request to report back after the set), with a target already given: 60 كغ لـ 8، 8، 8 تكرارات. User message: "نعم" ("yes") — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
     ],
     new AIMessage("هيا بنا! 💪 أخبرني بعد أن تنهي مجموعتك الأولى."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is ضغط الأرجل (Leg Press, nothing logged for it yet this session). The PREVIOUS exercise this session was قرفصاء الجوبلت (Goblet Squat), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "في قرفصاء الجوبلت عملت 12 كغ على 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected قرفصاء الجوبلت set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected قرفصاء الجوبلت set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("تم، صححت أرقام قرفصاء الجوبلت — 12 كغ لـ 8، 7، و7 تكرارات. بما أنك الآن في ضغط الأرجل، أخبرني بأرقامك هناك عندما تكون جاهزًا! 💪"),
   ],
 };
 
@@ -252,6 +303,9 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
       switchToExerciseId: null,
       substituteExercise: null,
       noteToSave: null,
+      correctedSet: null,
+      correctedNote: null,
+      correctedPreviousExerciseSet: null,
       nextSuggestedWeightKg: null,
       nextTargetReps: null,
     };
@@ -269,11 +323,19 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     nextExercise: input.nextExercise,
     nextTargets: defaultNextTargets,
     nextLastLogs: input.nextLastLogs,
+    previousExercise: input.previousExercise,
+    previousExerciseLogs: input.previousExerciseLogs,
   });
 
   const outcome = emptyOutcome();
   const tools = buildTurnTools(
-    { exercise: input.exercise, thisSessionLogs: input.thisSessionLogs, remainingExercises: input.remainingExercises },
+    {
+      exercise: input.exercise,
+      thisSessionLogs: input.thisSessionLogs,
+      remainingExercises: input.remainingExercises,
+      previousExercise: input.previousExercise,
+      previousExerciseLogs: input.previousExerciseLogs,
+    },
     outcome,
   );
   const toolsByName = new Map<string, (typeof tools)[number]>(tools.map((t) => [t.name, t]));
@@ -354,6 +416,9 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     switchToExerciseId: outcome.switchToExerciseId,
     substituteExercise: outcome.substituteExercise,
     noteToSave: outcome.noteToSave,
+    correctedSet: outcome.correctedSet,
+    correctedNote: outcome.correctedNote,
+    correctedPreviousExerciseSet: outcome.correctedPreviousExerciseSet,
     nextSuggestedWeightKg,
     nextTargetReps,
   };

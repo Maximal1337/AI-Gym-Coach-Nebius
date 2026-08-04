@@ -10,6 +10,9 @@ import {
   switchToExerciseArgsSchema,
   substituteExerciseArgsSchema,
   saveNoteArgsSchema,
+  correctLoggedSetArgsSchema,
+  correctNoteArgsSchema,
+  correctPreviousExerciseSetArgsSchema,
 } from "./schema.js";
 
 /**
@@ -41,6 +44,9 @@ export interface ToolContext {
   exercise: Exercise;
   thisSessionLogs: SetLog[];
   remainingExercises: RemainingExerciseCandidate[];
+  /** The exercise (if any) most recently logged in this session before the current one — see correctPreviousExerciseSet. */
+  previousExercise: Exercise | null;
+  previousExerciseLogs: SetLog[];
 }
 
 export interface TurnOutcome {
@@ -59,6 +65,12 @@ export interface TurnOutcome {
     equipmentType: Exercise["equipmentType"] | null;
   } | null;
   noteToSave: { text: string; general: boolean } | null;
+  /** A fix to a set already logged this session — never a new report. */
+  correctedSet: { setNo: number; weightKg: number | null; reps: number | null } | null;
+  /** A fix to the wording of the most recent note saved for this exercise. */
+  correctedNote: { newText: string } | null;
+  /** A fix to a set logged for the PREVIOUS exercise in this session, not the current one. */
+  correctedPreviousExerciseSet: { exerciseId: string; setNo: number; weightKg: number | null; reps: number | null } | null;
 }
 
 export function emptyOutcome(): TurnOutcome {
@@ -72,6 +84,9 @@ export function emptyOutcome(): TurnOutcome {
     switchTarget: null,
     substituteExercise: null,
     noteToSave: null,
+    correctedSet: null,
+    correctedNote: null,
+    correctedPreviousExerciseSet: null,
   };
 }
 
@@ -194,6 +209,68 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
     },
   );
 
+  const correctLoggedSet = tool(
+    async ({ setNo, weightKg, reps }) => {
+      const existing = context.thisSessionLogs.find((l) => l.setNo === setNo);
+      if (!existing) {
+        const loggedNos = context.thisSessionLogs.map((l) => l.setNo).join(", ");
+        return `FAILED — set ${setNo} hasn't been logged yet this session for this exercise, so there's nothing to correct. ${loggedNos ? `Sets logged so far: ${loggedNos}.` : "No sets logged yet."} Ask the user which set they mean, or use logCompletedSets if they're actually reporting a new set.`;
+      }
+      if (weightKg == null && reps == null) {
+        return "FAILED — no new weight or reps given, nothing to correct.";
+      }
+      outcome.correctedSet = { setNo, weightKg, reps };
+      const newWeight = weightKg ?? existing.weightKg;
+      const newReps = reps ?? existing.reps;
+      return `Corrected set ${setNo}: was ${existing.weightKg}kg × ${existing.reps} reps, now ${newWeight}kg × ${newReps} reps.`;
+    },
+    {
+      name: "correctLoggedSet",
+      description:
+        "Fix the weight and/or reps of a set ALREADY logged this session for the current exercise — call this when the user is correcting something they already reported (\"actually it was 65kg\", \"wait, set 2 was 8 reps not 6\"), never for a new report (use logCompletedSets for that). If it's unclear which already-logged set they mean, ask instead of guessing.",
+      schema: correctLoggedSetArgsSchema,
+    },
+  );
+
+  const correctNote = tool(
+    async ({ newText }) => {
+      outcome.correctedNote = { newText };
+      return "Updated your most recent note for this exercise.";
+    },
+    {
+      name: "correctNote",
+      description:
+        "Fix the wording of the note you most recently saved for this exercise — call this when the user is correcting something they just asked you to remember (\"actually make that my left knee, not my right\"), never for adding new information (use saveNote for that).",
+      schema: correctNoteArgsSchema,
+    },
+  );
+
+  const correctPreviousExerciseSet = tool(
+    async ({ setNo, weightKg, reps }) => {
+      if (!context.previousExercise) {
+        return "FAILED — there's no previous exercise logged this session to correct. If this is about the CURRENT exercise, use correctLoggedSet instead.";
+      }
+      const existing = context.previousExerciseLogs.find((l) => l.setNo === setNo);
+      if (!existing) {
+        const loggedNos = context.previousExerciseLogs.map((l) => l.setNo).join(", ");
+        return `FAILED — set ${setNo} of ${context.previousExercise.name} hasn't been logged, so there's nothing to correct. ${loggedNos ? `Sets logged: ${loggedNos}.` : "No sets logged."} Ask the user which set they mean.`;
+      }
+      if (weightKg == null && reps == null) {
+        return "FAILED — no new weight or reps given, nothing to correct.";
+      }
+      outcome.correctedPreviousExerciseSet = { exerciseId: context.previousExercise.id, setNo, weightKg, reps };
+      const newWeight = weightKg ?? existing.weightKg;
+      const newReps = reps ?? existing.reps;
+      return `Corrected ${context.previousExercise.name} set ${setNo}: was ${existing.weightKg}kg × ${existing.reps} reps, now ${newWeight}kg × ${newReps} reps.`;
+    },
+    {
+      name: "correctPreviousExerciseSet",
+      description:
+        "Fix the weight and/or reps of a set logged for the PREVIOUS exercise in this session — the one done right before the current one — not the exercise you're currently on. Call this when the user names a different, already-finished exercise than the current one (e.g. you're now on Leg Press but they say \"in the goblet squats I actually did 8/7/7\"). Never use this for the current exercise (use correctLoggedSet for that), and never guess if the exercise they name doesn't match either the current or the previous one — ask instead.",
+      schema: correctPreviousExerciseSetArgsSchema,
+    },
+  );
+
   return [
     logCompletedSets,
     stopExerciseEarly,
@@ -202,5 +279,8 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
     switchToExercise,
     substituteExercise,
     saveNote,
+    correctLoggedSet,
+    correctNote,
+    correctPreviousExerciseSet,
   ];
 }

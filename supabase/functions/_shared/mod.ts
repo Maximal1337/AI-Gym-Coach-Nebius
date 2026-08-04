@@ -467,12 +467,17 @@ export async function runConversationExerciseTurn(
   const { userId, sessionId, planId, exercise, userMessage, recentHistory } = params;
   const exerciseId = exercise.id as string;
 
-  const [{ data: profileRow }, ordered, { attemptedIds, deferred }, thisSessionLogRows] = await Promise.all([
+  const [{ data: profileRow }, ordered, { attemptedIds, deferred }, thisSessionLogRows, lastOtherExerciseLog] = await Promise.all([
     db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
     orderedExercisesForSession(db, planId, sessionId),
     sessionExerciseState(db, sessionId),
     db.from("set_logs").select("*").eq("session_id", sessionId).eq("exercise_id", exerciseId)
       .order("set_no", { ascending: true }).then((r) => r.data ?? []),
+    // The exercise (if any) most recently logged this session other than
+    // the current one — lets a user's correction reach back one exercise
+    // even after the flow has already moved on (see correctPreviousExerciseSet).
+    db.from("set_logs").select("exercise_id, created_at").eq("session_id", sessionId).neq("exercise_id", exerciseId)
+      .order("created_at", { ascending: false }).limit(1).maybeSingle().then((r) => r.data ?? null),
   ]);
   if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
 
@@ -482,8 +487,11 @@ export async function runConversationExerciseTurn(
   const remainingCandidates = ordered.filter(
     (e) => e.id !== exerciseId && e.id !== defaultNext?.id && (!attemptedIds.has(e.id) || deferredIds.has(e.id)),
   );
+  const previousExerciseRow = lastOtherExerciseLog
+    ? ordered.find((e) => e.id === lastOtherExerciseLog.exercise_id) ?? null
+    : null;
 
-  const [lastLogs, notes, nextLastLogs, nextNotes, remainingExercises] = await Promise.all([
+  const [lastLogs, notes, nextLastLogs, nextNotes, remainingExercises, previousExerciseLogRows] = await Promise.all([
     lastLogsForExercise(db, userId, exerciseId),
     notesForExercise(db, userId, planId, exerciseId),
     defaultNext ? lastLogsForExercise(db, userId, defaultNext.id) : Promise.resolve([]),
@@ -496,6 +504,10 @@ export async function runConversationExerciseTurn(
         deferred: deferredIds.has(e.id),
       })),
     ),
+    previousExerciseRow
+      ? db.from("set_logs").select("*").eq("session_id", sessionId).eq("exercise_id", previousExerciseRow.id)
+          .order("set_no", { ascending: true }).then((r) => r.data ?? [])
+      : Promise.resolve([]),
   ]);
 
   const agentRes = await callAgent(
@@ -511,6 +523,8 @@ export async function runConversationExerciseTurn(
       nextLastLogs: setLogsToAgent(nextLastLogs),
       nextNotes,
       remainingExercises,
+      previousExercise: previousExerciseRow ? exerciseToAgent(previousExerciseRow) : null,
+      previousExerciseLogs: setLogsToAgent(previousExerciseLogRows),
     },
     "/converse",
   );
@@ -565,6 +579,62 @@ export async function runConversationExerciseTurn(
     }
   }
 
+  // A fix to a set already logged this session (not a new report) —
+  // re-validate the setNo against the real rows fetched above before
+  // trusting it, same "never trust twice" discipline as everything else
+  // here. Reuses the same upsert-by-conflict-key the append path above
+  // uses; the difference is this setNo already exists, so it updates the
+  // real row in place instead of appending a new one.
+  if (turn.correctedSet && Number.isInteger(turn.correctedSet.setNo)) {
+    const target = thisSessionLogRows.find((r) => r.set_no === turn.correctedSet.setNo);
+    if (target) {
+      const { error } = await db.from("set_logs").upsert({
+        session_id: sessionId,
+        exercise_id: exerciseId,
+        set_no: turn.correctedSet.setNo,
+        weight_kg: turn.correctedSet.weightKg ?? target.weight_kg,
+        reps: turn.correctedSet.reps ?? target.reps,
+      }, { onConflict: "session_id,exercise_id,set_no" });
+      if (error) {
+        console.error("set_logs correction failed", { userId, sessionId, error: error.message });
+      }
+    } else {
+      // Shouldn't happen — the tool already checks this against the same
+      // data — but the agent's word alone is never enough to write.
+      console.error("correctLoggedSet: setNo not found in this session's logs", {
+        userId, sessionId, exerciseId, setNo: turn.correctedSet.setNo,
+      });
+    }
+  }
+
+  // Same idea as correctedSet above, but targeting the PREVIOUS exercise
+  // logged this session — re-validated against previousExerciseRow/
+  // previousExerciseLogRows fetched at the top of this function, never
+  // trusting the agent's exerciseId/setNo claim outright.
+  if (
+    turn.correctedPreviousExerciseSet && previousExerciseRow &&
+    turn.correctedPreviousExerciseSet.exerciseId === previousExerciseRow.id &&
+    Number.isInteger(turn.correctedPreviousExerciseSet.setNo)
+  ) {
+    const target = previousExerciseLogRows.find((r) => r.set_no === turn.correctedPreviousExerciseSet.setNo);
+    if (target) {
+      const { error } = await db.from("set_logs").upsert({
+        session_id: sessionId,
+        exercise_id: previousExerciseRow.id,
+        set_no: turn.correctedPreviousExerciseSet.setNo,
+        weight_kg: turn.correctedPreviousExerciseSet.weightKg ?? target.weight_kg,
+        reps: turn.correctedPreviousExerciseSet.reps ?? target.reps,
+      }, { onConflict: "session_id,exercise_id,set_no" });
+      if (error) {
+        console.error("set_logs previous-exercise correction failed", { userId, sessionId, error: error.message });
+      }
+    } else {
+      console.error("correctPreviousExerciseSet: setNo not found in previous exercise's logs", {
+        userId, sessionId, exerciseId: previousExerciseRow.id, setNo: turn.correctedPreviousExerciseSet.setNo,
+      });
+    }
+  }
+
   const totalLoggedThisSession = thisSessionLogRows.length + newSets.length;
   const nowAttempted = wasAttemptedBefore || newSets.length > 0;
   const fullyComplete = totalLoggedThisSession >= (exercise.sets as number);
@@ -598,6 +668,33 @@ export async function runConversationExerciseTurn(
     });
     if (error) {
       console.error("coach_notes insert failed", { userId, sessionId, error: error.message });
+    }
+  }
+
+  // A fix to the wording of the most-recently-saved note for this
+  // exercise — the agent has no note ids to reference (deliberately kept
+  // out of its context), so "which note" is resolved here: the latest
+  // one for this exercise, the only sane default for a same-turn
+  // "actually, make that..." correction. A general (not exercise-scoped)
+  // note isn't covered by this — out of scope for now.
+  if (
+    turn.correctedNote && typeof turn.correctedNote.newText === "string" &&
+    turn.correctedNote.newText.length > 0 && turn.correctedNote.newText.length <= 500
+  ) {
+    const { data: recentNote } = await db.from("coach_notes")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("exercise_id", exerciseId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (recentNote) {
+      const { error } = await db.from("coach_notes")
+        .update({ note: turn.correctedNote.newText })
+        .eq("id", recentNote.id);
+      if (error) {
+        console.error("coach_notes correction failed", { userId, sessionId, error: error.message });
+      }
     }
   }
 

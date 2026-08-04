@@ -112,6 +112,14 @@ export const conversationTurnInputSchema = z.object({
   // next instead of `nextExercise` (the deterministic default) — only
   // when the user's message actually asks for a change.
   remainingExercises: z.array(remainingExerciseSchema).max(30).default([]),
+  // The exercise (if any) most recently logged in this session before the
+  // current one — a real production bug (a user correcting the PREVIOUS
+  // exercise's set while already moved on to the current one) got silently
+  // misattributed to the current exercise because the model had no other
+  // exercise's logs to target. Lets a same-turn correction reach back one
+  // exercise instead of only ever writing against `exercise`.
+  previousExercise: exerciseSchema.nullable().default(null),
+  previousExerciseLogs: z.array(setLogSchema).max(20).default([]),
 });
 
 /**
@@ -174,4 +182,22 @@ export const substituteExerciseArgsSchema = z.object({
 export const saveNoteArgsSchema = z.object({
   text: z.string().min(1).max(500),
   general: z.boolean(),
+});
+
+/** A correction to a set ALREADY logged this session — never a new report (that's logCompletedSetsArgsSchema). */
+export const correctLoggedSetArgsSchema = z.object({
+  setNo: z.number().int().min(1).max(20),
+  weightKg: z.number().min(0).max(500).nullable().default(null),
+  reps: z.number().int().min(0).max(200).nullable().default(null),
+});
+
+export const correctNoteArgsSchema = z.object({
+  newText: z.string().min(1).max(500),
+});
+
+/** A correction to a set logged for the PREVIOUS exercise in this session (not the current one). */
+export const correctPreviousExerciseSetArgsSchema = z.object({
+  setNo: z.number().int().min(1).max(20),
+  weightKg: z.number().min(0).max(500).nullable().default(null),
+  reps: z.number().int().min(0).max(200).nullable().default(null),
 });

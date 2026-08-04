@@ -221,10 +221,14 @@ export function buildConversationPrompt(params: {
   nextExercise: Exercise | null;
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
+  /** The exercise (if any) most recently logged this session before the current one — see correctPreviousExerciseSet. */
+  previousExercise: Exercise | null;
+  previousExerciseLogs: SetLog[];
 }): string {
   const {
     exercise, lastLogs, notes, userMessage, recentHistory,
     currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs,
+    previousExercise, previousExerciseLogs,
   } = params;
   const lines: string[] = [
     `Current exercise: ${exercise.name}`,
@@ -239,10 +243,19 @@ export function buildConversationPrompt(params: {
   }
   lines.push(
     thisSessionLogs.length > 0
-      ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `${l.weightKg}kg x ${l.reps}`).join(", ")}.`
+      // Set numbers spelled out explicitly (not just weight x reps) so a
+      // correction ("set 2 was actually 8 reps") can reference a real,
+      // unambiguous set number — see correctLoggedSet below.
+      ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `set ${l.setNo}: ${l.weightKg}kg x ${l.reps}`).join(", ")}.`
       : `Nothing logged yet this session for this exercise (0 of ${exercise.sets} work sets).`,
   );
   if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
+  if (previousExercise) {
+    lines.push(
+      "",
+      `The PREVIOUS exercise this session (done right before the current one) was ${previousExercise.name}. Sets logged for it: ${previousExerciseLogs.length > 0 ? previousExerciseLogs.map((l) => `set ${l.setNo}: ${l.weightKg}kg x ${l.reps}`).join(", ") : "none"}.`,
+    );
+  }
   if (recentHistory.length > 0) {
     lines.push("", "Recent conversation, most recent last (for context, e.g. an agreed target):");
     for (const m of recentHistory) lines.push(`${m.from === "coach" ? "Coach" : "User"}: ${m.text}`);
@@ -253,6 +266,14 @@ export function buildConversationPrompt(params: {
     "",
     "STOP — check this FIRST, before anything else: is this message a pure request/reminder for the future (\"remind me...\", \"note that...\", \"write down...\", \"don't forget...\", \"next time...\") with NOTHING in it describing what the user actually did this set — no numbers, and no plain statement like \"done\"/\"finished\" that stands on its own without needing a reminder framing? If so, this is ONLY a note — call saveNote and do NOT call logCompletedSets. It is NOT a completion, NOT a confirmation, even though it names this exercise, even though a target was already suggested. Do this check even if the message sounds positive or on-topic — mentioning the exercise is not the same as reporting having done it.",
     "",
+    "SECOND CHECK: does this message name a SPECIFIC exercise that is NOT the current exercise (\"" + exercise.name + "\")? This matters even if the message otherwise reads exactly like a normal report or correction (numbers, \"actually\"/\"wait\"/\"I meant\", etc.) — a real production bug came from logging a message like this against the current exercise just because it had numbers in it, when the user was actually talking about a different one." +
+      (previousExercise
+        ? ` If the named exercise matches the PREVIOUS exercise (${previousExercise.name}, listed above), it's a correction to THAT exercise, not the current one — call correctPreviousExerciseSet with the set number and corrected weight/reps, never logCompletedSets or correctLoggedSet (those only ever apply to the current exercise, ${exercise.name}). If the named exercise matches neither the current nor the previous one, or it's ambiguous which set they mean, call no tool — tell the user plainly you can only fix the current exercise or the one right before it, and ask them to clarify.`
+        : ` There is no previous exercise logged this session to attribute it to, so if the name doesn't match the current exercise, call no tool — tell the user plainly you can only log/correct the current exercise (${exercise.name}) right now, and ask them to clarify what they meant.`) +
+      " If the message does NOT name a different exercise (it's about the current one, or names no exercise at all), move on to the next check.",
+    "",
+    "THIRD CHECK: is this message CORRECTING a set already listed under \"Already logged THIS session\" above, not reporting a new one? Signaled by words like \"actually\", \"wait\", \"I meant\", \"that's wrong\", \"correction\", or by stating a number that plainly contradicts what's already logged for a specific past set. If so, call correctLoggedSet with that set's number and the corrected weight and/or reps — never logCompletedSets, which would wrongly add it as an extra new set on top of the wrong one. If it's unclear which already-logged set they mean (e.g. more than one is logged and they didn't say which), ask instead of guessing; call no tool yet.",
+    "",
     "Otherwise, extract whatever sets THIS message reports (weight in kg, reps) and call logCompletedSets with them — its result tells you how many of this exercise's sets are now accounted for in total (combining what's already logged this session with what you just added), so you don't need to track that yourself. If one weight was stated for the whole exercise, use it for every set reported. If the user reports reps but this message states no weight at all, use the weight already established for this exercise instead — either one negotiated in the conversation above, or the introduction weight given above. weightKg=0 is only correct for a genuinely bodyweight exercise with no weight ever mentioned; never use 0 just because this message omitted repeating an already-established weight. If no weight can be determined at all — not in this message, not negotiated above, no introduction weight given — do not call logCompletedSets with a guess: ask the user what weight they used instead, and wait for their answer.",
     "The same applies to reps, the other direction: if a weight is stated but no rep count is given and none can be inferred from context, do NOT assume the target reps were hit — reps are the one number that genuinely varies set to set, so a missing rep count is never safe to guess, even when a target was suggested. Ask the user how many reps per set, and wait for their answer, exactly as you would for a missing weight.",
     "A bare standalone confirmation with no numbers at all (\"yes\", \"done\", \"finished\", nothing else — not a reminder/request) only counts as a completed-set report if YOUR OWN last message (shown as \"Coach:\" in the recent conversation above) was itself asking the user to report back AFTER doing the set (e.g. \"report back after your set\", \"let me know how it goes\", \"done?\") — only then, and only if the conversation already establishes a specific weight/rep target for every set, call logCompletedSets with that agreed target. If instead your own last message was asking whether the user is ready or wants to begin (e.g. \"ready to start?\", \"sound good?\", \"let's go?\") — a bare \"yes\" there means \"I'm about to start\", not \"I already finished\": call no tool, just acknowledge briefly and wait for the real report once the set is actually done.",
@@ -260,7 +281,7 @@ export function buildConversationPrompt(params: {
     "If the user explicitly moves on early — either directly (\"let's skip the rest\", \"that's enough for this one\") or by giving a reason that makes clear they want to stop now, not just complaining (\"the machine's taken\", \"someone's using it\", \"this is hurting my shoulder\", \"I'm short on time\") — call stopExerciseEarly (after logCompletedSets, if this message also reported anything).",
     "Otherwise (a question, a request to change the target, reporting pain, general chat, nothing about performance) — call no tool at all. Respond directly to what the user said in your final message: if they're proposing a different weight/reps, acknowledge and confirm the new target for this same exercise; if they report pain, follow the safety rules; do not introduce a new exercise.",
     "",
-    "Separately from all of the above (a message can be both a report AND contain a note): if any part of what the user said is worth remembering for a future session — a technique cue, a request for next time, something about how the exercise felt — call saveNote too, in the same turn as any other tool call. If the same note (in substance) already appears in \"Saved notes about this exercise\" above, it's already recorded — acknowledge it conversationally if relevant, don't call saveNote again for it.",
+    "Separately from all of the above (a message can be both a report AND contain a note): if any part of what the user said is worth remembering for a future session — a technique cue, a request for next time, something about how the exercise felt — call saveNote too, in the same turn as any other tool call. If the same note (in substance) already appears in \"Saved notes about this exercise\" above, it's already recorded — acknowledge it conversationally if relevant, don't call saveNote again for it. If instead the user is correcting the wording of a note you just saved (\"actually make that my left knee, not my right\"), call correctNote with the corrected text, not saveNote.",
   );
   lines.push(
     "",
