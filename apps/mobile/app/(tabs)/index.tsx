@@ -15,6 +15,7 @@ import { MarkdownText } from '../../src/components/MarkdownText';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
 import { useLanguage } from '../../src/lib/language';
+import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
@@ -121,6 +122,7 @@ export default function Chat() {
   }
 
   function handleSessionStartResult(res: SessionStartResult) {
+    track('workout_started');
     setSessionId(res.sessionId);
     setCurrentExerciseId(res.exerciseId);
     pushCoachMessage(withTarget(res.message, res.suggestedWeightKg, res.targetReps));
@@ -255,6 +257,7 @@ export default function Chat() {
       const res = await callFn<{ exercises: Array<{ name: string; sets: string[] }> }>(
         'session-complete', { sessionId },
       );
+      track('workout_completed');
       const lines = res.exercises.map((e) => `${e.name}: ${e.sets.join(', ')}`).join('\n');
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
