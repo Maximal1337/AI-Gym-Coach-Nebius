@@ -266,7 +266,7 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
     {
       name: "correctPreviousExerciseSet",
       description:
-        "Fix the weight and/or reps of a set logged for the PREVIOUS exercise in this session — the one done right before the current one — not the exercise you're currently on. Call this when the user names a different, already-finished exercise than the current one (e.g. you're now on Leg Press but they say \"in the goblet squats I actually did 8/7/7\"). Never use this for the current exercise (use correctLoggedSet for that), and never guess if the exercise they name doesn't match either the current or the previous one — ask instead.",
+        "Fix the weight and/or reps of a set logged for the PREVIOUS exercise in this session — the one done right before the current one — not the exercise you're currently on. Call this when the user refers to that different, already-finished exercise, whether by naming it (\"in the goblet squats I actually did 8/7/7\") or with a generic backward reference (\"actually the previous exercise was 8/7/7\", \"wait, the last exercise, not this one\"). Never use this for the current exercise (use correctLoggedSet for that), and never guess if a NAMED exercise doesn't match either the current or the previous one — ask instead.",
       schema: correctPreviousExerciseSetArgsSchema,
     },
   );

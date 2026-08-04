@@ -163,6 +163,20 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
     new ToolMessage("Corrected Goblet Squat set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
     new ToolMessage("Corrected Goblet Squat set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
     new AIMessage("Got it, fixed your Goblet Squat numbers — 12kg for 8, 7, and 7 reps. Since you're on Leg Press now, whenever you're ready let me know your numbers for that! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is Seated Leg Curl (nothing logged for it yet this session). The PREVIOUS exercise this session was Leg Press, logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "wait, the previous exercise was actually 8/7/7, not 8/8/8" — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Leg Press set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Leg Press set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("Got it, fixed your Leg Press numbers — 12kg for 8, 7, and 7 reps. Whenever you're ready, let me know your numbers on Seated Leg Curl! 💪"),
   ],
   he: [
     [
@@ -219,6 +233,20 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
     new ToolMessage("Corrected סקוואט גובלט set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
     new ToolMessage("Corrected סקוואט גובלט set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
     new AIMessage("קיבלתי, תיקנתי את המספרים של סקוואט גובלט — 12 קילו ל-8, 7, ו-7 חזרות. עכשיו כשאתה בלחיצת רגליים, תעדכן אותי במספרים שלך שם כשתהיה מוכן! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is כפיפת רגליים בישיבה (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was לחיצת רגליים (Leg Press), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "רגע, בתרגיל הקודם עשיתי בעצם 8/7/7, לא 8/8/8" ("wait, in the previous exercise I actually did 8/7/7, not 8/8/8") — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected לחיצת רגליים set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected לחיצת רגליים set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("קיבלתי, תיקנתי את המספרים של לחיצת רגליים — 12 קילו ל-8, 7, ו-7 חזרות. כשתהיה מוכן, תעדכן אותי במספרים שלך בכפיפת רגליים בישיבה! 💪"),
   ],
   ar: [
     [
@@ -275,6 +303,20 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
     new ToolMessage("Corrected قرفصاء الجوبلت set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
     new ToolMessage("Corrected قرفصاء الجوبلت set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
     new AIMessage("تم، صححت أرقام قرفصاء الجوبلت — 12 كغ لـ 8، 7، و7 تكرارات. بما أنك الآن في ضغط الأرجل، أخبرني بأرقامك هناك عندما تكون جاهزًا! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is تمرين مطرقة الرجل بالجلوس (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was ضغط الأرجل (Leg Press), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "لحظة، في التمرين السابق عملت فعليًا 8/7/7 مش 8/8/8" ("wait, in the previous exercise I actually did 8/7/7, not 8/8/8") — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected ضغط الأرجل set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected ضغط الأرجل set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("تم، صححت أرقام ضغط الأرجل — 12 كغ لـ 8، 7، و7 تكرارات. أخبرني بأرقامك في تمرين مطرقة الرجل بالجلوس عندما تكون جاهزًا! 💪"),
   ],
 };
 
