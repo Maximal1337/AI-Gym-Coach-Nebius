@@ -163,11 +163,18 @@ export function PlanPasteFlow({
         {stepLabel}
       </Text>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginVertical: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-        {preview ? t('confirmPlanTitle') : t('planTitle')}
+        {preview ? t('confirmPlanTitle') : openingPicker ? t('uploadTitle') : t('planTitle')}
       </Text>
 
-      {loadingExisting || openingPicker ? (
+      {loadingExisting ? (
         <ActivityIndicator color={theme.accent} style={{ marginTop: spacing.lg }} />
+      ) : openingPicker ? (
+        <>
+          <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+            {t('uploadSub')}
+          </Text>
+          <ActivityIndicator color={theme.accent} style={{ marginTop: spacing.lg }} />
+        </>
       ) : !preview ? (
         <>
           <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
