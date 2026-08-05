@@ -201,3 +201,17 @@ export const correctPreviousExerciseSetArgsSchema = z.object({
   weightKg: z.number().min(0).max(500).nullable().default(null),
   reps: z.number().int().min(0).max(200).nullable().default(null),
 });
+
+// A pasted plan is plain text (small); an uploaded PDF/docx is base64
+// (much bigger) — same endpoint, any of the three shapes.
+export const parsePlanInputSchema = z.union([
+  z.object({ text: z.string().min(10).max(20000) }),
+  z.object({
+    pdfBase64: z.string().min(100).max(16 * 1024 * 1024),
+    filename: z.string().min(1).max(200),
+  }),
+  z.object({
+    docxBase64: z.string().min(100).max(16 * 1024 * 1024),
+    filename: z.string().min(1).max(200),
+  }),
+]);

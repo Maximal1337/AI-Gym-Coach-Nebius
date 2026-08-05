@@ -96,6 +96,16 @@ export default function ManagePlans() {
         </Pressable>
 
         <Pressable
+          onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'add', initialMode: 'upload' } })}
+          style={{
+            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
+            padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
+          }}
+        >
+          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('chooseUpload')}</Text>
+        </Pressable>
+
+        <Pressable
           onPress={() => router.push('/plan-build')}
           style={{
             borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,

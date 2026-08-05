@@ -22,7 +22,10 @@ import { z } from "zod";
 import { agentDisabled } from "./config.js";
 import { runCoachingTurn } from "./graph.js";
 import { runConversationTurn, runConfirmTurn } from "./converse.js";
-import { turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema, equipmentTypeSchema } from "./schema.js";
+import {
+  turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema, equipmentTypeSchema,
+  parsePlanInputSchema,
+} from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
 import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
 
@@ -30,7 +33,6 @@ import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
 process.on("uncaughtException", (err) => Sentry.captureException(err));
 process.on("unhandledRejection", (err) => Sentry.captureException(err));
 
-const parsePlanInput = z.object({ text: z.string().min(10).max(20000) });
 const parseSummaryInput = z.object({
   text: z.string().min(10).max(20000),
   knownExercises: z.array(z.string().max(200)).max(100).default([]),
@@ -52,6 +54,10 @@ const generatePlanRequestSchema = z.object({
 
 const PORT = Number(process.env.PORT ?? 8787);
 const MAX_BODY_BYTES = 64 * 1024;
+// A base64-encoded PDF is ~33% bigger than the file itself; this covers a
+// generously-sized real workout-plan PDF (the client also caps the raw
+// file at 8MB before ever uploading it) with headroom for JSON overhead.
+const MAX_PDF_BODY_BYTES = 12 * 1024 * 1024;
 
 type Json = (status: number, body: unknown) => void;
 
@@ -79,13 +85,13 @@ function checkAuth(req: IncomingMessage, json: Json): boolean {
   return true;
 }
 
-/** Reads the body up to MAX_BODY_BYTES; null means the cap was exceeded. */
-async function readBody(req: IncomingMessage): Promise<Buffer | null> {
+/** Reads the body up to maxBytes (default MAX_BODY_BYTES); null means the cap was exceeded. */
+async function readBody(req: IncomingMessage, maxBytes = MAX_BODY_BYTES): Promise<Buffer | null> {
   const chunks: Buffer[] = [];
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > MAX_BODY_BYTES) return null;
+    if (size > maxBytes) return null;
     chunks.push(chunk as Buffer);
   }
   return Buffer.concat(chunks);
@@ -173,19 +179,19 @@ const server = createServer(async (req, res) => {
   if (req.method === "POST" && (req.url === "/parse-plan" || req.url === "/parse-summary")) {
     if (!checkAuth(req, json)) return;
     try {
-      const rawBody = await readBody(req);
+      const rawBody = await readBody(req, req.url === "/parse-plan" ? MAX_PDF_BODY_BYTES : MAX_BODY_BYTES);
       if (!rawBody) {
         json(413, { error: "body_too_large" });
         return;
       }
       const body = JSON.parse(rawBody.toString());
       if (req.url === "/parse-plan") {
-        const parsed = parsePlanInput.safeParse(body);
+        const parsed = parsePlanInputSchema.safeParse(body);
         if (!parsed.success) {
           json(400, { error: "invalid_input" });
           return;
         }
-        const result = await parsePlanText(parsed.data.text);
+        const result = await parsePlanText(parsed.data);
         if (!result) {
           json(503, { error: "llm_not_configured" });
           return;

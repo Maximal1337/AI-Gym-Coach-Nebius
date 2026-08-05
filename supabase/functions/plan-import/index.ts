@@ -27,6 +27,9 @@ Deno.serve(withSentry(async (req) => {
   let body: {
     action: string;
     text?: string;
+    pdfBase64?: string;
+    docxBase64?: string;
+    filename?: string;
     plans?: unknown;
     mode?: string;
     editPlanId?: string;
@@ -39,10 +42,27 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "parse") {
-    if (typeof body.text !== "string" || body.text.length < 10 || body.text.length > 20000) {
-      return json(400, { error: "invalid_input" });
+    // Pasted text, or an uploaded PDF/docx (client caps the raw file at
+    // 8MB before ever uploading it; base64 inflates that by ~33%).
+    let agentPayload: { text: string } | { pdfBase64: string; filename: string } | { docxBase64: string; filename: string };
+    if (typeof body.pdfBase64 === "string" || typeof body.docxBase64 === "string") {
+      const fileBase64 = body.pdfBase64 ?? body.docxBase64!;
+      if (
+        fileBase64.length < 100 || fileBase64.length > 16 * 1024 * 1024 ||
+        typeof body.filename !== "string" || body.filename.length < 1 || body.filename.length > 200
+      ) {
+        return json(400, { error: "invalid_input" });
+      }
+      agentPayload = typeof body.pdfBase64 === "string"
+        ? { pdfBase64: body.pdfBase64, filename: body.filename }
+        : { docxBase64: body.docxBase64!, filename: body.filename };
+    } else {
+      if (typeof body.text !== "string" || body.text.length < 10 || body.text.length > 20000) {
+        return json(400, { error: "invalid_input" });
+      }
+      agentPayload = { text: body.text };
     }
-    const res = await callAgent({ text: body.text }, "/parse-plan");
+    const res = await callAgent(agentPayload, "/parse-plan");
     if (!res.ok) {
       return json(res.status === 422 ? 422 : 503, {
         error: res.status === 422 ? "unparseable" : "parser_unavailable",

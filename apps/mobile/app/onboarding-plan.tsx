@@ -8,7 +8,7 @@ import { Screen } from '../src/components/Screen';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
-type Choice = 'generate' | 'paste' | null;
+type Choice = 'generate' | 'paste' | 'upload' | null;
 
 /**
  * First-run entry point (System Design §21): a brand-new user has nothing
@@ -29,10 +29,15 @@ export default function OnboardingPlan() {
     );
   }
 
-  if (choice === 'paste') {
+  if (choice === 'paste' || choice === 'upload') {
     return (
       <Screen>
-        <PlanPasteFlow mode="onboarding" onDone={() => router.replace('/')} onCancel={() => setChoice(null)} />
+        <PlanPasteFlow
+          mode="onboarding"
+          onDone={() => router.replace('/')}
+          onCancel={() => setChoice(null)}
+          initialMode={choice === 'upload' ? 'upload' : 'paste'}
+        />
       </Screen>
     );
   }
@@ -63,6 +68,16 @@ export default function OnboardingPlan() {
           }}
         >
           <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('choosePaste')}</Text>
+        </Pressable>
+
+        <Pressable
+          onPress={() => setChoice('upload')}
+          style={{
+            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
+            padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm,
+          }}
+        >
+          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('chooseUpload')}</Text>
         </Pressable>
 
         <Pressable

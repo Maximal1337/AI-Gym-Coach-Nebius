@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Alert, Keyboard, Pressable, Text, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import * as DocumentPicker from 'expo-document-picker';
+import { File } from 'expo-file-system';
 import { callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
@@ -8,19 +10,32 @@ import { PlanPreview, type ParsedPlan } from './PlanPreview';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
+// Base64 inflates a file by ~33%; the server independently caps the
+// base64 string itself (see services/agent/src/server.ts), this just
+// avoids uploading something that's going to be rejected anyway.
+const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+// Legacy .doc (pre-2007 binary format) isn't supported — it's a much
+// harder format to parse reliably and modern Word/Google Docs both
+// default to .docx, so this covers the real-world case.
+const UPLOAD_TYPES = ['application/pdf', DOCX_MIME, 'text/plain'];
+
 /**
  * Paste-and-parse plan flow (GYM-26), shared between first-run onboarding
  * and adding/editing a training type afterward (GYM-69) — same screen,
  * different commit semantics server-side (see plan-import's `mode`).
  */
 export function PlanPasteFlow({
-  mode, editPlanId, onDone, onCancel,
+  mode, editPlanId, onDone, onCancel, initialMode = 'paste',
 }: {
   mode: 'onboarding' | 'add' | 'edit';
   editPlanId?: string;
   onDone: () => void;
   /** Only meaningful where there's no real screen to navigate back to (onboarding's local-state flow) — 'add'/'edit' are pushed routes with native back already. */
   onCancel?: () => void;
+  /** 'upload' opens the file picker immediately instead of showing the paste textbox first — used when the caller's own entry point was explicitly "upload a file", not "paste text". */
+  initialMode?: 'paste' | 'upload';
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -77,6 +92,45 @@ export function PlanPasteFlow({
     setBusy(true);
     try {
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', text });
+      setPreview(res.plans);
+    } catch {
+      Alert.alert(t('parseFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // initialMode === 'upload' means the caller's own entry point was
+  // already "upload a file" (a peer choice next to generate/paste/manual,
+  // not a link buried inside the paste screen) — open the picker
+  // immediately, and if the user backs out of it, there's nothing useful
+  // to fall back to here, so leave the same way "cancel" would.
+  useEffect(() => {
+    if (initialMode === 'upload') void pickAndParseFile();
+  }, []);
+
+  async function pickAndParseFile() {
+    const picked = await DocumentPicker.getDocumentAsync({ type: UPLOAD_TYPES });
+    if (picked.canceled || !picked.assets?.[0]) {
+      onCancel?.();
+      return;
+    }
+    const asset = picked.assets[0];
+    if (asset.size && asset.size > MAX_UPLOAD_BYTES) {
+      Alert.alert(t('uploadTooLarge'));
+      return;
+    }
+    setBusy(true);
+    try {
+      const file = new File(asset.uri);
+      const isPdf = asset.mimeType === 'application/pdf' || asset.name.toLowerCase().endsWith('.pdf');
+      const isDocx = asset.mimeType === DOCX_MIME || asset.name.toLowerCase().endsWith('.docx');
+      const payload = isPdf
+        ? { pdfBase64: await file.base64(), filename: asset.name }
+        : isDocx
+          ? { docxBase64: await file.base64(), filename: asset.name }
+          : { text: await file.text() };
+      const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', ...payload });
       setPreview(res.plans);
     } catch {
       Alert.alert(t('parseFailed'));
