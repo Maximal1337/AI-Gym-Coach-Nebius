@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Text, useColorScheme, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -30,7 +30,6 @@ function TabIcon({
 
 export default function TabsLayout() {
   const theme = useTheme();
-  const scheme = useColorScheme();
   const { t } = useTranslation();
 
   return (
@@ -69,7 +68,7 @@ export default function TabsLayout() {
         tabBarBackground: () => (
           <BlurView
             intensity={60}
-            tint={scheme === 'dark' ? 'dark' : 'light'}
+            tint="dark"
             style={{ flex: 1, borderRadius: TAB_BAR_HEIGHT / 2, overflow: 'hidden', backgroundColor: `${theme.bg}B3` }}
           />
         ),

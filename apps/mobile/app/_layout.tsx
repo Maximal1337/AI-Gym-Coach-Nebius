@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { useColorScheme } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Sentry from '@sentry/react-native';
 import { palette } from '@gymcoach/shared';
@@ -16,12 +16,13 @@ Sentry.init({
 });
 
 function RootLayout() {
-  const scheme = useColorScheme();
-  const theme = palette[scheme === 'dark' ? 'dark' : 'light'];
+  // Dark mode only, by design decision — not following the system scheme.
+  const theme = palette.dark;
 
   return (
     <SafeAreaProvider>
       <LanguageProvider>
+        <StatusBar style="light" />
         <Stack
           screenOptions={{
             headerShown: false,

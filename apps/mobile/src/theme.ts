@@ -1,9 +1,8 @@
-import { useColorScheme } from 'react-native';
 import { palette, spacing, type Theme } from '@gymcoach/shared';
 
+// Dark mode only, by design decision — not following the system scheme.
 export function useTheme(): Theme {
-  const scheme = useColorScheme();
-  return palette[scheme === 'dark' ? 'dark' : 'light'];
+  return palette.dark;
 }
 
 export { spacing, radius, typography } from '@gymcoach/shared';
