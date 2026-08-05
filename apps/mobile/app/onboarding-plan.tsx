@@ -114,7 +114,7 @@ export default function OnboardingPlan() {
         </Pressable>
 
         <Pressable onPress={skip} style={{ alignItems: 'center', marginTop: spacing.lg }}>
-          <Text style={{ color: theme.inkSoft, fontSize: 13, fontWeight: '600' }}>{t('skipPlanForNow')}</Text>
+          <Text style={{ color: theme.inkSoft, fontSize: 13, fontWeight: '600' }}>{t('skipForNow')}</Text>
         </Pressable>
       </View>
     </Screen>
