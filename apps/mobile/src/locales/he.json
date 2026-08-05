@@ -121,6 +121,7 @@
   "chooseHowSub": "אפשר לתת ל-AI לבנות לך תוכנית, להדביק תוכנית קיימת, או לבנות בעצמך.",
   "choosePaste": "יש לי תוכנית — אדביק אותה",
   "chooseManual": "אבנה בעצמי",
+  "generateStepOf": "שלב {{current}} מתוך {{total}}",
   "goalTitle": "מה המטרה שלך?",
   "goalSub": "זה יעזור לבנות לך תוכנית מתאימה",
   "goal_strength": "כוח",

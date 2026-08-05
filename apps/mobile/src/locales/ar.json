@@ -121,6 +121,7 @@
   "chooseHowSub": "يمكنك أن يبني لك الذكاء الاصطناعي خطة، أو تلصق خطة موجودة، أو تبنيها بنفسك.",
   "choosePaste": "لدي خطة — سألصقها",
   "chooseManual": "سأبنيها بنفسي",
+  "generateStepOf": "الخطوة {{current}} من {{total}}",
   "goalTitle": "ما هو هدفك؟",
   "goalSub": "سيساعد هذا في بناء خطة مناسبة لك",
   "goal_strength": "القوة",

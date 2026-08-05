@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Animated, Easing, Pressable, Text, TextInput, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError, callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
@@ -24,6 +25,16 @@ const GOALS: PrimaryGoal[] = ['strength', 'hypertrophy', 'general_fitness', 'fat
 const LEVELS: ExperienceLevel[] = ['beginner', 'intermediate', 'advanced'];
 const DAY_OPTIONS = [1, 2, 3, 4, 5, 6];
 const GENERATING_LINES = ['genLine1', 'genLine2', 'genLine3'];
+const TOTAL_INTAKE_STEPS = 5;
+// Feedback from early beta testers: no way to go back and fix an earlier
+// answer without abandoning the whole intake. Each step now knows the one
+// before it; stepping back from 'goal' (nothing before it) exits instead.
+const PREV_STEP: Partial<Record<Step, Step>> = {
+  experience: 'goal',
+  days: 'experience',
+  about: 'days',
+  injuries: 'about',
+};
 
 function Spinner() {
   const theme = useTheme();
@@ -141,15 +152,26 @@ export function GeneratePlanFlow({
 
   const progressStep = { goal: 1, experience: 2, days: 3, about: 4, injuries: 5 }[step as string] ?? 0;
 
+  function goBack() {
+    const prev = PREV_STEP[step];
+    if (prev) setStep(prev);
+    else onCancel();
+  }
+
   function Header({ progress }: { progress: number }) {
     return (
-      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.md }}>
-        <Pressable onPress={onCancel}>
-          <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
-        </Pressable>
-        <View style={{ flex: 1, height: 3, borderRadius: 3, backgroundColor: theme.rule, overflow: 'hidden' }}>
-          <View style={{ width: `${progress * 20}%`, height: '100%', backgroundColor: theme.accent, borderRadius: 3 }} />
+      <View style={{ marginBottom: spacing.md }}>
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>
+          <Pressable onPress={goBack} hitSlop={10}>
+            <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={20} color={theme.inkSoft} />
+          </Pressable>
+          <View style={{ flex: 1, height: 3, borderRadius: 3, backgroundColor: theme.rule, overflow: 'hidden' }}>
+            <View style={{ width: `${progress * 20}%`, height: '100%', backgroundColor: theme.accent, borderRadius: 3 }} />
+          </View>
         </View>
+        <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+          {t('generateStepOf', { current: progress, total: TOTAL_INTAKE_STEPS })}
+        </Text>
       </View>
     );
   }

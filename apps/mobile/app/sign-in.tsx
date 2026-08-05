@@ -68,6 +68,9 @@ export default function SignIn() {
 
   return (
     <Screen>
+    <View style={{ flexDirection: 'row', justifyContent: dir === 'rtl' ? 'flex-start' : 'flex-end', padding: spacing.md }}>
+      <LanguagePicker />
+    </View>
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
@@ -148,9 +151,6 @@ export default function SignIn() {
         <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('signUp')}</Text>
       </Pressable>
       </ScrollView>
-      <View style={{ alignItems: 'center', paddingVertical: spacing.sm }}>
-        <LanguagePicker />
-      </View>
     </KeyboardAvoidingView>
     </Screen>
   );

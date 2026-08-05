@@ -121,6 +121,7 @@
   "chooseHowSub": "You can have AI build you a plan, paste an existing one, or build it yourself.",
   "choosePaste": "I have a plan — I'll paste it in",
   "chooseManual": "I'll build it myself",
+  "generateStepOf": "Step {{current}} of {{total}}",
   "goalTitle": "What's your goal?",
   "goalSub": "This will help build you a suitable plan",
   "goal_strength": "Strength",
