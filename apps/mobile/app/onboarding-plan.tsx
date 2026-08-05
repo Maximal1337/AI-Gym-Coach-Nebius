@@ -48,6 +48,17 @@ export default function OnboardingPlan() {
     router.replace('/sign-in');
   }
 
+  // Persisted (not just a local skip) — the gate in app/index.tsx checks
+  // this on every launch, so without it the user would just land right
+  // back here every time instead of reaching the app. Chat nudges them
+  // back to plans.tsx (the real "add a plan" surface) when they're ready.
+  async function skip() {
+    const { data } = await supabase.auth.getSession();
+    const uid = data.session?.user.id;
+    if (uid) await supabase.from('users').update({ plan_setup_skipped_at: new Date().toISOString() }).eq('id', uid);
+    router.replace('/');
+  }
+
   return (
     <Screen>
       <View style={{ flex: 1, padding: spacing.lg, justifyContent: 'center' }}>
@@ -100,6 +111,10 @@ export default function OnboardingPlan() {
           }}
         >
           <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('chooseManual')}</Text>
+        </Pressable>
+
+        <Pressable onPress={skip} style={{ alignItems: 'center', marginTop: spacing.lg }}>
+          <Text style={{ color: theme.inkSoft, fontSize: 13, fontWeight: '600' }}>{t('skipPlanForNow')}</Text>
         </Pressable>
       </View>
     </Screen>

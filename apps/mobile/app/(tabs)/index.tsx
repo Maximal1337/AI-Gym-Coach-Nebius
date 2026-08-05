@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn, ApiError } from '../../src/lib/api';
@@ -366,21 +366,41 @@ export default function Chat() {
 
       {!inWorkout ? (
         <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
-          <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.sm }}>
-            {t('startWorkout')}
-          </Text>
-          <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8 }}>
-            {plans.map((p) => (
+          {plans.length === 0 ? (
+            // Reachable whenever onboarding-plan was skipped (its
+            // plan_setup_skipped_at flag is what let the user in here
+            // without a plan in the first place) — this is the ongoing
+            // nudge back to plans.tsx, the real "add a plan" surface.
+            <>
+              <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.sm }}>
+                {t('noPlanYetChat')}
+              </Text>
               <Pressable
-                key={p.id}
-                disabled={busy}
-                onPress={() => start(p)}
-                style={{ backgroundColor: theme.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill }}
+                onPress={() => router.push('/(tabs)/plans')}
+                style={{ backgroundColor: theme.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}
               >
-                <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{p.name}</Text>
+                <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('addPlanCta')}</Text>
               </Pressable>
-            ))}
-          </View>
+            </>
+          ) : (
+            <>
+              <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.sm }}>
+                {t('startWorkout')}
+              </Text>
+              <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8 }}>
+                {plans.map((p) => (
+                  <Pressable
+                    key={p.id}
+                    disabled={busy}
+                    onPress={() => start(p)}
+                    style={{ backgroundColor: theme.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill }}
+                  >
+                    <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{p.name}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            </>
+          )}
         </View>
       ) : (
         <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule }}>

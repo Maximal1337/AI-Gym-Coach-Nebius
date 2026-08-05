@@ -23,7 +23,7 @@ export default function Entry() {
       if (!user) return router.replace('/sign-in');
 
       const [userRes, profileRes, planRes] = await Promise.all([
-        supabase.from('users').select('terms_accepted_at').eq('id', user.id).maybeSingle(),
+        supabase.from('users').select('terms_accepted_at, plan_setup_skipped_at').eq('id', user.id).maybeSingle(),
         supabase.from('coach_profiles').select('user_id').eq('user_id', user.id).maybeSingle(),
         supabase
           .from('training_plans')
@@ -38,7 +38,7 @@ export default function Entry() {
         return router.replace('/consent');
       }
       if (!userRes.data?.terms_accepted_at) return router.replace('/consent');
-      if (!planRes.count) return router.replace('/onboarding-plan');
+      if (!planRes.count && !userRes.data.plan_setup_skipped_at) return router.replace('/onboarding-plan');
       if (!profileRes.data) return router.replace('/onboarding-persona');
       router.replace('/(tabs)');
     })().finally(() => !cancelled && setChecking(false));
