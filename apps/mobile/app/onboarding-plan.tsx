@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { PlanPasteFlow } from '../src/components/PlanPasteFlow';
 import { GeneratePlanFlow } from '../src/components/GeneratePlanFlow';
 import { Screen } from '../src/components/Screen';
+import { supabase } from '../src/lib/supabase';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
@@ -42,9 +43,20 @@ export default function OnboardingPlan() {
     );
   }
 
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace('/sign-in');
+  }
+
   return (
     <Screen>
       <View style={{ flex: 1, padding: spacing.lg, justifyContent: 'center' }}>
+        {/* Reached via replace() from consent, also replace()'d away — no
+            screen behind this one to go back to. Signing out is the one
+            honest way out, same reasoning as consent.tsx. */}
+        <Pressable onPress={signOut} style={{ position: 'absolute', top: spacing.lg, [dir === 'rtl' ? 'left' : 'right']: spacing.lg }}>
+          <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('signOut')}</Text>
+        </Pressable>
         <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
           {t('chooseHowTitle')}
         </Text>

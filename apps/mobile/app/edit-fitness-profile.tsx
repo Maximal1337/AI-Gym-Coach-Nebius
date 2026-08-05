@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
 import { router } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../src/lib/supabase';
 import { FitnessProfileForm, type FitnessProfileValues } from '../src/components/FitnessProfileForm';
 import { Screen } from '../src/components/Screen';
-import { useTheme } from '../src/theme';
+import { useLanguage } from '../src/lib/language';
+import { useTheme, spacing } from '../src/theme';
 
 export default function EditFitnessProfile() {
   const theme = useTheme();
+  const { dir } = useLanguage();
   const [initial, setInitial] = useState<FitnessProfileValues | null>(null);
 
   useEffect(() => {
@@ -24,6 +27,11 @@ export default function EditFitnessProfile() {
 
   return (
     <Screen>
+      <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
+        <Pressable onPress={() => router.back()} hitSlop={12} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+          <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={24} color={theme.inkSoft} />
+        </Pressable>
+      </View>
       {initial ? (
         <FitnessProfileForm initial={initial} onDone={() => router.back()} />
       ) : (

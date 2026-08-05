@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../src/lib/api';
+import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
@@ -28,9 +29,19 @@ export default function Consent() {
     }
   }
 
+  async function signOut() {
+    await supabase.auth.signOut();
+    router.replace('/sign-in');
+  }
+
   return (
     <Screen>
     <View style={{ flex: 1, padding: spacing.lg }}>
+      {/* No screen before this one to go back to (this is a mandatory,
+          replace()-only gate) — the one honest way out is signing out. */}
+      <Pressable onPress={signOut} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start', marginBottom: spacing.sm }}>
+        <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('signOut')}</Text>
+      </Pressable>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {t('consentTitle')}
       </Text>

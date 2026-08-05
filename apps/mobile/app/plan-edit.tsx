@@ -13,7 +13,7 @@ export default function PlanEdit() {
         mode={mode === 'edit' ? 'edit' : 'add'}
         editPlanId={planId}
         onDone={() => router.back()}
-        onCancel={initialMode === 'upload' ? () => router.back() : undefined}
+        onCancel={() => router.back()}
         initialMode={initialMode === 'upload' ? 'upload' : 'paste'}
       />
     </Screen>
