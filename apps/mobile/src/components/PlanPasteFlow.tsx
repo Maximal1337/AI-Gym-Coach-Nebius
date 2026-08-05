@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Alert, Keyboard, Pressable, Text, TextInput } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Pressable, Text, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
@@ -44,6 +44,11 @@ export function PlanPasteFlow({
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(mode === 'edit');
+  // Hides the paste textbox while the picker sheet is being auto-opened
+  // for initialMode === 'upload' — otherwise it flashes underneath the
+  // native picker for a frame before either a file comes back or onCancel
+  // navigates away.
+  const [openingPicker, setOpeningPicker] = useState(initialMode === 'upload');
 
   // Editing an existing plan skips the paste-and-parse step entirely —
   // load its current exercises straight into the review/edit screen.
@@ -112,11 +117,13 @@ export function PlanPasteFlow({
   async function pickAndParseFile() {
     const picked = await DocumentPicker.getDocumentAsync({ type: UPLOAD_TYPES });
     if (picked.canceled || !picked.assets?.[0]) {
+      setOpeningPicker(false);
       onCancel?.();
       return;
     }
     const asset = picked.assets[0];
     if (asset.size && asset.size > MAX_UPLOAD_BYTES) {
+      setOpeningPicker(false);
       Alert.alert(t('uploadTooLarge'));
       return;
     }
@@ -136,6 +143,10 @@ export function PlanPasteFlow({
       Alert.alert(t('parseFailed'));
     } finally {
       setBusy(false);
+      // Falls through to the normal paste screen on failure, so an
+      // upload that didn't work isn't a dead end — success re-renders
+      // into the preview branch regardless of this flag.
+      setOpeningPicker(false);
     }
   }
 
@@ -155,8 +166,8 @@ export function PlanPasteFlow({
         {preview ? t('confirmPlanTitle') : t('planTitle')}
       </Text>
 
-      {loadingExisting ? (
-        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('loading')}</Text>
+      {loadingExisting || openingPicker ? (
+        <ActivityIndicator color={theme.accent} style={{ marginTop: spacing.lg }} />
       ) : !preview ? (
         <>
           <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
