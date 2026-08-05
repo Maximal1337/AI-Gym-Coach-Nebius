@@ -12,7 +12,7 @@ import { useTheme, spacing, radius } from '../theme';
  * Labeled pill in the accent color, not just an icon, so it reads as a
  * real control rather than decoration.
  */
-export function LanguagePicker({ size = 16 }: { size?: number }) {
+export function LanguagePicker({ size = 20 }: { size?: number }) {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir, language } = useLanguage();
@@ -23,13 +23,13 @@ export function LanguagePicker({ size = 16 }: { size?: number }) {
       onPress={open}
       hitSlop={12}
       style={{
-        flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6,
+        flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8,
         backgroundColor: theme.surface, borderRadius: radius.pill,
-        paddingVertical: spacing.xs, paddingHorizontal: spacing.sm,
+        paddingVertical: spacing.sm, paddingHorizontal: spacing.md,
       }}
     >
       <Ionicons name="globe-outline" size={size} color={theme.accent} />
-      <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 13 }}>{t(`lang_${language}`)}</Text>
+      <Text style={{ color: theme.accent, fontWeight: '700', fontSize: 15 }}>{t(`lang_${language}`)}</Text>
     </Pressable>
   );
 }
