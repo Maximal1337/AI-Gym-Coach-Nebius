@@ -396,8 +396,11 @@ export function GeneratePlanFlow({
   const uncovered = linterChecks.filter((c) => !c.covered);
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
-      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
+      <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 4 }}>
         {t('generatedTitle')}
+      </Text>
+      <Text style={{ color: theme.inkSoft, fontSize: 12.5, marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+        {t('tapToChangeHint')}
       </Text>
       <PlanPreview
         preview={preview}

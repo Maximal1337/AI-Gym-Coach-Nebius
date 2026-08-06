@@ -187,6 +187,11 @@ export function PlanPasteFlow({
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginVertical: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {preview ? t('confirmPlanTitle') : openingPicker ? t('uploadTitle') : t('planTitle')}
       </Text>
+      {preview && (
+        <Text style={{ color: theme.inkSoft, fontSize: 12.5, marginBottom: spacing.sm, marginTop: -spacing.xs, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+          {t('tapToChangeHint')}
+        </Text>
+      )}
 
       {loadingExisting ? (
         <ActivityIndicator color={theme.accent} style={{ marginTop: spacing.lg }} />
