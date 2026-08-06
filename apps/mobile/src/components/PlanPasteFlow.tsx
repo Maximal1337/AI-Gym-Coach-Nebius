@@ -82,11 +82,15 @@ export function PlanPasteFlow({
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(mode === 'edit');
-  // Hides the paste textbox while the picker sheet is being auto-opened
-  // for initialMode === 'upload' — otherwise it flashes underneath the
-  // native picker for a frame before either a file comes back or onCancel
-  // navigates away.
-  const [openingPicker, setOpeningPicker] = useState(initialMode === 'upload');
+  // Shows the "Choose a file" launcher screen instead of the paste
+  // textbox for initialMode === 'upload'.
+  const [showUploadLauncher] = useState(initialMode === 'upload');
+  // True only while a pick+parse is actually in flight, for the "Reading
+  // your file" loading screen — distinct from showUploadLauncher, which
+  // stays true for the whole upload path so a failed/canceled pick falls
+  // back to the launcher (with its own "choose a file" button) rather
+  // than to the wrong-mode paste textbox.
+  const [picking, setPicking] = useState(false);
   // Which path actually produced the current preview — "Try again" (in
   // PlanPreview) needs this to know whether to re-open the file picker or
   // fall back to the paste textbox; initialMode alone isn't enough, since
@@ -152,40 +156,34 @@ export function PlanPasteFlow({
   // "Try again" only clears the preview by default (PlanPreview.tsx),
   // which always drops back to the paste textbox — fine for a typed-text
   // preview, but wrong for an uploaded one: re-open the picker instead so
-  // "try again" actually retries the same action the user took.
+  // "try again" actually retries the same action the user took. This is
+  // itself a direct continuation of the user's tap on "Try again", not a
+  // mount-time auto-trigger, so it doesn't have the transition-race issue
+  // the old useEffect had.
   function handleTryAgain() {
     setPreview(null);
-    if (previewSource === 'upload') {
-      setOpeningPicker(true);
-      void pickAndParseFile();
-    }
+    if (previewSource === 'upload') void pickAndParseFile();
   }
-
-  // initialMode === 'upload' means the caller's own entry point was
-  // already "upload a file" (a peer choice next to generate/paste/manual,
-  // not a link buried inside the paste screen) — open the picker
-  // immediately, and if the user backs out of it, there's nothing useful
-  // to fall back to here, so leave the same way "cancel" would.
-  useEffect(() => {
-    if (initialMode === 'upload') void pickAndParseFile();
-  }, []);
 
   async function pickAndParseFile() {
     // getDocumentAsync itself must be inside the try — left bare, a
     // rejection here (the native picker failing to present, a permission
     // denial, anything) was an unhandled promise rejection that never
-    // reset openingPicker, leaving the screen stuck on the loading state
+    // reset picking, leaving the screen stuck on the loading state
     // forever with no error shown.
+    setPicking(true);
     try {
       const picked = await pickDocument();
       if (picked.canceled || !picked.assets?.[0]) {
-        setOpeningPicker(false);
-        onCancel?.();
+        // Falls back to the "Choose a file" launcher (still showing, since
+        // showUploadLauncher never changes) rather than leaving the whole
+        // flow — canceling the native sheet should land back on the
+        // screen that opened it, and lets the user immediately retry with
+        // a fresh tap.
         return;
       }
       const asset = picked.assets[0];
       if (asset.size && asset.size > MAX_UPLOAD_BYTES) {
-        setOpeningPicker(false);
         Alert.alert(t('uploadTooLarge'));
         return;
       }
@@ -205,10 +203,7 @@ export function PlanPasteFlow({
       Alert.alert(t('parseFailed'));
     } finally {
       setBusy(false);
-      // Falls through to the normal paste screen on failure, so an
-      // upload that didn't work isn't a dead end — success re-renders
-      // into the preview branch regardless of this flag.
-      setOpeningPicker(false);
+      setPicking(false);
     }
   }
 
@@ -216,7 +211,7 @@ export function PlanPasteFlow({
 
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
-      <LoadingOverlay visible={busy && !openingPicker} object="plate" label={t('parsing')} />
+      <LoadingOverlay visible={busy && !picking} object="plate" label={t('parsing')} />
       {onCancel && !preview && (
         <Pressable onPress={onCancel} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
@@ -226,7 +221,7 @@ export function PlanPasteFlow({
         {stepLabel}
       </Text>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginVertical: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-        {preview ? t('confirmPlanTitle') : openingPicker ? t('uploadTitle') : t('planTitle')}
+        {preview ? t('confirmPlanTitle') : picking ? t('uploadTitle') : showUploadLauncher ? t('uploadChooseTitle') : t('planTitle')}
       </Text>
       {preview && (
         <Text style={{ color: theme.inkSoft, fontSize: 12.5, marginBottom: spacing.sm, marginTop: -spacing.xs, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
@@ -236,7 +231,7 @@ export function PlanPasteFlow({
 
       {loadingExisting ? (
         <ActivityIndicator color={theme.accent} style={{ marginTop: spacing.lg }} />
-      ) : openingPicker ? (
+      ) : picking ? (
         <>
           <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
             {t('uploadSub')}
@@ -245,6 +240,25 @@ export function PlanPasteFlow({
             size={88} objects={['plate']} orbit={false} stroke={3.2} dir={dir}
             style={{ marginTop: spacing.lg, alignSelf: 'center' }}
           />
+        </>
+      ) : showUploadLauncher && !preview ? (
+        <>
+          <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+            {t('uploadChooseSub')}
+          </Text>
+          {/* A direct tap, not a mount-time auto-trigger — presenting the
+              native picker only in response to a settled screen's own
+              button press avoids racing this screen's push-transition
+              animation, which silently swallowed the picker presentation
+              on a repeat attempt (GYM: "second time doesn't work"). */}
+          <Pressable
+            onPress={() => void pickAndParseFile()}
+            style={{
+              backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md,
+            }}
+          >
+            <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('uploadChooseCta')}</Text>
+          </Pressable>
         </>
       ) : !preview ? (
         <>
