@@ -100,8 +100,16 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   // range, so a set that fell below the floor targets the floor. A set
   // that already independently reached the ceiling holds there instead
   // of being walked backward below what was actually already performed.
+  //
+  // The "previous" reference for a set MUST be what was actually
+  // performed, never a plan assumption standing in for it. A set index
+  // with no entry in topWeightSets isn't a set with no data — it's a set
+  // performed at a different (often lower, fatigue-driven) weight, and
+  // its real reps are still in `ordered`. Only fall back to the plan's
+  // floor when there is truly no logged set at that index at all — the
+  // user's own reported numbers always win over what the plan expected.
   const targetReps = Array.from({ length: exercise.sets }, (_, i) => {
-    const prev = topWeightSets[i]?.reps ?? min;
+    const prev = topWeightSets[i]?.reps ?? ordered[i]?.reps ?? min;
     if (prev >= max) return prev;
     return Math.min(Math.max(prev + 1, min), max);
   });

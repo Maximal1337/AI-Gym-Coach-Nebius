@@ -109,4 +109,25 @@ test("inverted pyramid (mixed weights): progression judged at top weight", () =>
   const t = suggestTargets(exercise, logs([[50, 10], [50, 10], [45, 10]]));
   assert.equal(t.suggestedWeightKg, 50);
   assert.notEqual(t.reason, "increase_weight");
+  // The 3rd set (dropped to 45kg) still really happened at 10 reps — the
+  // target for that slot must reflect that, never a value invented from
+  // the plan's floor just because the set fell outside topWeightSets.
+  assert.deepEqual(t.targetReps, [10, 10, 10]);
+});
+
+test("real regression: a later set at a DIFFERENT (lower) weight must never be replaced by the plan's floor in next-session targets", () => {
+  // Exact user-reported scenario: 18kg x8, 18kg x8, then dropped to 16kg
+  // for a 3rd set at 7 reps. The 3rd set has no entry in topWeightSets
+  // (its weight isn't the session's top weight of 18kg) — the bug was
+  // defaulting that slot to the plan's floor (8) as if nothing was
+  // logged, silently discarding the real, lower 7-rep performance.
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const t = suggestTargets(wideRange, logs([[18, 8], [18, 8], [16, 7]]));
+  assert.equal(t.reason, "add_reps");
+  assert.equal(t.suggestedWeightKg, 18);
+  // Sets 1-2 (at the top weight, 8 reps, below the 12 ceiling) nudge to 9.
+  // Set 3 has no top-weight entry, so it must fall back to what was
+  // ACTUALLY performed there (7 reps at 16kg), nudged to 8 — never the
+  // plan's floor value standing in for a real number.
+  assert.deepEqual(t.targetReps, [9, 9, 8]);
 });
