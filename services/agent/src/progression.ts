@@ -17,12 +17,25 @@ import type { EquipmentType, Exercise, SetLog } from "@gymcoach/shared";
  *  - Otherwise keep the weight and target +1 rep on sets below the
  *    ceiling — a set that already independently reached the ceiling
  *    holds there rather than being walked backward.
+ *  - A set logged at a DIFFERENT weight than the exercise's top weight
+ *    (e.g. a fatigue drop, or a deliberate pyramid) is its own track, not
+ *    noise: it keeps ITS OWN weight next time and nudges +1 rep from
+ *    what was actually done there — never pulled up to match the top
+ *    weight, and never floor-clamped to the plan's rep-range minimum
+ *    (that floor represents the plan's intended WORKING weight; it
+ *    doesn't apply to a weight the user chose to be lighter). The user's
+ *    real reported numbers are the source of truth for what happened —
+ *    the plan's range only ever shapes the SUGGESTION on top of that,
+ *    never replaces the record of what was actually done.
  *  - No history -> baseline session: find working weights, no targets.
  */
 
 export interface Targets {
+  /** The primary/top weight — kept for simple display and the baseline/increase-weight cases, where every set genuinely shares one weight. */
   suggestedWeightKg: number | null;
   targetReps: number[] | null;
+  /** Per-set weight, one entry per work set — the real source of truth for what to suggest at each set index, since not every set necessarily shares suggestedWeightKg (see the "different weight" case above). Null only at baseline, where no weight is known yet at all. */
+  targetWeights: number[] | null;
   reason: "baseline" | "increase_weight" | "add_reps" | "hold";
 }
 
@@ -68,7 +81,10 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   // the user. Set rows can start from the plan's own numbers instead of
   // a blank placeholder.
   if (lastLogs.length === 0) {
-    return { suggestedWeightKg: null, targetReps: Array(exercise.sets).fill(min), reason: "baseline" };
+    return {
+      suggestedWeightKg: null, targetReps: Array(exercise.sets).fill(min),
+      targetWeights: null, reason: "baseline",
+    };
   }
 
   const ordered = [...lastLogs].sort((a, b) => a.setNo - b.setNo);
@@ -80,7 +96,10 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   // no history: ask the user for a starting weight instead of presenting
   // "0kg" (or a trivial +2.5kg off of it) as if it were a real target.
   if (topWeight <= 0) {
-    return { suggestedWeightKg: null, targetReps: Array(exercise.sets).fill(min), reason: "baseline" };
+    return {
+      suggestedWeightKg: null, targetReps: Array(exercise.sets).fill(min),
+      targetWeights: null, reason: "baseline",
+    };
   }
 
   const topWeightSets = ordered.filter((l) => l.weightKg === topWeight);
@@ -89,35 +108,54 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
     topWeightSets.length >= exercise.sets && (topWeightSets[0]?.reps ?? 0) >= max;
 
   if (readyForMoreWeight) {
+    // Ready to move the WHOLE exercise up together — every set (including
+    // any that had been trailing at a lower weight) resets to the new
+    // weight and the range's floor; there's no "own track" left to
+    // preserve once the plan's own working weight has cleared the ceiling.
+    const nextWeight = topWeight + incrementForEquipment(exercise.equipmentType);
     return {
-      suggestedWeightKg: topWeight + incrementForEquipment(exercise.equipmentType),
+      suggestedWeightKg: nextWeight,
       targetReps: Array(exercise.sets).fill(min),
+      targetWeights: Array(exercise.sets).fill(nextWeight),
       reason: "increase_weight",
     };
   }
 
-  // Same weight, nudge each set toward one more rep — clamped into the
-  // range, so a set that fell below the floor targets the floor. A set
-  // that already independently reached the ceiling holds there instead
-  // of being walked backward below what was actually already performed.
-  //
-  // The "previous" reference for a set MUST be what was actually
-  // performed, never a plan assumption standing in for it. A set index
-  // with no entry in topWeightSets isn't a set with no data — it's a set
-  // performed at a different (often lower, fatigue-driven) weight, and
-  // its real reps are still in `ordered`. Only fall back to the plan's
-  // floor when there is truly no logged set at that index at all — the
-  // user's own reported numbers always win over what the plan expected.
-  const targetReps = Array.from({ length: exercise.sets }, (_, i) => {
-    const prev = topWeightSets[i]?.reps ?? ordered[i]?.reps ?? min;
-    if (prev >= max) return prev;
-    return Math.min(Math.max(prev + 1, min), max);
-  });
+  // Not ready to move up: nudge each set toward one more rep from what it
+  // ACTUALLY did last time, at the weight it actually did it at — never a
+  // plan assumption standing in for either number. A set performed at the
+  // exercise's top weight follows the plan's own rep range (clamped into
+  // it, so a set that fell below the floor targets the floor — that floor
+  // is the plan's intended working weight, a reasonable goal). A set
+  // performed at a DIFFERENT (typically lower, fatigue-driven) weight is
+  // its own track: it keeps that weight and just gets a +1 nudge, capped
+  // at the range's ceiling but never floor-clamped — the floor doesn't
+  // apply to a weight the user chose to be lighter than the plan's own.
+  const targetReps: number[] = [];
+  const targetWeights: number[] = [];
+  for (let i = 0; i < exercise.sets; i++) {
+    const last = ordered[i];
+    if (!last) {
+      // No logged set at all for this index last time -- the plan's own
+      // numbers are the only anchor available.
+      targetWeights.push(topWeight);
+      targetReps.push(min);
+      continue;
+    }
+    if (last.weightKg === topWeight) {
+      targetWeights.push(topWeight);
+      targetReps.push(last.reps >= max ? last.reps : Math.min(Math.max(last.reps + 1, min), max));
+    } else {
+      targetWeights.push(last.weightKg);
+      targetReps.push(last.reps >= max ? last.reps : Math.min(last.reps + 1, max));
+    }
+  }
 
   const anyBelow = topWeightSets.some((l) => l.reps < max);
   return {
     suggestedWeightKg: topWeight,
     targetReps,
+    targetWeights,
     reason: anyBelow ? "add_reps" : "hold",
   };
 }

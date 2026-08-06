@@ -742,6 +742,7 @@ export async function runConversationExerciseTurn(
         degraded: !!turn.degraded,
         nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
         nextTargetReps: turn.nextTargetReps ?? null,
+        nextTargetWeights: turn.nextTargetWeights ?? null,
         progress: computeProgress(ordered, attemptedIds),
       },
     };
@@ -762,6 +763,7 @@ export async function runConversationExerciseTurn(
       degraded: !!turn.degraded,
       nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
       nextTargetReps: turn.nextTargetReps ?? null,
+      nextTargetWeights: turn.nextTargetWeights ?? null,
       progress: computeProgress(ordered, attemptedIds),
     },
   };
@@ -856,6 +858,7 @@ export async function confirmExerciseSets(
       degraded: !!turn.degraded,
       nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
       nextTargetReps: turn.nextTargetReps ?? null,
+      nextTargetWeights: turn.nextTargetWeights ?? null,
       progress: computeProgress(ordered, attemptedIds),
     },
   };
@@ -912,6 +915,7 @@ export async function runExerciseTurn(
       message: turn.message,
       suggestedWeightKg: turn.suggestedWeightKg,
       targetReps: turn.targetReps,
+      targetWeights: turn.targetWeights,
       exerciseSets: exercise.sets,
       degraded: turn.degraded,
     },

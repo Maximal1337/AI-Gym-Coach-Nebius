@@ -28,6 +28,8 @@ export interface TurnResult {
   sessionComplete: boolean;
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;
+  /** Per-set weight for the next exercise — see SessionStartResult.targetWeights. */
+  nextTargetWeights: number[] | null;
   progress: { done: number; total: number } | null;
 }
 

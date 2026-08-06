@@ -66,6 +66,7 @@
   "finishEarlyTitle": "לסיים עכשיו?",
   "finishEarlySub": "נשארו {{count}} תרגילים, כולל \"{{name}}\" — לסיים בכל זאת?",
   "targetLine": "🎯 **יעד: {{weight}} ק\"ג × {{reps}}**",
+  "targetLinePerSet": "🎯 **יעד: {{sets}}**",
   "kgLabel": "ק\"ג",
   "repsLabel": "חזרות",
   "workoutSummary": "סיכום האימון",

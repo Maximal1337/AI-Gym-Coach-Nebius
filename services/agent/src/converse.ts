@@ -75,6 +75,8 @@ export interface ConversationOutput {
    */
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;
+  /** Per-set weight for the next exercise — see progression.ts; nextSuggestedWeightKg alone can't express a set that carried its own track. */
+  nextTargetWeights: number[] | null;
 }
 
 const MAX_TOOL_ITERATIONS = 6;
@@ -350,6 +352,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
       correctedPreviousExerciseSet: null,
       nextSuggestedWeightKg: null,
       nextTargetReps: null,
+      nextTargetWeights: null,
     };
   }
 
@@ -437,14 +440,17 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
   // override, or the default already computed above.
   let nextSuggestedWeightKg = defaultNextTargets?.suggestedWeightKg ?? null;
   let nextTargetReps = defaultNextTargets?.targetReps ?? null;
+  let nextTargetWeights = defaultNextTargets?.targetWeights ?? null;
   if (outcome.switchTarget) {
     const t = suggestTargets(outcome.switchTarget.exercise, outcome.switchTarget.lastLogs);
     nextSuggestedWeightKg = t.suggestedWeightKg;
     nextTargetReps = t.targetReps;
+    nextTargetWeights = t.targetWeights;
   } else if (outcome.substituteExercise) {
     // Brand-new exercise, no history — always baseline, nothing to suggest.
     nextSuggestedWeightKg = null;
     nextTargetReps = null;
+    nextTargetWeights = null;
   }
 
   return {
@@ -464,6 +470,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     correctedPreviousExerciseSet: outcome.correctedPreviousExerciseSet,
     nextSuggestedWeightKg,
     nextTargetReps,
+    nextTargetWeights,
   };
 }
 
@@ -485,6 +492,7 @@ export interface ConfirmOutput {
   degraded: boolean;
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;
+  nextTargetWeights: number[] | null;
 }
 
 /**
@@ -522,6 +530,7 @@ export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput
       degraded: false,
       nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
       nextTargetReps: nextTargets?.targetReps ?? null,
+      nextTargetWeights: nextTargets?.targetWeights ?? null,
     };
   }
 
@@ -535,5 +544,6 @@ export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput
     degraded: true,
     nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
     nextTargetReps: nextTargets?.targetReps ?? null,
+    nextTargetWeights: nextTargets?.targetWeights ?? null,
   };
 }

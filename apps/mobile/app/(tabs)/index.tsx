@@ -19,7 +19,14 @@ import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
-interface SuggestedAction { exerciseId: string; weightKg: number | null; targetReps: number[] | null; sets: number }
+interface SuggestedAction {
+  exerciseId: string;
+  weightKg: number | null;
+  targetReps: number[] | null;
+  /** Per-set weight — the real source of truth when a set carried its own track (e.g. a fatigue drop kept at a lower weight); weightKg alone can't express that. */
+  targetWeights: number[] | null;
+  sets: number;
+}
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
 
 /** "58kg × 8/8/8" when every set shares a weight (the common case), else a per-set list. */
@@ -90,9 +97,19 @@ export default function Chat() {
   // a number while doing so — appending the deterministic target (from
   // progression.ts, never touched by the LLM) guarantees the number the
   // user actually sees is correct, regardless of what the prose says.
-  function withTarget(message: string, weightKg: number | null, reps: number[] | null) {
+  // Most sets share one weight, so that stays the terse "Xkg x Y/Y/Y"
+  // line — but a set that carried its own track (see progression.ts) has
+  // a genuinely different weight, and collapsing it back into one number
+  // would misstate the actual target, so that case spells out each set.
+  function withTarget(
+    message: string, weightKg: number | null, reps: number[] | null, targetWeights: number[] | null,
+  ) {
     if (weightKg == null || !reps || reps.length === 0) return message;
-    return `${message}\n\n${t('targetLine', { weight: weightKg, reps: reps.join('/') })}`;
+    const uniform = !targetWeights || targetWeights.every((w) => w === targetWeights[0]);
+    const line = uniform
+      ? t('targetLine', { weight: weightKg, reps: reps.join('/') })
+      : t('targetLinePerSet', { sets: reps.map((r, i) => `${targetWeights![i]}${t('kgLabel')}×${r}`).join(', ') });
+    return `${message}\n\n${line}`;
   }
 
   function handleTurnResult(res: TurnResult) {
@@ -101,7 +118,7 @@ export default function Chat() {
     // (e.g. a note, a question) shouldn't show a target for a different
     // exercise the user isn't even being introduced to yet.
     const text = res.advance
-      ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps)
+      ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps, res.nextTargetWeights)
       : res.message;
     pushCoachMessage(text);
     setProgress(res.progress ?? null);
@@ -119,6 +136,7 @@ export default function Chat() {
             exerciseId: res.nextExerciseId,
             weightKg: res.nextSuggestedWeightKg,
             targetReps: res.nextTargetReps,
+            targetWeights: res.nextTargetWeights,
             sets: res.nextExerciseSets ?? 1,
           }
         : null,
@@ -129,11 +147,12 @@ export default function Chat() {
     track('workout_started');
     setSessionId(res.sessionId);
     setCurrentExerciseId(res.exerciseId);
-    pushCoachMessage(withTarget(res.message, res.suggestedWeightKg, res.targetReps));
+    pushCoachMessage(withTarget(res.message, res.suggestedWeightKg, res.targetReps, res.targetWeights));
     setPendingAction({
       exerciseId: res.exerciseId,
       weightKg: res.suggestedWeightKg,
       targetReps: res.targetReps,
+      targetWeights: res.targetWeights,
       sets: res.exerciseSets ?? 1,
     });
   }
@@ -369,7 +388,7 @@ export default function Chat() {
           // exercise would inherit whatever the user typed for the last one.
           key={pendingAction.exerciseId}
           exerciseName={currentExerciseName}
-          weightKg={pendingAction.weightKg}
+          targetWeights={pendingAction.targetWeights}
           targetReps={pendingAction.targetReps}
           sets={pendingAction.sets}
           disabled={busy}

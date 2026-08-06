@@ -68,6 +68,23 @@ export function formatHistory(logs: SetLog[]): string {
     .join("\n");
 }
 
+/**
+ * Describes a non-baseline Targets as a single line for the prompt. Most
+ * sets share one suggested weight, so the common case stays the terse
+ * "Xkg, sets of Y, Y, Y reps" — but a set carried on its own track (e.g. a
+ * fatigue drop kept at its own lower weight, see progression.ts) has a
+ * DIFFERENT per-set weight, and collapsing that back into one number would
+ * silently misstate the actual target. Only go per-set when the weights
+ * genuinely differ, so this never adds noise to the ordinary case.
+ */
+export function formatTargets(targets: Targets): string {
+  const { targetWeights, targetReps } = targets;
+  if (!targetWeights || !targetReps) return "";
+  const uniform = targetWeights.every((w) => w === targetWeights[0]);
+  if (uniform) return `${targetWeights[0]}kg, sets of ${targetReps.join(", ")} reps`;
+  return targetReps.map((r, i) => `set ${i + 1}: ${targetWeights[i]}kg x ${r} reps`).join(", ");
+}
+
 export function buildTurnPrompt(
   exercise: Exercise,
   lastLogs: SetLog[],
@@ -94,7 +111,7 @@ export function buildTurnPrompt(
     "",
     targets.reason === "baseline"
       ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${targets.suggestedWeightKg}kg, sets of ${targets.targetReps?.join(", ")} reps (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
+      : `Computed target for today (already validated, present it as the goal): ${formatTargets(targets)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
   );
   if (notes.length > 0) {
     lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
@@ -143,7 +160,7 @@ export function buildConfirmPrompt(params: {
       formatHistory(nextLastLogs),
       nextTargets.reason === "baseline"
         ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${nextTargets.suggestedWeightKg}kg, sets of ${nextTargets.targetReps?.join(", ")} reps.`,
+        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets)}.`,
     );
     if (nextNotes.length > 0) lines.push("", "Saved notes about the next exercise:", ...nextNotes.map((n) => `- ${n}`));
   } else {
@@ -185,7 +202,7 @@ export function buildOrchestrationIntroPrompt(params: {
     formatHistory(nextLastLogs),
     nextTargets.reason === "baseline"
       ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${nextTargets.suggestedWeightKg}kg, sets of ${nextTargets.targetReps?.join(", ")} reps.`,
+      : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets)}.`,
   ];
   if (nextNotes.length > 0) lines.push("", "Saved notes about this exercise:", ...nextNotes.map((n) => `- ${n}`));
   lines.push(
@@ -298,7 +315,7 @@ export function buildConversationPrompt(params: {
       formatHistory(nextLastLogs),
       nextTargets.reason === "baseline"
         ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${nextTargets.suggestedWeightKg}kg, sets of ${nextTargets.targetReps?.join(", ")} reps.`,
+        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets)}.`,
     );
   } else if (!nextExercise) {
     lines.push(

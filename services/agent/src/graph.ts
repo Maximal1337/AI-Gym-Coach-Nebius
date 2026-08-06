@@ -28,6 +28,8 @@ export interface TurnOutput {
   message: string;
   suggestedWeightKg: number | null;
   targetReps: number[] | null;
+  /** Per-set weight — the real source of truth when a set carried its own track (see progression.ts); suggestedWeightKg alone can't express that. */
+  targetWeights: number[] | null;
   usage: LlmUsage;
   degraded: boolean;
 }
@@ -63,6 +65,7 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
         message: llmReply.message,
         suggestedWeightKg: targets.suggestedWeightKg,
         targetReps: targets.targetReps,
+        targetWeights: targets.targetWeights,
         usage: llmReply.usage,
         degraded: false,
       },
@@ -80,6 +83,7 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
       message: fallback,
       suggestedWeightKg: targets.suggestedWeightKg,
       targetReps: targets.targetReps,
+      targetWeights: targets.targetWeights,
       usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 },
       degraded: true,
     },

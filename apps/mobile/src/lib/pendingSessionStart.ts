@@ -22,6 +22,8 @@ export interface SessionStartResult {
   message: string;
   suggestedWeightKg: number | null;
   targetReps: number[] | null;
+  /** Per-set weight — the real source of truth when a set carried its own track (a fatigue drop kept at its own weight); suggestedWeightKg alone can't express that. */
+  targetWeights: number[] | null;
   exerciseSets: number;
 }
 

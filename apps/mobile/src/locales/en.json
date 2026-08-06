@@ -66,6 +66,7 @@
   "finishEarlyTitle": "Finish now?",
   "finishEarlySub": "{{count}} exercises left, including \"{{name}}\" — finish anyway?",
   "targetLine": "🎯 **Target: {{weight}}kg × {{reps}}**",
+  "targetLinePerSet": "🎯 **Target: {{sets}}**",
   "kgLabel": "kg",
   "repsLabel": "reps",
   "workoutSummary": "Workout summary",

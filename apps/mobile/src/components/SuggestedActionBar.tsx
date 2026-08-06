@@ -15,10 +15,14 @@ interface SetRow { kg: string; reps: string }
  * pre-filled values, not placeholders, same as any other suggestion. */
 const PLACEHOLDER = 'X';
 
-function initialRows(weightKg: number | null, targetReps: number[] | null, sets: number): SetRow[] {
+function initialRows(targetWeights: number[] | null, targetReps: number[] | null, sets: number): SetRow[] {
   const reps = targetReps && targetReps.length > 0 ? targetReps : Array.from({ length: sets }, () => null);
-  return reps.map((r) => ({
-    kg: weightKg != null ? String(weightKg) : PLACEHOLDER,
+  return reps.map((r, i) => ({
+    // Per-set weight, not one shared value — a set that carried its own
+    // track (e.g. a fatigue drop kept at a lower weight, see
+    // progression.ts) genuinely differs from the others, and each row's
+    // kg Stepper is already independently editable.
+    kg: targetWeights?.[i] != null ? String(targetWeights[i]) : PLACEHOLDER,
     reps: r != null ? String(r) : PLACEHOLDER,
   }));
 }
@@ -88,14 +92,14 @@ function Stepper({
  */
 export function SuggestedActionBar({
   exerciseName,
-  weightKg,
+  targetWeights,
   targetReps,
   sets,
   disabled,
   onSubmitSets,
 }: {
   exerciseName: string | null;
-  weightKg: number | null;
+  targetWeights: number[] | null;
   targetReps: number[] | null;
   sets: number;
   disabled?: boolean;
@@ -104,13 +108,13 @@ export function SuggestedActionBar({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
-  const [rows, setRows] = useState<SetRow[]>(() => initialRows(weightKg, targetReps, sets));
+  const [rows, setRows] = useState<SetRow[]>(() => initialRows(targetWeights, targetReps, sets));
 
   // A new suggestion (different exercise, or a renegotiated target) should
   // reset any in-progress edits rather than keep showing stale numbers.
   useEffect(() => {
-    setRows(initialRows(weightKg, targetReps, sets));
-  }, [weightKg, targetReps ? targetReps.join(',') : '', sets]);
+    setRows(initialRows(targetWeights, targetReps, sets));
+  }, [targetWeights ? targetWeights.join(',') : '', targetReps ? targetReps.join(',') : '', sets]);
 
   function updateRow(i: number, patch: Partial<SetRow>) {
     setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));

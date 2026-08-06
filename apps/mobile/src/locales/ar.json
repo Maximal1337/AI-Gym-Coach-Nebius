@@ -66,6 +66,7 @@
   "finishEarlyTitle": "الإنهاء الآن؟",
   "finishEarlySub": "تبقّى {{count}} تمارين، بما فيها \"{{name}}\" — هل تريد الإنهاء رغم ذلك؟",
   "targetLine": "🎯 **الهدف: {{weight}} كغ × {{reps}}**",
+  "targetLinePerSet": "🎯 **الهدف: {{sets}}**",
   "kgLabel": "كغ",
   "repsLabel": "تكرارات",
   "workoutSummary": "ملخص التمرين",

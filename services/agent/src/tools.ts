@@ -2,7 +2,7 @@ import { tool, type StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
 import type { Exercise, SetLog } from "@gymcoach/shared";
 import { suggestTargets } from "./progression.js";
-import { formatHistory } from "./prompt.js";
+import { formatHistory, formatTargets } from "./prompt.js";
 import {
   logCompletedSetsArgsSchema,
   stopExerciseEarlyArgsSchema,
@@ -170,7 +170,7 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
         formatHistory(match.lastLogs),
         targets.reason === "baseline"
           ? "No reliable weight on record — do not invent a starting weight, ask the user what they'd like to start with."
-          : `Computed target for today: ${targets.suggestedWeightKg}kg, sets of ${targets.targetReps?.join(", ")} reps.`,
+          : `Computed target for today: ${formatTargets(targets)}.`,
       ];
       if (match.notes.length > 0) lines.push("Saved notes about this exercise:", ...match.notes.map((n) => `- ${n}`));
       return lines.join("\n");
