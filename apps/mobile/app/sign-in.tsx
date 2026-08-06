@@ -7,7 +7,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTranslation } from 'react-i18next';
-import { supabase } from '../src/lib/supabase';
+import { supabase, SUPABASE_URL, SUPABASE_ANON_KEY } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { LanguagePicker } from '../src/components/LanguagePicker';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
@@ -19,6 +19,10 @@ import { useTheme, spacing, radius } from '../src/theme';
 
 const RESEND_COOLDOWN_SEC = 30;
 const CODE_LENGTH = 6;
+// One fixed test account, allowlisted server-side in dev-test-login itself
+// — the real safety boundary is there, not this __DEV__ gate. Lets testing
+// in Expo Go skip waiting on a real inbox before custom SMTP is wired up.
+const DEV_TEST_EMAIL = 'dor@test.com';
 
 /**
  * Email/code sign-in (System Design: auth-flow guidelines, option B —
@@ -140,6 +144,33 @@ export default function SignIn() {
     setCooldown(0);
   }
 
+  // Dev-only: the edge function isn't behind the normal auth check (it
+  // can't be — there's no session yet), so this is a plain unauthenticated
+  // fetch rather than the usual callFn helper, which requires one.
+  async function devTestLogin() {
+    setBusy(true);
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/dev-test-login`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          apikey: SUPABASE_ANON_KEY,
+          authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ email: DEV_TEST_EMAIL }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const { accessToken, refreshToken } = await res.json();
+      const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      if (error) throw error;
+      afterAuth();
+    } catch {
+      Alert.alert(t('signInError'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Screen>
     <LoadingOverlay visible={busy} object="dumbbell" label={t('signingIn')} />
@@ -198,6 +229,15 @@ export default function SignIn() {
             style={{ marginBottom: spacing.md }}
           />
           <Button block disabled={busy} onPress={sendCode}>{t('continue')}</Button>
+
+          {__DEV__ && (
+            <Button
+              variant="dashed" block disabled={busy} onPress={devTestLogin}
+              style={{ marginTop: spacing.md }}
+            >
+              Dev: sign in as {DEV_TEST_EMAIL}
+            </Button>
+          )}
         </>
       ) : (
         <>
