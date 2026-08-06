@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import { useTranslation } from 'react-i18next';
 import { callFn, ApiError } from '../lib/api';
 import { DismissKeyboardView } from './DismissKeyboardView';
+import { LoadingOverlay } from './LoadingOverlay';
 import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
@@ -100,6 +101,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
 
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
+      <LoadingOverlay visible={busy} object="plate" label={t('saving')} />
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
         {t('manualPlanTitle')}
       </Text>

@@ -10,6 +10,7 @@ import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
 import { Field } from './Field';
+import { LoadingOverlay } from './LoadingOverlay';
 import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
 
 export interface ParsedExercise {
@@ -238,6 +239,7 @@ export function PlanPreview({
 
   return (
     <>
+      <LoadingOverlay visible={busy} object="plate" label={t('saving')} />
       <ScrollView style={{ flex: 1 }}>
         {preview.map((plan, planIdx) => (
           <View key={planIdx} style={{

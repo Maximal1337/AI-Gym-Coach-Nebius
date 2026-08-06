@@ -23,6 +23,42 @@ const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingm
 // default to .docx, so this covers the real-world case.
 const UPLOAD_TYPES = ['application/pdf', DOCX_MIME, 'text/plain'];
 
+// expo-document-picker has no cancel API. Backing out of this screen
+// (native back gesture, not the in-app Cancel button) while its native
+// sheet is still presenting leaves that getDocumentAsync() call
+// outstanding — presenting a SECOND native picker while the first's
+// completion handler never fired is a known iOS conflict, and the
+// second call can silently fail to appear (GYM: "second time doesn't
+// work"). Serializing every call through one in-flight promise means a
+// fresh attempt always waits for any abandoned prior one to settle
+// first, instead of racing it; the timeout below caps how long that
+// wait (and the call itself) can possibly hang for.
+let pickerInFlight: Promise<unknown> | null = null;
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('document_picker_timed_out')), ms);
+    promise.then(
+      (v) => { clearTimeout(timer); resolve(v); },
+      (e) => { clearTimeout(timer); reject(e); },
+    );
+  });
+}
+
+async function pickDocument(): Promise<DocumentPicker.DocumentPickerResult> {
+  const prior = pickerInFlight;
+  const call = (async () => {
+    if (prior) await prior;
+    return withTimeout(DocumentPicker.getDocumentAsync({ type: UPLOAD_TYPES }), 20000);
+  })();
+  const settled = call.then(() => {}, () => {});
+  pickerInFlight = settled;
+  settled.finally(() => {
+    if (pickerInFlight === settled) pickerInFlight = null;
+  });
+  return call;
+}
+
 /**
  * Paste-and-parse plan flow (GYM-26), shared between first-run onboarding
  * and adding/editing a training type afterward (GYM-69) — same screen,
@@ -141,7 +177,7 @@ export function PlanPasteFlow({
     // reset openingPicker, leaving the screen stuck on the loading state
     // forever with no error shown.
     try {
-      const picked = await DocumentPicker.getDocumentAsync({ type: UPLOAD_TYPES });
+      const picked = await pickDocument();
       if (picked.canceled || !picked.assets?.[0]) {
         setOpeningPicker(false);
         onCancel?.();
@@ -165,8 +201,8 @@ export function PlanPasteFlow({
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', ...payload });
       setPreview(res.plans);
       setPreviewSource('upload');
-    } catch (e) {
-      Alert.alert(t('parseFailed'), e instanceof Error ? e.message : undefined);
+    } catch {
+      Alert.alert(t('parseFailed'));
     } finally {
       setBusy(false);
       // Falls through to the normal paste screen on failure, so an

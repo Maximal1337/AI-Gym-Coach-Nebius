@@ -31,7 +31,7 @@ function NumField({
   const theme = useTheme();
   return (
     <View style={{
-      flexDirection: 'row', alignItems: 'baseline', gap: 3, backgroundColor: theme.bg,
+      flexDirection: 'row', alignItems: 'baseline', gap: 3, backgroundColor: theme.surface,
       borderRadius: radius.field, paddingVertical: 7, paddingHorizontal: 8, width: unit ? 58 : 42, justifyContent: 'center',
     }}>
       <TextInput
