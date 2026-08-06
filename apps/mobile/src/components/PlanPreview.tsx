@@ -10,6 +10,7 @@ import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
 import { Field } from './Field';
+import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
 
 export interface ParsedExercise {
   orderIndex: number; name: string; sets: number; repRange: string;
@@ -168,6 +169,7 @@ export function PlanPreview({
   const { dir } = useLanguage();
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ planIdx: number; exIdx: number } | null>(null);
+  const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
 
   function updatePlanName(planIdx: number, name: string) {
     setPreview((prev) => prev && prev.map((p, i) => (i === planIdx ? { ...p, name } : p)));
@@ -206,18 +208,30 @@ export function PlanPreview({
   async function commit() {
     setBusy(true);
     try {
-      await callFn('plan-import', {
+      const res = await callFn<{ plans: StartingWeightsPlan[] }>('plan-import', {
         action: 'commit',
         plans: preview,
         ...(mode !== 'onboarding' ? { mode } : {}),
         ...(mode === 'edit' ? { editPlanId } : {}),
       });
-      onDone();
+      // Editing an existing plan isn't "starting" anything new — skip
+      // straight to onDone the way this already worked. Every other route
+      // (onboarding/add, i.e. any brand-new plan) gets the one shared
+      // starting-weights step (guidelines/starting-weights.html).
+      if (mode === 'edit') {
+        onDone();
+      } else {
+        setStartingWeightsPlans(res.plans);
+      }
     } catch {
       Alert.alert(t('coachUnavailable'));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (startingWeightsPlans) {
+    return <StartingWeightsStep plans={startingWeightsPlans} onDone={onDone} />;
   }
 
   const editingExercise = editing ? preview[editing.planIdx]?.exercises[editing.exIdx] ?? null : null;

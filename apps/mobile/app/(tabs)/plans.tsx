@@ -78,9 +78,21 @@ export default function ManagePlans() {
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
+  // Closing a Modal and pushing the next screen in the same tick races the
+  // sheet's own dismiss animation against expo-router's push on iOS — for
+  // the upload route, whose target screen opens ANOTHER native modal (the
+  // document picker) on mount, two overlapping native presentations cause
+  // the second one to get silently dropped, so the picker resolves as if
+  // nothing were selected instead of ever appearing. Let the sheet actually
+  // finish closing first; 300ms matches its own slide-down duration.
+  function navigateAfterSheetCloses(to: () => void) {
+    setTimeout(to, 300);
+  }
+
   function openPlan(plan: Plan) {
     setActionsFor(null);
-    router.push({ pathname: '/plan-edit', params: { mode: 'edit', planId: plan.id, planName: plan.name } });
+    navigateAfterSheetCloses(() =>
+      router.push({ pathname: '/plan-edit', params: { mode: 'edit', planId: plan.id, planName: plan.name } }));
   }
 
   async function archive(plan: Plan) {
@@ -99,7 +111,7 @@ export default function ManagePlans() {
 
   function openAddRoute(to: () => void) {
     setAddOpen(false);
-    to();
+    navigateAfterSheetCloses(to);
   }
 
   return (

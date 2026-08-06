@@ -135,20 +135,25 @@ export function PlanPasteFlow({
   }, []);
 
   async function pickAndParseFile() {
-    const picked = await DocumentPicker.getDocumentAsync({ type: UPLOAD_TYPES });
-    if (picked.canceled || !picked.assets?.[0]) {
-      setOpeningPicker(false);
-      onCancel?.();
-      return;
-    }
-    const asset = picked.assets[0];
-    if (asset.size && asset.size > MAX_UPLOAD_BYTES) {
-      setOpeningPicker(false);
-      Alert.alert(t('uploadTooLarge'));
-      return;
-    }
-    setBusy(true);
+    // getDocumentAsync itself must be inside the try — left bare, a
+    // rejection here (the native picker failing to present, a permission
+    // denial, anything) was an unhandled promise rejection that never
+    // reset openingPicker, leaving the screen stuck on the loading state
+    // forever with no error shown.
     try {
+      const picked = await DocumentPicker.getDocumentAsync({ type: UPLOAD_TYPES });
+      if (picked.canceled || !picked.assets?.[0]) {
+        setOpeningPicker(false);
+        onCancel?.();
+        return;
+      }
+      const asset = picked.assets[0];
+      if (asset.size && asset.size > MAX_UPLOAD_BYTES) {
+        setOpeningPicker(false);
+        Alert.alert(t('uploadTooLarge'));
+        return;
+      }
+      setBusy(true);
       const file = new File(asset.uri);
       const isPdf = asset.mimeType === 'application/pdf' || asset.name.toLowerCase().endsWith('.pdf');
       const isDocx = asset.mimeType === DOCX_MIME || asset.name.toLowerCase().endsWith('.docx');
@@ -160,8 +165,8 @@ export function PlanPasteFlow({
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', ...payload });
       setPreview(res.plans);
       setPreviewSource('upload');
-    } catch {
-      Alert.alert(t('parseFailed'));
+    } catch (e) {
+      Alert.alert(t('parseFailed'), e instanceof Error ? e.message : undefined);
     } finally {
       setBusy(false);
       // Falls through to the normal paste screen on failure, so an

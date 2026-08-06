@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import { useTranslation } from 'react-i18next';
 import { callFn, ApiError } from '../lib/api';
 import { DismissKeyboardView } from './DismissKeyboardView';
+import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
@@ -10,20 +11,12 @@ interface ManualExercise {
   name: string;
   sets: string;
   repRange: string;
-  kg: string;
   note: string;
   warmup: string;
 }
 
 function emptyExercise(): ManualExercise {
-  return { name: '', sets: '', repRange: '', kg: '', note: '', warmup: '' };
-}
-
-function buildIntensity(kg: string, note: string, startingWeightLabel: string, kgLabel: string): string {
-  const parts: string[] = [];
-  if (kg.trim()) parts.push(`${startingWeightLabel}: ${kg.trim()} ${kgLabel}`);
-  if (note.trim()) parts.push(note.trim());
-  return parts.join(' | ');
+  return { name: '', sets: '', repRange: '', note: '', warmup: '' };
 }
 
 /**
@@ -40,6 +33,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
   const [planName, setPlanName] = useState('');
   const [exercises, setExercises] = useState<ManualExercise[]>([emptyExercise()]);
   const [busy, setBusy] = useState(false);
+  const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
 
   function updateExercise(idx: number, patch: Partial<ManualExercise>) {
     setExercises((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -69,7 +63,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
 
     setBusy(true);
     try {
-      await callFn('plan-import', {
+      const res = await callFn<{ plans: StartingWeightsPlan[] }>('plan-import', {
         action: 'commit',
         mode: 'add',
         plans: [
@@ -81,19 +75,27 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
               sets: parseInt(e.sets, 10),
               repRange: e.repRange.trim(),
               restSec: 60,
-              intensity: buildIntensity(e.kg, e.note, t('startingWeightLabel'), t('kgLabel')),
+              intensity: e.note.trim(),
               warmup: e.warmup.trim() ? e.warmup.trim() : null,
               equipmentType: null,
             })),
           },
         ],
       });
-      onDone();
+      setStartingWeightsPlans(res.plans);
     } catch (e) {
       Alert.alert(e instanceof ApiError ? t('coachUnavailable') : t('manualPlanInvalid'));
     } finally {
       setBusy(false);
     }
+  }
+
+  if (startingWeightsPlans) {
+    return (
+      <View style={{ flex: 1, padding: spacing.lg }}>
+        <StartingWeightsStep plans={startingWeightsPlans} onDone={onDone} />
+      </View>
+    );
   }
 
   return (
@@ -160,18 +162,6 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
               />
             </View>
 
-            <TextInput
-              value={e.kg}
-              onChangeText={(v) => updateExercise(idx, { kg: v })}
-              placeholder={t('kgPlaceholder')}
-              placeholderTextColor={theme.inkSoft}
-              keyboardType="numeric"
-              maxLength={20}
-              style={{
-                backgroundColor: theme.bg, borderRadius: radius.field, padding: 8,
-                color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', fontSize: 13,
-              }}
-            />
             <TextInput
               value={e.warmup}
               onChangeText={(v) => updateExercise(idx, { warmup: v })}

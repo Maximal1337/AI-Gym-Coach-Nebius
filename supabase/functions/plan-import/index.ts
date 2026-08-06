@@ -8,6 +8,10 @@ import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } f
  *    mode omitted (onboarding, default) -> archive ALL active plans, insert new ones
  *    mode: "add"                        -> insert new plan(s), archive nothing
  *    mode: "edit", editPlanId           -> archive ONLY editPlanId, insert new plan(s)
+ *  { action: "seed-starting-weights", entries } -> log one "last set" per exercise
+ *    (guidelines/starting-weights.html) — the same source-imported session/
+ *    set_logs shape history-import writes, one row per exercise, so the
+ *    coach's normal cold-start read of "last time" just sees it.
  *  { action: "archive", planId } -> archive a single plan
  * Two steps by design for commit: the user always confirms what the
  * parser understood before anything is saved.
@@ -34,6 +38,7 @@ Deno.serve(withSentry(async (req) => {
     mode?: string;
     editPlanId?: string;
     planId?: string;
+    entries?: unknown;
   };
   try {
     body = await req.json();
@@ -128,7 +133,11 @@ Deno.serve(withSentry(async (req) => {
     // leaves the old program untouched — the user is never stranded
     // with zero active plans.
     const createdIds: string[] = [];
-    const created: Array<{ id: string; name: string }> = [];
+    const created: Array<{
+      id: string;
+      name: string;
+      exercises: Array<{ id: string; name: string; sets: number; repRange: string }>;
+    }> = [];
     const rollback = async () => {
       if (createdIds.length > 0) {
         await db.from("training_plans").delete().in("id", createdIds);
@@ -145,7 +154,7 @@ Deno.serve(withSentry(async (req) => {
         return json(500, { error: "write_failed" });
       }
       createdIds.push(plan.id);
-      const { error: exError } = await db.from("exercises").insert(
+      const { data: insertedExercises, error: exError } = await db.from("exercises").insert(
         p.exercises.map((e) => ({
           plan_id: plan.id,
           order_index: e.orderIndex,
@@ -157,12 +166,15 @@ Deno.serve(withSentry(async (req) => {
           warmup: e.warmup,
           equipment_type: e.equipmentType,
         })),
-      );
-      if (exError) {
+      ).select("id, name, sets, rep_range");
+      if (exError || !insertedExercises) {
         await rollback();
         return json(500, { error: "write_failed" });
       }
-      created.push(plan);
+      created.push({
+        ...plan,
+        exercises: insertedExercises.map((e) => ({ id: e.id, name: e.name, sets: e.sets, repRange: e.rep_range })),
+      });
     }
 
     // mode="add": archive nothing, the new type joins the existing ones.
@@ -191,6 +203,71 @@ Deno.serve(withSentry(async (req) => {
     }
 
     return json(200, { plans: created });
+  }
+
+  if (body.action === "seed-starting-weights") {
+    const entries = body.entries as Array<{ exerciseId: string; weightKg: number; reps: number }>;
+    if (!Array.isArray(entries) || entries.length === 0 || entries.length > 60) {
+      return json(400, { error: "invalid_input" });
+    }
+    for (const e of entries) {
+      if (
+        typeof e.exerciseId !== "string" ||
+        typeof e.weightKg !== "number" || !Number.isFinite(e.weightKg) || e.weightKg < 0 || e.weightKg > 1000 ||
+        !Number.isInteger(e.reps) || e.reps < 1 || e.reps > 200
+      ) {
+        return json(400, { error: "invalid_input" });
+      }
+    }
+
+    // Scope to exercises on one of this user's own active plans — same
+    // ownership check coach-note uses for a single exercise, extended to a
+    // batch via `.in`.
+    const { data: owned } = await db
+      .from("exercises")
+      .select("id, plan_id, training_plans!inner(user_id, status)")
+      .in("id", entries.map((e) => e.exerciseId))
+      .eq("training_plans.user_id", user.id)
+      .eq("training_plans.status", "active");
+    const planIdByExercise = new Map((owned ?? []).map((r) => [r.id as string, r.plan_id as string]));
+
+    const byPlan = new Map<string, typeof entries>();
+    for (const e of entries) {
+      const planId = planIdByExercise.get(e.exerciseId);
+      if (!planId) continue; // not this user's exercise -- skip rather than fail the whole batch
+      byPlan.set(planId, [...(byPlan.get(planId) ?? []), e]);
+    }
+    if (byPlan.size === 0) return json(404, { error: "no_matching_exercises" });
+
+    const now = new Date().toISOString();
+    let seeded = 0;
+    for (const [planId, planEntries] of byPlan) {
+      const { data: session, error } = await db
+        .from("workout_sessions")
+        .insert({
+          user_id: user.id,
+          plan_id: planId,
+          source: "imported",
+          status: "completed",
+          started_at: now,
+          completed_at: now,
+        })
+        .select("id")
+        .single();
+      if (error || !session) return json(500, { error: "write_failed" });
+      const { error: logError } = await db.from("set_logs").insert(
+        planEntries.map((e) => ({
+          session_id: session.id,
+          exercise_id: e.exerciseId,
+          set_no: 1,
+          weight_kg: e.weightKg,
+          reps: e.reps,
+        })),
+      );
+      if (logError) return json(500, { error: "write_failed" });
+      seeded += planEntries.length;
+    }
+    return json(200, { seeded });
   }
 
   if (body.action === "archive") {
