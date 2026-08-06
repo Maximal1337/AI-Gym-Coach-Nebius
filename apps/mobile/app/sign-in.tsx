@@ -1,25 +1,48 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-  Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, TextInput, View,
+  Alert, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, Text, View,
 } from 'react-native';
 import { router } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { LanguagePicker } from '../src/components/LanguagePicker';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
+import { Field } from '../src/components/Field';
+import { CodeInput } from '../src/components/CodeInput';
+import { Button } from '../src/components/Button';
 import { useLanguage } from '../src/lib/language';
-import { useTheme, spacing, radius, typography } from '../src/theme';
+import { useTheme, spacing, radius } from '../src/theme';
 
+const RESEND_COOLDOWN_SEC = 30;
+const CODE_LENGTH = 6;
+
+/**
+ * Email/code sign-in (System Design: auth-flow guidelines, option B —
+ * "one-time code", the recommended direction). Replaces the old two-button
+ * sign-in/sign-up + password form: one email field, one Continue button,
+ * and a 6-digit code the same for a brand-new account or a returning one
+ * — the system decides which by whether the email already has an account,
+ * with no user-visible branch. This also closes the gap where anyone
+ * could type an email they don't own and get in — proving receipt of the
+ * code IS the verification, there's no separate confirmation step.
+ */
 export default function SignIn() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
+  const insets = useSafeAreaInsets();
+  const [step, setStep] = useState<'email' | 'code'>('email');
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
+  const [codeError, setCodeError] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
   const [appleAvailable, setAppleAvailable] = useState(false);
+  const cooldownTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -31,7 +54,22 @@ export default function SignIn() {
     };
   }, []);
 
-  async function afterAuth() {
+  useEffect(() => () => {
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+  }, []);
+
+  function startCooldown() {
+    setCooldown(RESEND_COOLDOWN_SEC);
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    cooldownTimer.current = setInterval(() => {
+      setCooldown((s) => {
+        if (s <= 1 && cooldownTimer.current) clearInterval(cooldownTimer.current);
+        return Math.max(0, s - 1);
+      });
+    }, 1000);
+  }
+
+  function afterAuth() {
     router.replace('/');
   }
 
@@ -52,27 +90,59 @@ export default function SignIn() {
     }
   }
 
-  async function signInEmail(signUp: boolean) {
+  // Same call whether this email has an account or not — Supabase creates
+  // one on first request (shouldCreateUser, default true). Nothing here
+  // ever reveals which case it was; that's the whole point of this flow.
+  async function sendCode() {
     Keyboard.dismiss();
-    if (!email.trim() || !password) {
-      Alert.alert(t('signInError'));
+    const trimmed = email.trim();
+    if (!trimmed || !trimmed.includes('@')) {
+      Alert.alert(t('signInError'), t('enterValidEmail'));
       return;
     }
     setBusy(true);
-    const { error } = signUp
-      ? await supabase.auth.signUp({ email: email.trim(), password })
-      : await supabase.auth.signInWithPassword({ email: email.trim(), password });
+    const { error } = await supabase.auth.signInWithOtp({ email: trimmed });
     setBusy(false);
-    if (error) Alert.alert(t('signInError'), error.message);
-    else afterAuth();
+    if (error) {
+      Alert.alert(t('signInError'), error.message);
+      return;
+    }
+    setCode('');
+    setCodeError(false);
+    setStep('code');
+    startCooldown();
+  }
+
+  async function verifyCode(value: string) {
+    setBusy(true);
+    setCodeError(false);
+    const { error } = await supabase.auth.verifyOtp({ email: email.trim(), token: value, type: 'email' });
+    setBusy(false);
+    if (error) {
+      setCodeError(true);
+      setCode('');
+      return;
+    }
+    afterAuth();
+  }
+
+  function onCodeChange(value: string) {
+    setCode(value);
+    setCodeError(false);
+    if (value.length === CODE_LENGTH) void verifyCode(value);
+  }
+
+  function useDifferentEmail() {
+    setStep('email');
+    setCode('');
+    setCodeError(false);
+    if (cooldownTimer.current) clearInterval(cooldownTimer.current);
+    setCooldown(0);
   }
 
   return (
     <Screen>
     <LoadingOverlay visible={busy} object="dumbbell" label={t('signingIn')} />
-    <View style={{ flexDirection: 'row', justifyContent: dir === 'rtl' ? 'flex-start' : 'flex-end', padding: spacing.md }}>
-      <LanguagePicker />
-    </View>
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       style={{ flex: 1 }}
@@ -82,78 +152,108 @@ export default function SignIn() {
         keyboardDismissMode="on-drag"
         contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: spacing.lg }}
       >
-      <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
-        <Image
-          source={require('../assets/logo-mark.png')}
-          resizeMode="contain"
-          style={{ width: 140, height: 140, marginBottom: spacing.xs }}
-        />
-        <Text style={{
-          color: theme.ink, fontSize: typography.screenTitle.size,
-          fontWeight: typography.screenTitle.weight, letterSpacing: typography.screenTitle.letterSpacing,
-        }}>
-          {t('appName')}
-        </Text>
-        <Text style={{ color: theme.inkSoft, marginTop: spacing.sm, textAlign: 'center' }}>
-          {t('tagline')}
-        </Text>
-      </View>
+      {step === 'email' ? (
+        <>
+          <View style={{ alignItems: 'center', marginBottom: spacing.md }}>
+            <Image
+              source={require('../assets/logo-mark.png')}
+              resizeMode="contain"
+              style={{ width: 140, height: 140, marginBottom: spacing.xs }}
+            />
+            <Text style={{
+              color: theme.ink, fontSize: 30, fontWeight: '800', letterSpacing: -0.6, marginTop: 4,
+              textAlign: 'center',
+            }}>
+              {t('appName')}
+            </Text>
+            <Text style={{
+              color: theme.inkSoft, fontSize: 15.5, lineHeight: 22, marginTop: spacing.sm,
+              textAlign: 'center', maxWidth: 280,
+            }}>
+              {t('tagline')}
+            </Text>
+          </View>
 
-      {appleAvailable && (
-        <Pressable
-          onPress={signInApple}
-          style={{ backgroundColor: theme.ink, padding: 14, borderRadius: radius.pill, alignItems: 'center' }}
-        >
-          <Text style={{ color: theme.bg, fontWeight: '700' }}>{t('signInWithApple')}</Text>
-        </Pressable>
+          {appleAvailable && (
+            <Pressable
+              onPress={signInApple}
+              style={{ backgroundColor: theme.ink, padding: 14, borderRadius: radius.pill, alignItems: 'center' }}
+            >
+              <Text style={{ color: theme.bg, fontWeight: '700' }}>{t('signInWithApple')}</Text>
+            </Pressable>
+          )}
+
+          <Text style={{ color: theme.inkSoft, textAlign: 'center', marginVertical: spacing.md }}>
+            {t('or')}
+          </Text>
+
+          <Field
+            value={email}
+            onChangeText={setEmail}
+            placeholder={t('email')}
+            surface="outline"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            onSubmitEditing={sendCode}
+            style={{ marginBottom: spacing.md }}
+          />
+          <Button block disabled={busy} onPress={sendCode}>{t('continue')}</Button>
+        </>
+      ) : (
+        <>
+          <Text style={{
+            color: theme.ink, fontSize: 22, fontWeight: '800', letterSpacing: -0.4,
+            textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 5,
+          }}>
+            {t('codeStepTitle')}
+          </Text>
+          <Text style={{
+            color: theme.inkSoft, fontSize: 13.5, lineHeight: 20,
+            textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.lg,
+          }}>
+            {t('codeSentTo', { email: email.trim() })}
+          </Text>
+
+          <CodeInput value={code} onChangeText={onCodeChange} disabled={busy} autoFocus />
+
+          {codeError && (
+            <Text style={{
+              color: theme.critical, fontSize: 12.5, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.sm,
+            }}>
+              {t('codeInvalid')}
+            </Text>
+          )}
+
+          <Button
+            variant="ghost" block disabled={busy || cooldown > 0}
+            onPress={sendCode}
+            style={{ marginTop: spacing.sm }}
+          >
+            {cooldown > 0 ? t('resendCodeIn', { seconds: cooldown }) : t('resendCode')}
+          </Button>
+          <Button variant="quiet" block disabled={busy} onPress={useDifferentEmail}>
+            {t('useDifferentEmail')}
+          </Button>
+        </>
       )}
-
-      <Text style={{ color: theme.inkSoft, textAlign: 'center', marginVertical: spacing.md }}>
-        {t('or')}
-      </Text>
-
-      <TextInput
-        placeholder={t('email')}
-        placeholderTextColor={theme.inkSoft}
-        autoCapitalize="none"
-        keyboardType="email-address"
-        value={email}
-        onChangeText={setEmail}
-        style={{
-          borderWidth: 1, borderColor: theme.rule, borderRadius: radius.field,
-          padding: 12, color: theme.ink, marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left',
-        }}
-      />
-      <TextInput
-        placeholder={t('password')}
-        placeholderTextColor={theme.inkSoft}
-        secureTextEntry
-        value={password}
-        onChangeText={setPassword}
-        style={{
-          borderWidth: 1, borderColor: theme.rule, borderRadius: radius.field,
-          padding: 12, color: theme.ink, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left',
-        }}
-      />
-      <Pressable
-        disabled={busy}
-        onPress={() => signInEmail(false)}
-        style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center' }}
-      >
-        <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('signIn')}</Text>
-      </Pressable>
-      <Pressable
-        disabled={busy}
-        onPress={() => signInEmail(true)}
-        style={{
-          borderWidth: 1.5, borderColor: theme.accent, borderRadius: radius.pill,
-          padding: 14, alignItems: 'center', marginTop: spacing.sm,
-        }}
-      >
-        <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('signUp')}</Text>
-      </Pressable>
       </ScrollView>
     </KeyboardAvoidingView>
+    {/* Floats above the centered content instead of sitting in normal flow
+        above it — otherwise it eats into the ScrollView's available height
+        and the "centered" block ends up visibly low, centered only in the
+        leftover space below this row rather than the full screen. */}
+    <View style={{
+      position: 'absolute', top: insets.top, left: 0, right: 0,
+      flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center',
+      padding: spacing.md,
+    }}>
+      {step === 'code' ? (
+        <Pressable onPress={useDifferentEmail} hitSlop={10}>
+          <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={24} color={theme.inkSoft} />
+        </Pressable>
+      ) : <View />}
+      <LanguagePicker />
+    </View>
     </Screen>
   );
 }
