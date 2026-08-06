@@ -7,8 +7,16 @@ import { useTheme, spacing, radius } from '../theme';
 
 interface SetRow { kg: string; reps: string }
 
-function initialRows(weightKg: number, targetReps: number[]): SetRow[] {
-  return targetReps.map((reps) => ({ kg: String(weightKg), reps: String(reps) }));
+/** No history yet (first time on this exercise): show `sets` placeholder
+ * rows instead of no card at all — "X" reads as unset (not a real
+ * suggestion) and fails numeric validation until the user fills it in. */
+const PLACEHOLDER = 'X';
+
+function initialRows(weightKg: number | null, targetReps: number[] | null, sets: number): SetRow[] {
+  if (weightKg != null && targetReps && targetReps.length > 0) {
+    return targetReps.map((reps) => ({ kg: String(weightKg), reps: String(reps) }));
+  }
+  return Array.from({ length: sets }, () => ({ kg: PLACEHOLDER, reps: PLACEHOLDER }));
 }
 
 /** Rounds away the float noise repeated +/- taps would otherwise accumulate. */
@@ -69,29 +77,36 @@ function Stepper({
  * through the LLM). Fields are pre-filled with the suggested numbers as
  * real, editable values (not placeholders) so "send exactly this" needs
  * zero taps, while +/- steppers make a quick nudge (a plate short, one
- * more rep) faster than retyping the whole number.
+ * more rep) faster than retyping the whole number. The first time on an
+ * exercise there's nothing to suggest yet (no history) — the bar still
+ * shows, with `sets` rows of "X" placeholders, so a brand-new user sees
+ * the same comfortable UI from set one instead of a blank gap.
  */
 export function SuggestedActionBar({
+  exerciseName,
   weightKg,
   targetReps,
+  sets,
   disabled,
   onSubmitSets,
 }: {
-  weightKg: number;
-  targetReps: number[];
+  exerciseName: string | null;
+  weightKg: number | null;
+  targetReps: number[] | null;
+  sets: number;
   disabled?: boolean;
   onSubmitSets: (sets: Array<{ weightKg: number; reps: number }>) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
-  const [rows, setRows] = useState<SetRow[]>(() => initialRows(weightKg, targetReps));
+  const [rows, setRows] = useState<SetRow[]>(() => initialRows(weightKg, targetReps, sets));
 
   // A new suggestion (different exercise, or a renegotiated target) should
   // reset any in-progress edits rather than keep showing stale numbers.
   useEffect(() => {
-    setRows(initialRows(weightKg, targetReps));
-  }, [weightKg, targetReps.join(',')]);
+    setRows(initialRows(weightKg, targetReps, sets));
+  }, [weightKg, targetReps ? targetReps.join(',') : '', sets]);
 
   function updateRow(i: number, patch: Partial<SetRow>) {
     setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
@@ -107,6 +122,16 @@ export function SuggestedActionBar({
       backgroundColor: theme.surface, borderTopWidth: 1, borderTopColor: theme.rule,
       paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: 2,
     }}>
+      {exerciseName && (
+        <View style={{
+          flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginBottom: 4,
+        }}>
+          <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: theme.accent }} />
+          <Text style={{ color: theme.accent, fontWeight: '800', fontSize: 13, letterSpacing: 0.3 }}>
+            {exerciseName.toUpperCase()}
+          </Text>
+        </View>
+      )}
       <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
         <Text style={{ width: 14 }} />
         <Text style={{ flex: 1, color: theme.inkSoft, fontSize: 11, lineHeight: 13, textAlign: 'center' }}>

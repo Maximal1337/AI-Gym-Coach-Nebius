@@ -22,6 +22,7 @@ export interface SessionStartResult {
   message: string;
   suggestedWeightKg: number | null;
   targetReps: number[] | null;
+  exerciseSets: number;
 }
 
 const KEY = 'gymcoach.pending-session-start.v1';

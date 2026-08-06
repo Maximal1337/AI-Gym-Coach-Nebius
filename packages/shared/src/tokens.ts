@@ -28,7 +28,7 @@ export const palette = {
     surface: "#15181D",
     ink: "#F3F6EF",
     inkSoft: "#8A9482",
-    accent: "#C8FF3D",
+    accent: "#62FC98",
     onAccent: "#0A0D11",
     rule: "#23272E",
     success: "#4FE38A",

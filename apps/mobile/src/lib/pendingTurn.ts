@@ -24,6 +24,7 @@ export interface TurnResult {
   nextExerciseId: string | null;
   /** §20: the current/next exercise may be a session-only substitution the client has never fetched — carry its name so the header doesn't need a lookup that can miss. */
   nextExerciseName: string | null;
+  nextExerciseSets: number | null;
   sessionComplete: boolean;
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;

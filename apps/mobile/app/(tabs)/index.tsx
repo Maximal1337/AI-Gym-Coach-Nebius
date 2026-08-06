@@ -19,7 +19,7 @@ import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface Plan { id: string; name: string }
-interface SuggestedAction { exerciseId: string; weightKg: number; targetReps: number[] }
+interface SuggestedAction { exerciseId: string; weightKg: number | null; targetReps: number[] | null; sets: number }
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
 
 /** "58kg × 8/8/8" when every set shares a weight (the common case), else a per-set list. */
@@ -114,9 +114,13 @@ export default function Chat() {
     setCurrentExerciseId(res.nextExerciseId);
     setCurrentExerciseName(res.nextExerciseName);
     setPendingAction(
-      res.nextExerciseId && res.nextSuggestedWeightKg != null &&
-        res.nextTargetReps && res.nextTargetReps.length > 0
-        ? { exerciseId: res.nextExerciseId, weightKg: res.nextSuggestedWeightKg, targetReps: res.nextTargetReps }
+      res.nextExerciseId
+        ? {
+            exerciseId: res.nextExerciseId,
+            weightKg: res.nextSuggestedWeightKg,
+            targetReps: res.nextTargetReps,
+            sets: res.nextExerciseSets ?? 1,
+          }
         : null,
     );
   }
@@ -126,11 +130,12 @@ export default function Chat() {
     setSessionId(res.sessionId);
     setCurrentExerciseId(res.exerciseId);
     pushCoachMessage(withTarget(res.message, res.suggestedWeightKg, res.targetReps));
-    setPendingAction(
-      res.suggestedWeightKg != null && res.targetReps && res.targetReps.length > 0
-        ? { exerciseId: res.exerciseId, weightKg: res.suggestedWeightKg, targetReps: res.targetReps }
-        : null,
-    );
+    setPendingAction({
+      exerciseId: res.exerciseId,
+      weightKg: res.suggestedWeightKg,
+      targetReps: res.targetReps,
+      sets: res.exerciseSets ?? 1,
+    });
   }
 
   // Generative-UI confirm action (System Design §19): deterministic on the
@@ -357,8 +362,16 @@ export default function Chat() {
 
       {inWorkout && pendingAction && (
         <SuggestedActionBar
+          // Keyed by exercise, not just by its suggested numbers: two
+          // consecutive baseline (no-history) exercises can share the same
+          // weightKg/targetReps/sets shape (all null/null/N), so the
+          // internal rows state wouldn't otherwise reset and the next
+          // exercise would inherit whatever the user typed for the last one.
+          key={pendingAction.exerciseId}
+          exerciseName={currentExerciseName}
           weightKg={pendingAction.weightKg}
           targetReps={pendingAction.targetReps}
+          sets={pendingAction.sets}
           disabled={busy}
           onSubmitSets={(sets) => void confirmSets(pendingAction.exerciseId, sets)}
         />
