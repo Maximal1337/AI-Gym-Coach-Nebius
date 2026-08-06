@@ -1,11 +1,15 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
 import { callFn } from '../../src/lib/api';
 import { Screen } from '../../src/components/Screen';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
+import { Button } from '../../src/components/Button';
+import { SectionTitle } from '../../src/components/SectionTitle';
+import { ChoiceCard } from '../../src/components/ChoiceCard';
+import { Badge } from '../../src/components/Badge';
 import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -69,66 +73,55 @@ export default function ManagePlans() {
               {p.name}
             </Text>
             <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm }}>
-              <Pressable
+              <Button
+                variant="secondary" size="md"
                 disabled={busyId === p.id}
                 onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'edit', planId: p.id, planName: p.name } })}
-                style={{ backgroundColor: theme.accent, paddingVertical: 8, paddingHorizontal: 16, borderRadius: radius.pill }}
               >
-                <Text style={{ color: theme.onAccent, fontWeight: '700', fontSize: 13 }}>{t('editPlan')}</Text>
-              </Pressable>
-              <Pressable
+                {t('editPlan')}
+              </Button>
+              <Button
+                variant="destructive" size="md"
                 disabled={busyId === p.id}
                 onPress={() => confirmArchive(p)}
-                style={{ paddingVertical: 8, paddingHorizontal: 16, borderRadius: radius.pill, borderWidth: 1, borderColor: theme.critical }}
               >
-                <Text style={{ color: theme.critical, fontWeight: '700', fontSize: 13 }}>{t('archivePlan')}</Text>
-              </Pressable>
+                {t('archivePlan')}
+              </Button>
             </View>
           </View>
         ))}
 
-        <Pressable
-          onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'add' } })}
-          style={{
-            borderWidth: 1, borderColor: theme.accent, borderStyle: 'dashed', borderRadius: radius.card,
-            padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
-          }}
-        >
-          <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('addNewPlanType')}</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'add', initialMode: 'upload' } })}
-          style={{
-            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
-            padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
-          }}
-        >
-          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('chooseUpload')}</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push('/plan-build')}
-          style={{
-            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
-            padding: spacing.md, alignItems: 'center', marginTop: spacing.sm,
-          }}
-        >
-          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('buildOwnPlan')}</Text>
-        </Pressable>
-
-        {/* Pinned separately from the two above (System Design §21) — a
-            distinct third option, not grouped with paste/manual. */}
-        <Pressable
-          onPress={() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } })}
-          style={{
-            backgroundColor: theme.accent, borderRadius: radius.pill,
-            padding: spacing.md, alignItems: 'center', marginTop: spacing.lg,
-          }}
-        >
-          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('generatePlanCta')}</Text>
-        </Pressable>
-        <Text style={{ color: theme.inkSoft, fontSize: 10.5, textAlign: 'center', marginTop: spacing.xs, lineHeight: 15 }}>
+        {/* Matches the design system's own PlansScreen: the plan-creation
+            choices are one ChoiceCard list under a single section title,
+            not a separate CTA pill below a few dashed boxes — same four
+            destinations the app already had, just unified per the source. */}
+        <SectionTitle>{t('addNewPlanType')}</SectionTitle>
+        <View style={{ gap: spacing.sm }}>
+          <ChoiceCard
+            emphasis="primary"
+            icon="sparkles"
+            label={t('generatePlanCta')}
+            description={t('goalSub')}
+            badge={<Badge>AI</Badge>}
+            onPress={() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } })}
+          />
+          <ChoiceCard
+            icon="clipboard-outline"
+            label={t('choosePaste')}
+            onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'add' } })}
+          />
+          <ChoiceCard
+            icon="document-attach-outline"
+            label={t('chooseUpload')}
+            onPress={() => router.push({ pathname: '/plan-edit', params: { mode: 'add', initialMode: 'upload' } })}
+          />
+          <ChoiceCard
+            icon="construct-outline"
+            label={t('buildOwnPlan')}
+            onPress={() => router.push('/plan-build')}
+          />
+        </View>
+        <Text style={{ color: theme.inkSoft, fontSize: 10.5, lineHeight: 15, textAlign: dir === 'rtl' ? 'right' : 'left', marginTop: spacing.sm }}>
           {t('generatePlanCaption')}
         </Text>
       </ScrollView>

@@ -1,6 +1,6 @@
 import { palette } from "@gymcoach/shared";
 
-const EFFECTIVE_DATE = "July 29, 2026";
+const EFFECTIVE_DATE = "August 6, 2026";
 const CONTACT_EMAIL = "dorhaimbob@gmail.com";
 
 export default function Privacy() {
@@ -30,11 +30,16 @@ export default function Privacy() {
 
         <h2>Data we collect</h2>
         <ul>
-          <li>Account info: your email address, used for sign-in.</li>
           <li>
-            Coaching data: your training plans, chat messages with the coach,
-            and logged workout sets (exercise, weight, reps) — this is what
-            lets the coach track your progress over time.
+            Account info: your email address, used for sign-in — or, if you
+            sign in with Apple, the identifier Apple provides for your
+            account instead.
+          </li>
+          <li>
+            Coaching data: your training plans, chat messages with the
+            coach, logged workout sets (exercise, weight, reps), and any
+            notes you or the coach add about a set or exercise — this is
+            what lets the coach track your progress over time.
           </li>
           <li>
             Coach persona settings: the name, tone, and preferences you
@@ -43,9 +48,27 @@ export default function Privacy() {
           <li>
             Fitness profile (optional): if you use the "AI-generated plan"
             feature, the goal, experience level, and days-per-week you
-            select, plus gender, age, weight, height, and injury notes if
-            you choose to share them — used only to personalize the
-            generated plan. All of these fields are optional and skippable.
+            select, plus gender, age, weight, height, and injury or
+            limitation notes if you choose to share them — used only to
+            personalize the generated plan. All of these fields are
+            optional and skippable.
+          </li>
+          <li>
+            Push notifications (optional): if you allow notifications, we
+            store a device push token so the coach can reach you while the
+            app is in the background. You can turn this off anytime in your
+            device settings.
+          </li>
+          <li>
+            App usage &amp; diagnostics: aggregate product-usage events
+            (e.g. that a workout was started or completed) so we can see
+            how the app is used, and crash/error reports so we can fix
+            bugs. Both are configured to exclude your personal content and
+            device-level identifying details where the tools allow it.
+          </li>
+          <li>
+            Consent record: the date and version of our Terms you accepted,
+            so we can show which version you agreed to.
           </li>
         </ul>
 
@@ -58,9 +81,11 @@ export default function Privacy() {
 
         <h2>Third parties</h2>
         <p>
-          We use Supabase to store your account and workout data, and Google
-          Gemini to power the AI coach. Both process data only as needed to
-          run the app.
+          We use Supabase to store your account and workout data, Google
+          Gemini to power the AI coach, PostHog for basic product-usage
+          analytics, Sentry for crash and error reporting, and Apple/Expo's
+          push notification services to deliver coach notifications. Each
+          processes data only as needed to run the app.
         </p>
 
         <h2>Data deletion</h2>

@@ -1,13 +1,16 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { PlanPasteFlow } from '../src/components/PlanPasteFlow';
 import { GeneratePlanFlow } from '../src/components/GeneratePlanFlow';
 import { Screen } from '../src/components/Screen';
+import { ChoiceCard } from '../src/components/ChoiceCard';
+import { Badge } from '../src/components/Badge';
+import { Button } from '../src/components/Button';
 import { supabase } from '../src/lib/supabase';
 import { useLanguage } from '../src/lib/language';
-import { useTheme, spacing, radius } from '../src/theme';
+import { useTheme, spacing } from '../src/theme';
 
 type Choice = 'generate' | 'paste' | 'upload' | null;
 
@@ -61,61 +64,66 @@ export default function OnboardingPlan() {
 
   return (
     <Screen>
-      <View style={{ flex: 1, padding: spacing.lg, justifyContent: 'center' }}>
+      <View style={{ flex: 1 }}>
         {/* Reached via replace() from consent, also replace()'d away — no
             screen behind this one to go back to. Signing out is the one
-            honest way out, same reasoning as consent.tsx. */}
-        <Pressable onPress={signOut} style={{ position: 'absolute', top: spacing.lg, [dir === 'rtl' ? 'left' : 'right']: spacing.lg }}>
-          <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('signOut')}</Text>
-        </Pressable>
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.xs }}>
-          {t('chooseHowTitle')}
-        </Text>
-        <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.lg }}>{t('chooseHowSub')}</Text>
+            honest way out, same reasoning as consent.tsx — positioned on
+            the leading side, matching the design system's NavBar
+            "exit" convention (and consent.tsx's own placement) rather
+            than the trailing corner. */}
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', padding: spacing.sm }}>
+          <Button variant="quiet" size="sm" onPress={signOut}>{t('signOut')}</Button>
+        </View>
 
-        <Pressable
-          onPress={() => setChoice('generate')}
-          style={{ backgroundColor: theme.accent, borderRadius: radius.pill, padding: spacing.md, alignItems: 'center' }}
+        <View style={{ paddingHorizontal: spacing.lg }}>
+          <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', letterSpacing: -0.3, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 4 }}>
+            {t('chooseHowTitle')}
+          </Text>
+          <Text style={{ color: theme.inkSoft, fontSize: 14.5, lineHeight: 21, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.lg }}>
+            {t('chooseHowSub')}
+          </Text>
+        </View>
+
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: spacing.lg, gap: spacing.sm }}
         >
-          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('generatePlanCta')}</Text>
-        </Pressable>
-        <Text style={{ color: theme.inkSoft, fontSize: 10.5, textAlign: 'center', marginTop: spacing.xs, marginBottom: spacing.lg, lineHeight: 15 }}>
-          {t('generatePlanCaption')}
-        </Text>
+          <ChoiceCard
+            emphasis="primary"
+            icon="sparkles"
+            label={t('generatePlanCta')}
+            description={t('goalSub')}
+            badge={<Badge>AI</Badge>}
+            onPress={() => setChoice('generate')}
+          />
+          <ChoiceCard
+            icon="clipboard-outline"
+            label={t('choosePaste')}
+            description={t('planSub')}
+            onPress={() => setChoice('paste')}
+          />
+          <ChoiceCard
+            icon="document-attach-outline"
+            label={t('chooseUpload')}
+            onPress={() => setChoice('upload')}
+          />
+          <ChoiceCard
+            icon="construct-outline"
+            label={t('chooseManual')}
+            description={t('manualPlanSub')}
+            onPress={() => router.push({ pathname: '/plan-build', params: { mode: 'onboarding' } })}
+          />
+          <Text style={{
+            color: theme.inkSoft, fontSize: 10.5, lineHeight: 15,
+            textAlign: dir === 'rtl' ? 'right' : 'left', marginTop: 4,
+          }}>
+            {t('generatePlanCaption')}
+          </Text>
+        </ScrollView>
 
-        <Pressable
-          onPress={() => setChoice('paste')}
-          style={{
-            borderWidth: 1, borderColor: theme.accent, borderStyle: 'dashed', borderRadius: radius.card,
-            padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm,
-          }}
-        >
-          <Text style={{ color: theme.accent, fontWeight: '700' }}>{t('choosePaste')}</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => setChoice('upload')}
-          style={{
-            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
-            padding: spacing.md, alignItems: 'center', marginBottom: spacing.sm,
-          }}
-        >
-          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('chooseUpload')}</Text>
-        </Pressable>
-
-        <Pressable
-          onPress={() => router.push({ pathname: '/plan-build', params: { mode: 'onboarding' } })}
-          style={{
-            borderWidth: 1, borderColor: theme.rule, borderStyle: 'dashed', borderRadius: radius.card,
-            padding: spacing.md, alignItems: 'center',
-          }}
-        >
-          <Text style={{ color: theme.inkSoft, fontWeight: '700' }}>{t('chooseManual')}</Text>
-        </Pressable>
-
-        <Pressable onPress={skip} style={{ alignItems: 'center', marginTop: spacing.lg }}>
-          <Text style={{ color: theme.inkSoft, fontSize: 13, fontWeight: '600' }}>{t('skipForNow')}</Text>
-        </Pressable>
+        <View style={{ padding: spacing.md, paddingBottom: spacing.lg }}>
+          <Button variant="quiet" block onPress={skip}>{t('skipForNow')}</Button>
+        </View>
       </View>
     </Screen>
   );

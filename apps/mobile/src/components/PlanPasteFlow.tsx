@@ -177,7 +177,7 @@ export function PlanPasteFlow({
     <DismissKeyboardView style={{ padding: spacing.lg }}>
       <LoadingOverlay visible={busy && !openingPicker} object="plate" label={t('parsing')} />
       {onCancel && !preview && (
-        <Pressable onPress={onCancel} style={{ marginBottom: spacing.sm, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+        <Pressable onPress={onCancel} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
         </Pressable>
       )}
