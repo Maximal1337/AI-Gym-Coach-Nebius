@@ -6,6 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/lib/supabase';
 import { callFn } from '../../src/lib/api';
 import { Screen } from '../../src/components/Screen';
+import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLanguage } from '../../src/lib/language';
 import { useLanguagePicker } from '../../src/lib/useLanguagePicker';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
@@ -29,6 +30,8 @@ export default function Settings() {
   const [fitnessProfile, setFitnessProfile] = useState<{
     gender: string | null; age: number | null; weight_kg: number | null; height_cm: number | null;
   } | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
@@ -47,8 +50,13 @@ export default function Settings() {
   );
 
   async function signOut() {
-    await supabase.auth.signOut();
-    router.replace('/sign-in');
+    setSigningOut(true);
+    try {
+      await supabase.auth.signOut();
+      router.replace('/sign-in');
+    } finally {
+      setSigningOut(false);
+    }
   }
 
   function confirmDelete() {
@@ -58,12 +66,15 @@ export default function Settings() {
         text: t('delete'),
         style: 'destructive',
         onPress: async () => {
+          setDeleting(true);
           try {
             await callFn('account-delete', {});
             await supabase.auth.signOut();
             router.replace('/sign-in');
           } catch {
             Alert.alert(t('coachUnavailable'));
+          } finally {
+            setDeleting(false);
           }
         },
       },
@@ -109,6 +120,11 @@ export default function Settings() {
 
   return (
     <Screen>
+    <LoadingOverlay
+      visible={signingOut || deleting}
+      object="dumbbell"
+      label={deleting ? t('deletingAccount') : t('signingOut')}
+    />
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
       <Text style={{
         color: theme.ink, fontSize: 20, fontWeight: '800',

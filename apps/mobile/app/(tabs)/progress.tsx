@@ -10,6 +10,7 @@ import { callFn } from '../../src/lib/api';
 import { DismissKeyboardView } from '../../src/components/DismissKeyboardView';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
+import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -383,6 +384,11 @@ export default function Progress() {
             pattern for Modal). */}
         <SafeAreaProvider>
         <Screen>
+        <LoadingOverlay
+          visible={busy}
+          object="stopwatch"
+          label={importPreview ? t('saving') : t('parsing')}
+        />
         <DismissKeyboardView style={{ padding: spacing.lg }}>
           <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
             {importPreview ? t('confirmPlanTitle') : t('importHistory')}

@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { callFn } from '../src/lib/api';
 import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
+import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
@@ -36,6 +37,7 @@ export default function Consent() {
 
   return (
     <Screen>
+    <LoadingOverlay visible={busy} object="dumbbell" label={t('saving')} />
     <View style={{ flex: 1, padding: spacing.lg }}>
       {/* No screen before this one to go back to (this is a mandatory,
           replace()-only gate) — the one honest way out is signing out. */}

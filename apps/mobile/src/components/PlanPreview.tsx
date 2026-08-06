@@ -21,7 +21,7 @@ export interface ParsedPlan { name: string; exercises: ParsedExercise[] }
  * Extracted from PlanPasteFlow rather than duplicated.
  */
 export function PlanPreview({
-  preview, setPreview, mode, editPlanId, onDone, showTryAgain = true, extraNote,
+  preview, setPreview, mode, editPlanId, onDone, showTryAgain = true, onTryAgain, extraNote,
 }: {
   preview: ParsedPlan[];
   setPreview: (updater: (prev: ParsedPlan[] | null) => ParsedPlan[] | null) => void;
@@ -29,6 +29,8 @@ export function PlanPreview({
   editPlanId?: string;
   onDone: () => void;
   showTryAgain?: boolean;
+  /** Overrides what "Try again" does beyond clearing the preview — e.g. PlanPasteFlow uses this to re-open the file picker when the preview came from an upload, instead of always dropping back to the paste textbox. Defaults to just clearing the preview. */
+  onTryAgain?: () => void;
   /** Rendered directly above the approve button (e.g. the AI-generated disclaimer, linter warnings). */
   extraNote?: ReactNode;
 }) {
@@ -132,7 +134,11 @@ export function PlanPreview({
         <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{busy ? t('saving') : t('approveAndSave')}</Text>
       </Pressable>
       {showTryAgain && mode !== 'edit' && (
-        <Pressable disabled={busy} onPress={() => setPreview(() => null)} style={{ padding: spacing.md, alignItems: 'center' }}>
+        <Pressable
+          disabled={busy}
+          onPress={() => (onTryAgain ? onTryAgain() : setPreview(() => null))}
+          style={{ padding: spacing.md, alignItems: 'center' }}
+        >
           <Text style={{ color: theme.accent, fontWeight: '600' }}>{t('tryAgain')}</Text>
         </Pressable>
       )}

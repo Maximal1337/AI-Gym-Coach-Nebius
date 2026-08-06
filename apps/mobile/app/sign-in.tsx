@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { LanguagePicker } from '../src/components/LanguagePicker';
+import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius, typography } from '../src/theme';
 
@@ -68,6 +69,7 @@ export default function SignIn() {
 
   return (
     <Screen>
+    <LoadingOverlay visible={busy} object="dumbbell" label={t('signingIn')} />
     <View style={{ flexDirection: 'row', justifyContent: dir === 'rtl' ? 'flex-start' : 'flex-end', padding: spacing.md }}>
       <LanguagePicker />
     </View>

@@ -35,17 +35,18 @@ test("parseRepRange handles ranges, single values, junk", () => {
   assert.deepEqual(parseRepRange("whatever"), { min: 8, max: 12 });
 });
 
-test("no history -> baseline", () => {
+test("no history -> baseline, reps default to the plan's rep-range floor (weight stays unknown)", () => {
   const t = suggestTargets(exercise, []);
   assert.equal(t.reason, "baseline");
   assert.equal(t.suggestedWeightKg, null);
+  assert.deepEqual(t.targetReps, [6, 6, 6]);
 });
 
 test("a logged weight of 0 is never trusted as a real working weight -> treated as baseline, not suggested as a target", () => {
   const t = suggestTargets(exercise, logs([[0, 8], [0, 8], [0, 8]]));
   assert.equal(t.reason, "baseline");
   assert.equal(t.suggestedWeightKg, null);
-  assert.equal(t.targetReps, null);
+  assert.deepEqual(t.targetReps, [6, 6, 6]);
 });
 
 test("all sets at range ceiling -> weight jumps by the equipment's real increment, reps reset to bottom", () => {

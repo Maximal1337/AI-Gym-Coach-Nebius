@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, Text, TextInput, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError, callFn } from '../lib/api';
@@ -7,6 +7,7 @@ import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
 import { ConfettiBurst } from './ConfettiBurst';
+import { SketchLoader } from './SketchLoader';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
@@ -35,29 +36,6 @@ const PREV_STEP: Partial<Record<Step, Step>> = {
   about: 'days',
   injuries: 'about',
 };
-
-function Spinner() {
-  const theme = useTheme();
-  const spin = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    const loop = Animated.loop(
-      Animated.timing(spin, { toValue: 1, duration: 900, easing: Easing.linear, useNativeDriver: true }),
-    );
-    loop.start();
-    return () => loop.stop();
-  }, [spin]);
-
-  const rotate = spin.interpolate({ inputRange: [0, 1], outputRange: ['0deg', '360deg'] });
-
-  return (
-    <Animated.View style={{
-      width: 54, height: 54, borderRadius: 27, borderWidth: 3,
-      borderColor: theme.rule, borderTopColor: theme.accent,
-      transform: [{ rotate }],
-    }} />
-  );
-}
 
 /**
  * AI-generated training plans (System Design §21): a short structured
@@ -390,9 +368,8 @@ export function GeneratePlanFlow({
 
   if (step === 'generating') {
     return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.lg }}>
-        <Spinner />
-        <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t(GENERATING_LINES[lineIdx])}</Text>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <SketchLoader label={t(GENERATING_LINES[lineIdx])} dir={dir} />
       </View>
     );
   }

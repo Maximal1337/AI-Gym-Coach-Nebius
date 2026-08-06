@@ -7,16 +7,20 @@ import { useTheme, spacing, radius } from '../theme';
 
 interface SetRow { kg: string; reps: string }
 
-/** No history yet (first time on this exercise): show `sets` placeholder
- * rows instead of no card at all — "X" reads as unset (not a real
- * suggestion) and fails numeric validation until the user fills it in. */
+/** No history yet (first time on this exercise): the weight is never
+ * guessed, so it still shows as an "X" placeholder — reads as unset (not
+ * a real suggestion) and fails numeric validation until the user fills
+ * it in. Reps, though, come from the plan's own rep-range floor even on
+ * a first session (see progression.ts's baseline case), so they're real
+ * pre-filled values, not placeholders, same as any other suggestion. */
 const PLACEHOLDER = 'X';
 
 function initialRows(weightKg: number | null, targetReps: number[] | null, sets: number): SetRow[] {
-  if (weightKg != null && targetReps && targetReps.length > 0) {
-    return targetReps.map((reps) => ({ kg: String(weightKg), reps: String(reps) }));
-  }
-  return Array.from({ length: sets }, () => ({ kg: PLACEHOLDER, reps: PLACEHOLDER }));
+  const reps = targetReps && targetReps.length > 0 ? targetReps : Array.from({ length: sets }, () => null);
+  return reps.map((r) => ({
+    kg: weightKg != null ? String(weightKg) : PLACEHOLDER,
+    reps: r != null ? String(r) : PLACEHOLDER,
+  }));
 }
 
 /** Rounds away the float noise repeated +/- taps would otherwise accumulate. */

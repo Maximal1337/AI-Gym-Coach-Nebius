@@ -60,11 +60,17 @@ export function parseRepRange(repRange: string): { min: number; max: number } {
 }
 
 export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets {
+  const { min, max } = parseRepRange(exercise.repRange);
+
+  // Baseline (no trustworthy weight on record): the weight is still
+  // unknown — never invent one — but the plan already specifies a rep
+  // target (the range's floor), so that much doesn't need to come from
+  // the user. Set rows can start from the plan's own numbers instead of
+  // a blank placeholder.
   if (lastLogs.length === 0) {
-    return { suggestedWeightKg: null, targetReps: null, reason: "baseline" };
+    return { suggestedWeightKg: null, targetReps: Array(exercise.sets).fill(min), reason: "baseline" };
   }
 
-  const { min, max } = parseRepRange(exercise.repRange);
   const ordered = [...lastLogs].sort((a, b) => a.setNo - b.setNo);
   const topWeight = Math.max(...ordered.map((l) => l.weightKg));
 
@@ -74,7 +80,7 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   // no history: ask the user for a starting weight instead of presenting
   // "0kg" (or a trivial +2.5kg off of it) as if it were a real target.
   if (topWeight <= 0) {
-    return { suggestedWeightKg: null, targetReps: null, reason: "baseline" };
+    return { suggestedWeightKg: null, targetReps: Array(exercise.sets).fill(min), reason: "baseline" };
   }
 
   const topWeightSets = ordered.filter((l) => l.weightKg === topWeight);

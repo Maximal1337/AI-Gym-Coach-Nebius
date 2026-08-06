@@ -7,6 +7,8 @@ import { callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
+import { SketchLoader } from './SketchLoader';
+import { LoadingOverlay } from './LoadingOverlay';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 
@@ -49,6 +51,11 @@ export function PlanPasteFlow({
   // native picker for a frame before either a file comes back or onCancel
   // navigates away.
   const [openingPicker, setOpeningPicker] = useState(initialMode === 'upload');
+  // Which path actually produced the current preview — "Try again" (in
+  // PlanPreview) needs this to know whether to re-open the file picker or
+  // fall back to the paste textbox; initialMode alone isn't enough, since
+  // a failed initial upload can still fall through to a typed-text parse.
+  const [previewSource, setPreviewSource] = useState<'upload' | 'paste' | null>(null);
 
   // Editing an existing plan skips the paste-and-parse step entirely —
   // load its current exercises straight into the review/edit screen.
@@ -98,10 +105,23 @@ export function PlanPasteFlow({
     try {
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', text });
       setPreview(res.plans);
+      setPreviewSource('paste');
     } catch {
       Alert.alert(t('parseFailed'));
     } finally {
       setBusy(false);
+    }
+  }
+
+  // "Try again" only clears the preview by default (PlanPreview.tsx),
+  // which always drops back to the paste textbox — fine for a typed-text
+  // preview, but wrong for an uploaded one: re-open the picker instead so
+  // "try again" actually retries the same action the user took.
+  function handleTryAgain() {
+    setPreview(null);
+    if (previewSource === 'upload') {
+      setOpeningPicker(true);
+      void pickAndParseFile();
     }
   }
 
@@ -139,6 +159,7 @@ export function PlanPasteFlow({
           : { text: await file.text() };
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', ...payload });
       setPreview(res.plans);
+      setPreviewSource('upload');
     } catch {
       Alert.alert(t('parseFailed'));
     } finally {
@@ -154,6 +175,7 @@ export function PlanPasteFlow({
 
   return (
     <DismissKeyboardView style={{ padding: spacing.lg }}>
+      <LoadingOverlay visible={busy && !openingPicker} object="plate" label={t('parsing')} />
       {onCancel && !preview && (
         <Pressable onPress={onCancel} style={{ marginBottom: spacing.sm, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
@@ -173,7 +195,10 @@ export function PlanPasteFlow({
           <Text style={{ color: theme.inkSoft, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
             {t('uploadSub')}
           </Text>
-          <ActivityIndicator color={theme.accent} style={{ marginTop: spacing.lg }} />
+          <SketchLoader
+            size={88} objects={['plate']} orbit={false} stroke={3.2} dir={dir}
+            style={{ marginTop: spacing.lg, alignSelf: 'center' }}
+          />
         </>
       ) : !preview ? (
         <>
@@ -215,6 +240,7 @@ export function PlanPasteFlow({
           mode={mode}
           editPlanId={editPlanId}
           onDone={onDone}
+          onTryAgain={handleTryAgain}
         />
       )}
     </DismissKeyboardView>
