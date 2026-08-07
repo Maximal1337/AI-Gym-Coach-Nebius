@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useTheme, spacing, radius } from '../theme';
+import { useLanguage } from '../lib/language';
 
 export type ButtonVariant = 'primary' | 'secondary' | 'outline' | 'dashed' | 'ghost' | 'quiet' | 'destructive';
 export type ButtonSize = 'lg' | 'md' | 'sm';
@@ -37,6 +38,7 @@ export function Button({
   textStyle?: object;
 }) {
   const theme = useTheme();
+  const { dir } = useLanguage();
 
   // rgba mixes for states the app's simplified Theme type doesn't carry a
   // token for (Notch's --volt-wash / --volt-300) — kept local to this
@@ -64,7 +66,7 @@ export function Button({
       onPress={onPress}
       style={{
         alignSelf: block ? 'stretch' : 'flex-start',
-        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
+        flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm,
         backgroundColor: v.background,
         borderWidth: v.borderWidth, borderColor: v.borderColor,
         borderStyle: dashed ? 'dashed' : 'solid',
