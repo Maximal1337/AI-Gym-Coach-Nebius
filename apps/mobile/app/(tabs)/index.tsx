@@ -15,6 +15,7 @@ import { MarkdownText } from '../../src/components/MarkdownText';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
 import { useLanguage } from '../../src/lib/language';
+import { useUnits, formatWeightKg, weightUnitLabel, type UnitSystem } from '../../src/lib/units';
 import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -29,12 +30,13 @@ interface SuggestedAction {
 }
 interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
 
-/** "58kg × 8/8/8" when every set shares a weight (the common case), else a per-set list. */
-function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>, kgLabel: string): string {
+/** "58kg × 8/8/8" when every set shares a weight (the common case), else a per-set list. Weights are always stored in kg; this is the one boundary that converts to whatever the user has chosen to see (guidelines/units-setting.html). */
+function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>, units: UnitSystem): string {
   const sameWeight = sets.every((s) => s.weightKg === sets[0].weightKg);
+  const unitLabel = weightUnitLabel(units);
   return sameWeight
-    ? `${sets[0].weightKg} ${kgLabel} × ${sets.map((s) => s.reps).join('/')}`
-    : sets.map((s) => `${s.weightKg}×${s.reps}`).join(', ');
+    ? `${formatWeightKg(sets[0].weightKg, units)} ${unitLabel} × ${sets.map((s) => s.reps).join('/')}`
+    : sets.map((s) => `${formatWeightKg(s.weightKg, units)}${unitLabel}×${s.reps}`).join(', ');
 }
 
 /** The core screen: free-text chat, single complete coach messages (GYM-28/61/67). */
@@ -42,6 +44,7 @@ export default function Chat() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
+  const { units } = useUnits();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentExerciseId, setCurrentExerciseId] = useState<string | null>(null);
@@ -121,10 +124,13 @@ export default function Chat() {
     message: string, weightKg: number | null, reps: number[] | null, targetWeights: number[] | null,
   ) {
     if (weightKg == null || !reps || reps.length === 0) return message;
+    const unitLabel = weightUnitLabel(units);
     const uniform = !targetWeights || targetWeights.every((w) => w === targetWeights[0]);
     const line = uniform
-      ? t('targetLine', { weight: weightKg, reps: reps.join('/') })
-      : t('targetLinePerSet', { sets: reps.map((r, i) => `${targetWeights![i]}${t('kgLabel')}×${r}`).join(', ') });
+      ? t('targetLine', { weight: `${formatWeightKg(weightKg, units)}${unitLabel}`, reps: reps.join('/') })
+      : t('targetLinePerSet', {
+          sets: reps.map((r, i) => `${formatWeightKg(targetWeights![i], units)}${unitLabel}×${r}`).join(', '),
+        });
     return `${message}\n\n${line}`;
   }
 
@@ -182,7 +188,7 @@ export default function Chat() {
   // the bar in place, tappable again.
   async function confirmSets(exerciseId: string, sets: Array<{ weightKg: number; reps: number }>) {
     if (!sessionId || busy) return;
-    push('me', formatConfirmedSets(sets, t('kgLabel')));
+    push('me', formatConfirmedSets(sets, units));
     setBusy(true);
     try {
       const res = await callFn<TurnResult>('coach-turn', { sessionId, exerciseId, confirmedSets: sets });

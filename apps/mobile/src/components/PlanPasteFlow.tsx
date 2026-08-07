@@ -81,6 +81,11 @@ export function PlanPasteFlow({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
+  // See DismissKeyboardView's `active` prop doc — the starting-weights
+  // step's ScrollView doesn't reliably scroll nested under this screen's
+  // TouchableWithoutFeedback, so that wrapper drops out once PlanPreview
+  // signals it's showing that step.
+  const [startingWeightsActive, setStartingWeightsActive] = useState(false);
   const [loadingExisting, setLoadingExisting] = useState(mode === 'edit');
   // Shows the "Choose a file" launcher screen instead of the paste
   // textbox for initialMode === 'upload'.
@@ -210,7 +215,7 @@ export function PlanPasteFlow({
   const stepLabel = mode === 'onboarding' ? t('planStep') : mode === 'edit' ? t('editPlanStep') : t('addPlanStep');
 
   return (
-    <DismissKeyboardView style={{ padding: spacing.lg }}>
+    <DismissKeyboardView style={{ padding: spacing.lg }} active={!startingWeightsActive}>
       <LoadingOverlay visible={busy && !picking} object="plate" label={t('parsing')} />
       {onCancel && !preview && (
         <Pressable onPress={onCancel} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
@@ -301,6 +306,7 @@ export function PlanPasteFlow({
           editPlanId={editPlanId}
           onDone={onDone}
           onTryAgain={handleTryAgain}
+          onEnterStartingWeights={() => setStartingWeightsActive(true)}
         />
       )}
     </DismissKeyboardView>

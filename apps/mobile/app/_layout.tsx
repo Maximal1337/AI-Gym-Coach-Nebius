@@ -4,6 +4,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Sentry from '@sentry/react-native';
 import { palette } from '@gymcoach/shared';
 import { LanguageProvider } from '../src/lib/language';
+import { UnitsProvider } from '../src/lib/units';
 import '../src/i18n';
 
 // GYM-14: crash/error reporting. An empty DSN leaves the SDK disabled
@@ -22,13 +23,15 @@ function RootLayout() {
   return (
     <SafeAreaProvider>
       <LanguageProvider>
-        <StatusBar style="light" />
-        <Stack
-          screenOptions={{
-            headerShown: false,
-            contentStyle: { backgroundColor: theme.bg },
-          }}
-        />
+        <UnitsProvider>
+          <StatusBar style="light" />
+          <Stack
+            screenOptions={{
+              headerShown: false,
+              contentStyle: { backgroundColor: theme.bg },
+            }}
+          />
+        </UnitsProvider>
       </LanguageProvider>
     </SafeAreaProvider>
   );

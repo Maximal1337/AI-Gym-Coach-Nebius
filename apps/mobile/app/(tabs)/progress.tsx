@@ -12,6 +12,7 @@ import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLanguage } from '../../src/lib/language';
+import { useUnits, formatWeightKg, weightUnitLabel } from '../../src/lib/units';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 const DATE_LOCALE: Record<string, string> = { he: 'he-IL', ar: 'ar', en: 'en-US' };
@@ -21,12 +22,14 @@ interface SessionRow {
   training_plans: { name: string } | null;
   set_logs: { id: string }[];
 }
-interface SessionDetailExercise { name: string; sets: string[] }
+interface SessionDetailExercise { name: string; sets: Array<{ weightKg: number; reps: number }> }
 interface RawSetLogDetail {
   exercise_id: string; set_no: number; weight_kg: number; reps: number;
   exercises: { name: string; order_index: number } | null;
 }
 
+// Kept as raw kg here — formatting into the user's chosen unit happens at
+// render time, where useUnits() is actually available (guidelines/units-setting.html).
 async function fetchSessionDetails(sessionId: string): Promise<SessionDetailExercise[]> {
   const { data } = await supabase
     .from('set_logs')
@@ -35,12 +38,12 @@ async function fetchSessionDetails(sessionId: string): Promise<SessionDetailExer
     .order('set_no', { ascending: true });
   const rows = (data ?? []) as unknown as RawSetLogDetail[];
 
-  const byExercise = new Map<string, { name: string; orderIndex: number; sets: string[] }>();
+  const byExercise = new Map<string, { name: string; orderIndex: number; sets: Array<{ weightKg: number; reps: number }> }>();
   for (const row of rows) {
     if (!row.exercises) continue;
     const entry = byExercise.get(row.exercise_id) ??
       { name: row.exercises.name, orderIndex: row.exercises.order_index, sets: [] };
-    entry.sets.push(`${Number(row.weight_kg)}×${row.reps}`);
+    entry.sets.push({ weightKg: Number(row.weight_kg), reps: row.reps });
     byExercise.set(row.exercise_id, entry);
   }
   return [...byExercise.values()]
@@ -116,7 +119,13 @@ function ExerciseProgress({ name, values }: { name: string; values: number[] }) 
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
-  const last = values[values.length - 1];
+  const { units } = useUnits();
+  // Stored (and passed in) as kg — converted here, at the one place this
+  // series is actually rendered, so the chart's plotted scale matches
+  // the label next to it (guidelines/units-setting.html).
+  const displayValues = values.map((v) => formatWeightKg(v, units));
+  const last = displayValues[displayValues.length - 1];
+  const unitLabel = weightUnitLabel(units);
   return (
     <View style={{
       flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', justifyContent: 'space-between',
@@ -125,10 +134,10 @@ function ExerciseProgress({ name, values }: { name: string; values: number[] }) 
       <View style={{ flex: 1 }}>
         <Text style={{ color: theme.ink, fontWeight: '700', fontSize: 13, textAlign: dir === 'rtl' ? 'right' : 'left' }}>{name}</Text>
         <Text style={{ color: theme.inkSoft, fontSize: 11, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-          {values.length === 0 ? t('noData') : values.length === 1 ? `${last} ${t('kgLabel')} · ${t('needOneMore')}` : `${last} ${t('kgLabel')}`}
+          {displayValues.length === 0 ? t('noData') : displayValues.length === 1 ? `${last} ${unitLabel} · ${t('needOneMore')}` : `${last} ${unitLabel}`}
         </Text>
       </View>
-      {values.length > 0 && <LineChart values={values} />}
+      {displayValues.length > 0 && <LineChart values={displayValues} />}
     </View>
   );
 }
@@ -137,6 +146,7 @@ export default function Progress() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir, language } = useLanguage();
+  const { units } = useUnits();
   const dateLocale = DATE_LOCALE[language] ?? 'en-US';
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [monthCount, setMonthCount] = useState(0);
@@ -360,7 +370,7 @@ export default function Progress() {
                               {e.name}
                             </Text>
                             <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-                              {e.sets.join(', ')} {t('kgLabel')}
+                              {e.sets.map((s) => `${formatWeightKg(s.weightKg, units)}×${s.reps}`).join(', ')} {weightUnitLabel(units)}
                             </Text>
                           </View>
                         ))
@@ -447,7 +457,7 @@ export default function Progress() {
                           </Text>
                           {logs.map((l, lIdx) => (
                             <Text key={lIdx} style={{ color: theme.inkSoft, fontSize: 12, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-                              {l.exerciseName}: {l.weightKg}×{l.reps}
+                              {l.exerciseName}: {formatWeightKg(l.weightKg, units)}{weightUnitLabel(units)}×{l.reps}
                             </Text>
                           ))}
                         </View>

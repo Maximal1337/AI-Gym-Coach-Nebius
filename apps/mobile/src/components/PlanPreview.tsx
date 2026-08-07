@@ -154,6 +154,7 @@ function EditExerciseSheet({
  */
 export function PlanPreview({
   preview, setPreview, mode, editPlanId, onDone, showTryAgain = true, onTryAgain, tryAgainLabel, extraNote,
+  onEnterStartingWeights,
 }: {
   preview: ParsedPlan[];
   setPreview: (updater: (prev: ParsedPlan[] | null) => ParsedPlan[] | null) => void;
@@ -167,6 +168,8 @@ export function PlanPreview({
   tryAgainLabel?: string;
   /** Rendered directly above the approve button (e.g. the AI-generated disclaimer, linter warnings). */
   extraNote?: ReactNode;
+  /** Fires once, right when the starting-weights step is about to show — lets a caller that wraps this component in DismissKeyboardView switch it to `active={false}` for that step (see DismissKeyboardView's own doc comment for why). */
+  onEnterStartingWeights?: () => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -237,6 +240,7 @@ export function PlanPreview({
         onDone();
       } else {
         setStartingWeightsPlans(res.plans);
+        onEnterStartingWeights?.();
       }
     } catch {
       Alert.alert(t('coachUnavailable'));

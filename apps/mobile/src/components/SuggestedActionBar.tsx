@@ -3,9 +3,10 @@ import { Pressable, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../lib/language';
+import { useUnits, formatWeightKg, parseWeightToKg, weightUnitLabel } from '../lib/units';
 import { useTheme, spacing, radius } from '../theme';
 
-interface SetRow { kg: string; reps: string }
+interface SetRow { weight: string; reps: string }
 
 /** No history yet (first time on this exercise): the weight is never
  * guessed, so it still shows as an "X" placeholder — reads as unset (not
@@ -15,14 +16,17 @@ interface SetRow { kg: string; reps: string }
  * pre-filled values, not placeholders, same as any other suggestion. */
 const PLACEHOLDER = 'X';
 
-function initialRows(targetWeights: number[] | null, targetReps: number[] | null, sets: number): SetRow[] {
+function initialRows(
+  targetWeights: number[] | null, targetReps: number[] | null, sets: number, units: 'metric' | 'imperial',
+): SetRow[] {
   const reps = targetReps && targetReps.length > 0 ? targetReps : Array.from({ length: sets }, () => null);
   return reps.map((r, i) => ({
     // Per-set weight, not one shared value — a set that carried its own
     // track (e.g. a fatigue drop kept at a lower weight, see
     // progression.ts) genuinely differs from the others, and each row's
-    // kg Stepper is already independently editable.
-    kg: targetWeights?.[i] != null ? String(targetWeights[i]) : PLACEHOLDER,
+    // kg Stepper is already independently editable. Displayed/edited in
+    // the user's current unit; the target itself is always in kg.
+    weight: targetWeights?.[i] != null ? String(formatWeightKg(targetWeights[i], units)) : PLACEHOLDER,
     reps: r != null ? String(r) : PLACEHOLDER,
   }));
 }
@@ -82,13 +86,16 @@ function Stepper({
  * callbacks out — no Supabase/session knowledge here.
  *
  * The numbers are deterministic on the server (only the reply text goes
- * through the LLM). Fields are pre-filled with the suggested numbers as
- * real, editable values (not placeholders) so "send exactly this" needs
- * zero taps, while +/- steppers make a quick nudge (a plate short, one
- * more rep) faster than retyping the whole number. The first time on an
- * exercise there's nothing to suggest yet (no history) — the bar still
- * shows, with `sets` rows of "X" placeholders, so a brand-new user sees
- * the same comfortable UI from set one instead of a blank gap.
+ * through the LLM), always in kg — this is the one place that reads and
+ * writes them in whatever unit the user has chosen (guidelines/
+ * units-setting.html), converting at the boundary rather than assuming
+ * kg. Fields are pre-filled with the suggested numbers as real, editable
+ * values (not placeholders) so "send exactly this" needs zero taps,
+ * while +/- steppers make a quick nudge (a plate short, one more rep)
+ * faster than retyping the whole number. The first time on an exercise
+ * there's nothing to suggest yet (no history) — the bar still shows,
+ * with `sets` rows of "X" placeholders, so a brand-new user sees the
+ * same comfortable UI from set one instead of a blank gap.
  */
 export function SuggestedActionBar({
   exerciseName,
@@ -108,22 +115,28 @@ export function SuggestedActionBar({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
-  const [rows, setRows] = useState<SetRow[]>(() => initialRows(targetWeights, targetReps, sets));
+  const { units } = useUnits();
+  const [rows, setRows] = useState<SetRow[]>(() => initialRows(targetWeights, targetReps, sets, units));
 
   // A new suggestion (different exercise, or a renegotiated target) should
   // reset any in-progress edits rather than keep showing stale numbers.
   useEffect(() => {
-    setRows(initialRows(targetWeights, targetReps, sets));
-  }, [targetWeights ? targetWeights.join(',') : '', targetReps ? targetReps.join(',') : '', sets]);
+    setRows(initialRows(targetWeights, targetReps, sets, units));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetWeights ? targetWeights.join(',') : '', targetReps ? targetReps.join(',') : '', sets, units]);
 
   function updateRow(i: number, patch: Partial<SetRow>) {
     setRows((r) => r.map((row, j) => (j === i ? { ...row, ...patch } : row)));
   }
 
-  const parsedSets = rows.map((r) => ({ weightKg: parseFloat(r.kg), reps: parseInt(r.reps, 10) }));
+  const parsedSets = rows.map((r) => ({ weightKg: parseWeightToKg(r.weight, units), reps: parseInt(r.reps, 10) }));
   const allValid = parsedSets.every(
-    (s) => Number.isFinite(s.weightKg) && s.weightKg >= 0 && Number.isInteger(s.reps) && s.reps >= 0,
+    (s): s is { weightKg: number; reps: number } =>
+      s.weightKg !== null && s.weightKg >= 0 && Number.isInteger(s.reps) && s.reps >= 0,
   );
+  // A half-kg nudge is finer than any real plate; imperial steps a
+  // rounder 2.5lb instead of the equivalent (and un-round) ~1.1kg.
+  const weightStep = units === 'metric' ? 1 : 2.5;
 
   return (
     <View style={{
@@ -143,7 +156,7 @@ export function SuggestedActionBar({
       <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
         <Text style={{ width: 14 }} />
         <Text style={{ flex: 1, color: theme.inkSoft, fontSize: 11, lineHeight: 13, textAlign: 'center' }}>
-          {t('kgLabel')}
+          {weightUnitLabel(units)}
         </Text>
         <Text style={{ flex: 1, color: theme.inkSoft, fontSize: 11, lineHeight: 13, textAlign: 'center' }}>
           {t('repsLabel')}
@@ -157,9 +170,9 @@ export function SuggestedActionBar({
             <View key={i} style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
               <Text style={{ color: theme.inkSoft, fontSize: 12, width: 14, textAlign: 'center' }}>{i + 1}.</Text>
               <Stepper
-                value={row.kg}
-                onChange={(v) => updateRow(i, { kg: v })}
-                step={1}
+                value={row.weight}
+                onChange={(v) => updateRow(i, { weight: v })}
+                step={weightStep}
                 disabled={disabled}
               />
               <Stepper
@@ -174,7 +187,7 @@ export function SuggestedActionBar({
 
         <Pressable
           disabled={disabled || !allValid}
-          onPress={() => onSubmitSets(parsedSets)}
+          onPress={() => allValid && onSubmitSets(parsedSets)}
           style={{
             width: 48,
             backgroundColor: allValid ? theme.accent : theme.rule,

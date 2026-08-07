@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../lib/api';
 import { useLanguage } from '../lib/language';
+import { useUnits, parseWeightToKg, weightUnitLabel } from '../lib/units';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -115,6 +116,7 @@ export function StartingWeightsStep({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
+  const { units } = useUnits();
   const exercises = plans.flatMap((p) => p.exercises);
   const [rows, setRows] = useState<Record<string, Row>>(() =>
     Object.fromEntries(exercises.map((e) => [e.id, { weight: '', reps: '' }])));
@@ -130,10 +132,10 @@ export function StartingWeightsStep({
     const entries = exercises
       .map((e) => {
         const row = rows[e.id];
-        const weightKg = parseFloat(row.weight);
+        const weightKg = parseWeightToKg(row.weight, units);
         const repsRaw = row.reps.trim() || lowEnd(e.repRange);
         const reps = parseInt(repsRaw, 10);
-        if (!Number.isFinite(weightKg) || weightKg < 0 || !Number.isInteger(reps) || reps < 1) return null;
+        if (weightKg === null || weightKg < 0 || !Number.isInteger(reps) || reps < 1) return null;
         return { exerciseId: e.id, weightKg, reps };
       })
       .filter((e): e is { exerciseId: string; weightKg: number; reps: number } => e !== null);
@@ -181,7 +183,7 @@ export function StartingWeightsStep({
             key={e.id}
             exercise={e}
             row={rows[e.id]}
-            unit={t('kgLabel')}
+            unit={weightUnitLabel(units)}
             onChange={(patch) => updateRow(e.id, patch)}
           />
         ))}
@@ -194,7 +196,7 @@ export function StartingWeightsStep({
 
       <View style={{ paddingTop: spacing.sm, gap: spacing.sm }}>
         <Button block disabled={busy} onPress={submit}>
-          {filledCount === 0 ? t('startingWithout') : t('startingContinue')}
+          {t('startingContinue')}
         </Button>
         <Button variant="quiet" block disabled={busy} onPress={onDone}>
           {t('startingSkip')}

@@ -7,7 +7,10 @@ import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
 import { SketchLoader } from './SketchLoader';
+import { Field } from './Field';
+import { UnitsToggle } from './UnitsToggle';
 import { useLanguage } from '../lib/language';
+import { useUnits, parseWeightToKg, parseHeightToCm, weightUnitLabel } from '../lib/units';
 import { useTheme, spacing, radius } from '../theme';
 
 type PrimaryGoal = 'strength' | 'hypertrophy' | 'general_fitness' | 'fat_loss';
@@ -52,6 +55,7 @@ export function GeneratePlanFlow({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir, language } = useLanguage();
+  const { units, setUnits } = useUnits();
 
   const [step, setStep] = useState<Step>('goal');
   const [primaryGoal, setPrimaryGoal] = useState<PrimaryGoal | null>(null);
@@ -59,11 +63,19 @@ export function GeneratePlanFlow({
   const [daysPerWeek, setDaysPerWeek] = useState<number | null>(null);
   const [gender, setGender] = useState<Gender | null>(null);
   const [age, setAge] = useState('');
-  const [weightKg, setWeightKg] = useState('');
-  const [heightCm, setHeightCm] = useState('');
+  // Typed in whatever the units toggle on this step is currently set to,
+  // converted to kg/cm only at save time — never assumed to already be
+  // metric.
+  const [weightInput, setWeightInput] = useState('');
+  const [heightInput, setHeightInput] = useState('');
   const [injuryNotes, setInjuryNotes] = useState('');
 
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
+  // See DismissKeyboardView's `active` prop doc — the starting-weights
+  // step's ScrollView doesn't reliably scroll nested under this screen's
+  // TouchableWithoutFeedback, so that wrapper drops out once PlanPreview
+  // signals it's showing that step.
+  const [startingWeightsActive, setStartingWeightsActive] = useState(false);
   const [linterChecks, setLinterChecks] = useState<LinterCheck[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [lineIdx, setLineIdx] = useState(0);
@@ -89,8 +101,8 @@ export function GeneratePlanFlow({
         days_per_week: daysPerWeek,
         gender,
         age: age.trim() ? parseInt(age, 10) : null,
-        weight_kg: weightKg.trim() ? parseFloat(weightKg) : null,
-        height_cm: heightCm.trim() ? parseFloat(heightCm) : null,
+        weight_kg: weightInput.trim() ? parseWeightToKg(weightInput, units) : null,
+        height_cm: heightInput.trim() ? parseHeightToCm(heightInput, units) : null,
       });
     }
     setStep('injuries');
@@ -105,8 +117,8 @@ export function GeneratePlanFlow({
         daysPerWeek,
         gender,
         age: age.trim() ? parseInt(age, 10) : null,
-        weightKg: weightKg.trim() ? parseFloat(weightKg) : null,
-        heightCm: heightCm.trim() ? parseFloat(heightCm) : null,
+        weightKg: weightInput.trim() ? parseWeightToKg(weightInput, units) : null,
+        heightCm: heightInput.trim() ? parseHeightToCm(heightInput, units) : null,
         injuryNotes: injuryNotes.trim() ? injuryNotes.trim() : null,
         language,
       });
@@ -257,6 +269,16 @@ export function GeneratePlanFlow({
         </Text>
         <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>{t('aboutSub')}</Text>
 
+        {/* The first screen in the whole product with a weight/height
+            field on it — labelling fields already here, not adding a
+            question (guidelines/units-setting.html). */}
+        <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
+          {t('unitsLabel')}
+        </Text>
+        <View style={{ marginBottom: spacing.md }}>
+          <UnitsToggle units={units} onChange={setUnits} block />
+        </View>
+
         <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
           {t('genderLabel')}
         </Text>
@@ -276,28 +298,32 @@ export function GeneratePlanFlow({
           ))}
         </View>
 
-        {[
-          { label: t('ageLabel'), placeholder: t('agePlaceholder'), value: age, onChange: setAge },
-          { label: t('weightLabel'), placeholder: t('weightPlaceholder'), value: weightKg, onChange: setWeightKg },
-          { label: t('heightLabel'), placeholder: t('heightPlaceholder'), value: heightCm, onChange: setHeightCm },
-        ].map((f) => (
-          <View key={f.label} style={{ marginBottom: spacing.sm }}>
-            <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
-              {f.label}
-            </Text>
-            <TextInput
-              value={f.value}
-              onChangeText={f.onChange}
-              placeholder={f.placeholder}
-              placeholderTextColor={theme.inkSoft}
-              keyboardType="number-pad"
-              style={{
-                backgroundColor: theme.surface, borderRadius: radius.field, padding: 12,
-                color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left',
-              }}
-            />
-          </View>
-        ))}
+        <Field
+          label={t('ageLabel')}
+          placeholder={t('agePlaceholder')}
+          value={age}
+          onChangeText={setAge}
+          keyboardType="number-pad"
+          style={{ marginBottom: spacing.sm }}
+        />
+        <Field
+          label={t('weightLabel')}
+          placeholder={units === 'metric' ? t('weightPlaceholder') : t('weightPlaceholderImperial')}
+          value={weightInput}
+          onChangeText={setWeightInput}
+          keyboardType="decimal-pad"
+          unit={weightUnitLabel(units)}
+          style={{ marginBottom: spacing.sm }}
+        />
+        <Field
+          label={t('heightLabel')}
+          placeholder={units === 'metric' ? t('heightPlaceholder') : t('heightPlaceholderImperial')}
+          value={heightInput}
+          onChangeText={setHeightInput}
+          keyboardType="decimal-pad"
+          unit={units === 'metric' ? t('cmLabel') : t('inLabel')}
+          style={{ marginBottom: spacing.sm }}
+        />
 
         <Pressable
           onPress={saveAboutYouAndContinue}
@@ -388,7 +414,7 @@ export function GeneratePlanFlow({
   if (!preview) return null;
   const uncovered = linterChecks.filter((c) => !c.covered);
   return (
-    <DismissKeyboardView style={{ padding: spacing.lg }}>
+    <DismissKeyboardView style={{ padding: spacing.lg }} active={!startingWeightsActive}>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 4 }}>
         {t('generatedTitle')}
       </Text>
@@ -401,6 +427,7 @@ export function GeneratePlanFlow({
         mode={mode === 'onboarding' ? 'onboarding' : 'add'}
         onDone={onDone}
         showTryAgain={false}
+        onEnterStartingWeights={() => setStartingWeightsActive(true)}
         extraNote={
           <View style={{ marginBottom: spacing.sm }}>
             {uncovered.map((c) => (

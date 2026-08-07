@@ -1,8 +1,12 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { useLanguage } from '../lib/language';
+import {
+  useUnits, formatWeightKg, formatHeightForEntry, parseWeightToKg, parseHeightToCm, weightUnitLabel,
+} from '../lib/units';
+import { Field } from './Field';
 import { useTheme, spacing, radius } from '../theme';
 
 type Gender = 'male' | 'female' | 'other';
@@ -29,10 +33,17 @@ export function FitnessProfileForm({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
+  const { units } = useUnits();
   const [gender, setGender] = useState<Gender | null>(initial.gender);
   const [age, setAge] = useState(initial.age);
-  const [weightKg, setWeightKg] = useState(initial.weightKg);
-  const [heightCm, setHeightCm] = useState(initial.heightCm);
+  // Stored values arrive in kg/cm; the editable field shows/accepts
+  // whatever the user's current unit is, converted on the way in and out.
+  const [weightInput, setWeightInput] = useState(
+    () => (initial.weightKg.trim() ? String(formatWeightKg(parseFloat(initial.weightKg), units)) : ''),
+  );
+  const [heightInput, setHeightInput] = useState(
+    () => (initial.heightCm.trim() ? formatHeightForEntry(parseFloat(initial.heightCm), units) : ''),
+  );
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -43,8 +54,8 @@ export function FitnessProfileForm({
     const { error } = await supabase.from('fitness_profiles').update({
       gender,
       age: age.trim() ? parseInt(age, 10) : null,
-      weight_kg: weightKg.trim() ? parseFloat(weightKg) : null,
-      height_cm: heightCm.trim() ? parseFloat(heightCm) : null,
+      weight_kg: weightInput.trim() ? parseWeightToKg(weightInput, units) : null,
+      height_cm: heightInput.trim() ? parseHeightToCm(heightInput, units) : null,
       updated_at: new Date().toISOString(),
     }).eq('user_id', userId);
     setBusy(false);
@@ -82,28 +93,32 @@ export function FitnessProfileForm({
         ))}
       </View>
 
-      {[
-        { label: t('ageLabel'), placeholder: t('agePlaceholder'), value: age, onChange: setAge },
-        { label: t('weightLabel'), placeholder: t('weightPlaceholder'), value: weightKg, onChange: setWeightKg },
-        { label: t('heightLabel'), placeholder: t('heightPlaceholder'), value: heightCm, onChange: setHeightCm },
-      ].map((f) => (
-        <View key={f.label} style={{ marginBottom: spacing.sm }}>
-          <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
-            {f.label}
-          </Text>
-          <TextInput
-            value={f.value}
-            onChangeText={f.onChange}
-            placeholder={f.placeholder}
-            placeholderTextColor={theme.inkSoft}
-            keyboardType="number-pad"
-            style={{
-              backgroundColor: theme.surface, borderRadius: radius.field, padding: 12,
-              color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left',
-            }}
-          />
-        </View>
-      ))}
+      <Field
+        label={t('ageLabel')}
+        placeholder={t('agePlaceholder')}
+        value={age}
+        onChangeText={setAge}
+        keyboardType="number-pad"
+        style={{ marginBottom: spacing.sm }}
+      />
+      <Field
+        label={t('weightLabel')}
+        placeholder={units === 'metric' ? t('weightPlaceholder') : t('weightPlaceholderImperial')}
+        value={weightInput}
+        onChangeText={setWeightInput}
+        keyboardType="decimal-pad"
+        unit={weightUnitLabel(units)}
+        style={{ marginBottom: spacing.sm }}
+      />
+      <Field
+        label={t('heightLabel')}
+        placeholder={units === 'metric' ? t('heightPlaceholder') : t('heightPlaceholderImperial')}
+        value={heightInput}
+        onChangeText={setHeightInput}
+        keyboardType="decimal-pad"
+        unit={units === 'metric' ? t('cmLabel') : t('inLabel')}
+        style={{ marginBottom: spacing.sm }}
+      />
 
       <Pressable
         disabled={busy}
