@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "package": "com.dorbob.gymcoach",
       "adaptiveIcon": {
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/android-icon-foreground.png",

@@ -1,7 +1,6 @@
 import { useRef } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useTheme, radius } from '../theme';
-import { useLanguage } from '../lib/language';
 
 const LENGTH = 6;
 
@@ -12,6 +11,12 @@ const LENGTH = 6;
  * drives real keyboard/paste/autofill behavior; the six boxes are a pure
  * visual reflection of its value, with the next-to-fill box getting the
  * accent ring the design specifies.
+ *
+ * Digit order is always left-to-right, even in RTL locales — like phone
+ * numbers or card numbers, a numeral sequence reads by digit-significance
+ * (first box = first digit typed), not by the surrounding language's
+ * reading direction, so `row-reverse` here would put the boxes in the
+ * wrong order relative to what's typed.
  */
 export function CodeInput({
   value, onChangeText, disabled, autoFocus,
@@ -22,14 +27,13 @@ export function CodeInput({
   autoFocus?: boolean;
 }) {
   const theme = useTheme();
-  const { dir } = useLanguage();
   const inputRef = useRef<TextInput>(null);
   const digits = value.split('');
   const activeIndex = Math.min(value.length, LENGTH - 1);
 
   return (
     <Pressable onPress={() => inputRef.current?.focus()}>
-      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8, marginBottom: 16 }}>
+      <View style={{ flexDirection: 'row', gap: 8, marginBottom: 16 }}>
         {Array.from({ length: LENGTH }, (_, i) => (
           <View
             key={i}
