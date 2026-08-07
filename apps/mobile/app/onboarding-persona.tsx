@@ -69,7 +69,7 @@ export default function OnboardingPersona() {
       />
       {/* Bottom, matching onboarding-plan's own "Skip for now" placement,
           not a corner text link next to Cancel. */}
-      <View style={{ padding: spacing.md, paddingBottom: spacing.lg }}>
+      <View style={{ padding: spacing.md, paddingBottom: spacing.xl }}>
         <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
       </View>
     </Screen>

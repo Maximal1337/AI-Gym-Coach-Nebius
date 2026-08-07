@@ -145,7 +145,7 @@ export default function OnboardingPlan() {
           </Text>
         </ScrollView>
 
-        <View style={{ padding: spacing.md, paddingBottom: spacing.lg }}>
+        <View style={{ padding: spacing.md, paddingBottom: spacing.xl }}>
           <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
         </View>
       </View>
