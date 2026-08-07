@@ -74,13 +74,14 @@ function parseModel(): ChatOpenRouter | null {
 }
 
 const PLAN_PARSE_SYSTEM_PROMPT =
-  "You convert workout plans (any language, as pasted text or an uploaded PDF) into JSON. Reply with ONLY valid JSON matching: {\"plans\":[{\"name\":string,\"exercises\":[{\"orderIndex\":number,\"name\":string,\"sets\":number,\"repRange\":string,\"restSec\":number,\"intensity\":string,\"warmup\":string|null,\"equipmentType\":\"barbell\"|\"dumbbell\"|\"machine\"|\"cable\"|\"bodyweight\"|\"other\"|null}]}]}. Each distinct workout (e.g. 'Workout A', 'Workout B') is one plan entry. \"name\" must be descriptive, not just the bare label: if the source already states which muscle groups/body parts that workout targets, use that; otherwise infer the muscle groups from the exercises included in that workout and append them, formatted as \"<label> - <muscle group 1>/<muscle group 2>/...\" ordered by how much of the workout targets each group (e.g. \"Workout A - Chest/Legs/Triceps\"), in the same language as the source. Keep exercise names in the original language. restSec in seconds. If sets count is a range, use the higher number. \"repRange\" MUST be copied from what the source actually says for that exercise (e.g. \"8-12\", \"10\", \"12-15\", \"AMRAP\") — never default to a generic range like \"6-10\" or reuse another exercise's range; if the source genuinely states no rep count anywhere for that exercise, use your best guess from the stated intensity/goal instead of a placeholder. \"warmup\" should capture any warm-up guidance tied to that exercise (e.g. lighter warm-up sets before the work sets, or a general warm-up routine like light cardio/stretching mentioned at the start of the workout — attach a session-level warm-up like that to the FIRST exercise's warmup field); use null only when the source gives no warm-up guidance at all for that exercise. Infer equipmentType from the exercise name (e.g. \"Barbell Squat\"->barbell, \"Dumbbell Curl\"->dumbbell, \"Leg Press machine\"->machine, \"Cable Row\"->cable, \"Push-up\"->bodyweight) — this determines what weight increment the exercise can realistically jump by, so a plain unqualified free-weight exercise name that's ambiguous between barbell and dumbbell should still use your best guess from common gym conventions, not null; use null only when you genuinely cannot infer any equipment (e.g. \"stretch\", \"plank\").";
+  "You convert workout plans (any language, as pasted text, an uploaded PDF, or one or more photos of a printed page) into JSON. Reply with ONLY valid JSON matching: {\"plans\":[{\"name\":string,\"exercises\":[{\"orderIndex\":number,\"name\":string,\"sets\":number,\"repRange\":string,\"restSec\":number,\"intensity\":string,\"warmup\":string|null,\"equipmentType\":\"barbell\"|\"dumbbell\"|\"machine\"|\"cable\"|\"bodyweight\"|\"other\"|null}]}]}. Each distinct workout (e.g. 'Workout A', 'Workout B') is one plan entry. \"name\" must be descriptive, not just the bare label: if the source already states which muscle groups/body parts that workout targets, use that; otherwise infer the muscle groups from the exercises included in that workout and append them, formatted as \"<label> - <muscle group 1>/<muscle group 2>/...\" ordered by how much of the workout targets each group (e.g. \"Workout A - Chest/Legs/Triceps\"), in the same language as the source. Keep exercise names in the original language. restSec in seconds. If sets count is a range, use the higher number. \"repRange\" MUST be copied from what the source actually says for that exercise (e.g. \"8-12\", \"10\", \"12-15\", \"AMRAP\") — never default to a generic range like \"6-10\" or reuse another exercise's range; if the source genuinely states no rep count anywhere for that exercise, use your best guess from the stated intensity/goal instead of a placeholder. \"warmup\" should capture any warm-up guidance tied to that exercise (e.g. lighter warm-up sets before the work sets, or a general warm-up routine like light cardio/stretching mentioned at the start of the workout — attach a session-level warm-up like that to the FIRST exercise's warmup field); use null only when the source gives no warm-up guidance at all for that exercise. Infer equipmentType from the exercise name (e.g. \"Barbell Squat\"->barbell, \"Dumbbell Curl\"->dumbbell, \"Leg Press machine\"->machine, \"Cable Row\"->cable, \"Push-up\"->bodyweight) — this determines what weight increment the exercise can realistically jump by, so a plain unqualified free-weight exercise name that's ambiguous between barbell and dumbbell should still use your best guess from common gym conventions, not null; use null only when you genuinely cannot infer any equipment (e.g. \"stretch\", \"plank\").";
 
-/** A pasted plan, or an uploaded file (base64, no data: prefix) — same parse, different input shape. */
+/** A pasted plan, an uploaded file, or one or more photographed pages (base64, no data: prefix) — same parse, different input shape. */
 export type PlanSource =
   | { text: string }
   | { pdfBase64: string; filename: string }
-  | { docxBase64: string; filename: string };
+  | { docxBase64: string; filename: string }
+  | { imagesBase64: string[] };
 
 /** Plain-text .docx extraction — mammoth reads the real paragraph/table text, not markup. */
 export async function textFromDocx(docxBase64: string): Promise<string> {
@@ -140,6 +141,50 @@ async function parsePlanPdf(pdfBase64: string, filename: string): Promise<string
   return body?.choices?.[0]?.message?.content ?? null;
 }
 
+/**
+ * Photographed pages (guidelines/photograph-plan.html) — same raw-fetch
+ * approach as parsePlanPdf, for the same reason: ChatOpenRouter's own
+ * content-block conversion is the proven-unreliable layer here, not the
+ * request itself. One call across all pages, not one per page, so
+ * exercises split across a page break still land in one plan.
+ */
+async function parsePlanImages(imagesBase64: string[]): Promise<string | null> {
+  if (!process.env.OPENROUTER_API_KEY) return null;
+  const instruction = imagesBase64.length > 1
+    ? `Extract the workout plan from these ${imagesBase64.length} photographed pages of a printed sheet — they're pages of the same plan (in page order), so combine them into one coherent plan rather than treating each page separately.`
+    : "Extract the workout plan from this photo of a printed page.";
+  const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      "Content-Type": "application/json",
+      "HTTP-Referer": "https://docs.langchain.com/oss",
+      "X-Title": "Notch",
+    },
+    body: JSON.stringify({
+      model: llmConfig.model,
+      temperature: 0,
+      max_tokens: 4096,
+      messages: [
+        { role: "system", content: PLAN_PARSE_SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: instruction },
+            ...imagesBase64.map((b64) => ({
+              type: "image_url",
+              image_url: { url: `data:image/jpeg;base64,${b64}` },
+            })),
+          ],
+        },
+      ],
+    }),
+  });
+  if (!res.ok) return null;
+  const body = await res.json();
+  return body?.choices?.[0]?.message?.content ?? null;
+}
+
 export async function parsePlanText(source: PlanSource): Promise<ParsedPlan | null> {
   if (!process.env.OPENROUTER_API_KEY) return null;
 
@@ -148,6 +193,8 @@ export async function parsePlanText(source: PlanSource): Promise<ParsedPlan | nu
     raw = await parsePlanFromText(source.text);
   } else if ("pdfBase64" in source) {
     raw = await parsePlanPdf(source.pdfBase64, source.filename);
+  } else if ("imagesBase64" in source) {
+    raw = await parsePlanImages(source.imagesBase64);
   } else {
     const extracted = await textFromDocx(source.docxBase64);
     if (!extracted.trim()) return null;

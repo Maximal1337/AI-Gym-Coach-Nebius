@@ -152,7 +152,7 @@ function EditExerciseSheet({
  * cleanly, per the design's own guidance.
  */
 export function PlanPreview({
-  preview, setPreview, mode, editPlanId, onDone, showTryAgain = true, onTryAgain, extraNote,
+  preview, setPreview, mode, editPlanId, onDone, showTryAgain = true, onTryAgain, tryAgainLabel, extraNote,
 }: {
   preview: ParsedPlan[];
   setPreview: (updater: (prev: ParsedPlan[] | null) => ParsedPlan[] | null) => void;
@@ -162,6 +162,8 @@ export function PlanPreview({
   showTryAgain?: boolean;
   /** Overrides what "Try again" does beyond clearing the preview — e.g. PlanPasteFlow uses this to re-open the file picker when the preview came from an upload, instead of always dropping back to the paste textbox. Defaults to just clearing the preview. */
   onTryAgain?: () => void;
+  /** Overrides the "Try again" button's own label — e.g. PhotographPlanFlow's "Retake the photos", more specific than the generic default. */
+  tryAgainLabel?: string;
   /** Rendered directly above the approve button (e.g. the AI-generated disclaimer, linter warnings). */
   extraNote?: ReactNode;
 }) {
@@ -320,7 +322,7 @@ export function PlanPreview({
           variant="quiet" block disabled={busy}
           onPress={() => (onTryAgain ? onTryAgain() : setPreview(() => null))}
         >
-          {t('tryAgain')}
+          {tryAgainLabel ?? t('tryAgain')}
         </Button>
       )}
 

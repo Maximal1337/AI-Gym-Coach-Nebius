@@ -33,7 +33,19 @@
       "expo-apple-authentication",
       "expo-notifications",
       "expo-localization",
-      "@sentry/react-native/expo"
+      "@sentry/react-native/expo",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Notch needs camera access to photograph a printed workout plan."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Notch needs photo access to pick a photo of your workout plan."
+        }
+      ]
     ],
     "extra": {
       "router": {},

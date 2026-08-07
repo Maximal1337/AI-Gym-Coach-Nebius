@@ -33,6 +33,7 @@ Deno.serve(withSentry(async (req) => {
     text?: string;
     pdfBase64?: string;
     docxBase64?: string;
+    imagesBase64?: string[];
     filename?: string;
     plans?: unknown;
     mode?: string;
@@ -47,10 +48,26 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "parse") {
-    // Pasted text, or an uploaded PDF/docx (client caps the raw file at
-    // 8MB before ever uploading it; base64 inflates that by ~33%).
-    let agentPayload: { text: string } | { pdfBase64: string; filename: string } | { docxBase64: string; filename: string };
-    if (typeof body.pdfBase64 === "string" || typeof body.docxBase64 === "string") {
+    // Pasted text, an uploaded PDF/docx (client caps the raw file at 8MB
+    // before ever uploading it; base64 inflates that by ~33%), or one or
+    // more photographed pages (guidelines/photograph-plan.html — client
+    // caps each photo at ~1.5MB raw, up to 3 pages, kept small since this
+    // function's own request-size ceiling is tighter than the agent's).
+    let agentPayload:
+      | { text: string }
+      | { pdfBase64: string; filename: string }
+      | { docxBase64: string; filename: string }
+      | { imagesBase64: string[] };
+    if (Array.isArray(body.imagesBase64)) {
+      const images = body.imagesBase64;
+      if (
+        images.length < 1 || images.length > 3 ||
+        images.some((img) => typeof img !== "string" || img.length < 100 || img.length > 2 * 1024 * 1024)
+      ) {
+        return json(400, { error: "invalid_input" });
+      }
+      agentPayload = { imagesBase64: images };
+    } else if (typeof body.pdfBase64 === "string" || typeof body.docxBase64 === "string") {
       const fileBase64 = body.pdfBase64 ?? body.docxBase64!;
       if (
         fileBase64.length < 100 || fileBase64.length > 16 * 1024 * 1024 ||

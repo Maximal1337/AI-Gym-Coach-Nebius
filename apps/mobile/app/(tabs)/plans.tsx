@@ -185,6 +185,12 @@ export default function ManagePlans() {
             onPress={() => openAddRoute(() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } }))}
           />
           <ChoiceCard
+            icon="camera-outline"
+            label={t('choosePhoto')}
+            description={t('choosePhotoDesc')}
+            onPress={() => openAddRoute(() => router.push({ pathname: '/plan-photo', params: { mode: 'add' } }))}
+          />
+          <ChoiceCard
             icon="clipboard-outline"
             label={t('choosePaste')}
             onPress={() => openAddRoute(() => router.push({ pathname: '/plan-edit', params: { mode: 'add' } }))}

@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { PlanPasteFlow } from '../src/components/PlanPasteFlow';
 import { GeneratePlanFlow } from '../src/components/GeneratePlanFlow';
+import { PhotographPlanFlow } from '../src/components/PhotographPlanFlow';
 import { Screen } from '../src/components/Screen';
 import { ChoiceCard } from '../src/components/ChoiceCard';
 import { Badge } from '../src/components/Badge';
@@ -12,7 +13,7 @@ import { supabase } from '../src/lib/supabase';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing } from '../src/theme';
 
-type Choice = 'generate' | 'paste' | 'upload' | null;
+type Choice = 'generate' | 'photo' | 'paste' | 'upload' | null;
 
 /**
  * First-run entry point (System Design §21): a brand-new user has nothing
@@ -30,6 +31,14 @@ export default function OnboardingPlan() {
       <Screen>
         <GeneratePlanFlow mode="onboarding" onCancel={() => setChoice(null)} onDone={() => router.replace('/')} />
       </Screen>
+    );
+  }
+
+  if (choice === 'photo') {
+    // No <Screen> wrapper — PhotographPlanFlow wraps its own non-camera
+    // steps individually, so the camera step itself can go full-bleed.
+    return (
+      <PhotographPlanFlow mode="onboarding" onCancel={() => setChoice(null)} onDone={() => router.replace('/')} />
     );
   }
 
@@ -95,6 +104,12 @@ export default function OnboardingPlan() {
             description={t('goalSub')}
             badge={<Badge>AI</Badge>}
             onPress={() => setChoice('generate')}
+          />
+          <ChoiceCard
+            icon="camera-outline"
+            label={t('choosePhoto')}
+            description={t('choosePhotoDesc')}
+            onPress={() => setChoice('photo')}
           />
           <ChoiceCard
             icon="clipboard-outline"

@@ -57,6 +57,10 @@ const MAX_BODY_BYTES = 64 * 1024;
 // A base64-encoded PDF is ~33% bigger than the file itself; this covers a
 // generously-sized real workout-plan PDF (the client also caps the raw
 // file at 8MB before ever uploading it) with headroom for JSON overhead.
+// Also covers a photographed plan (guidelines/photograph-plan.html) — up
+// to 3 compressed page photos, kept well under this same cap deliberately
+// (Supabase Edge Functions have their own, tighter request-size ceiling
+// upstream of this service, and this machine's own memory budget is 256MB).
 const MAX_PDF_BODY_BYTES = 12 * 1024 * 1024;
 
 type Json = (status: number, body: unknown) => void;

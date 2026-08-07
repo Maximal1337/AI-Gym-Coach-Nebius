@@ -203,7 +203,9 @@ export const correctPreviousExerciseSetArgsSchema = z.object({
 });
 
 // A pasted plan is plain text (small); an uploaded PDF/docx is base64
-// (much bigger) — same endpoint, any of the three shapes.
+// (much bigger); a photographed plan is one or more page photos (photos
+// of a printed sheet/whiteboard, GYM: guidelines/photograph-plan.html) —
+// same endpoint, any of the four shapes.
 export const parsePlanInputSchema = z.union([
   z.object({ text: z.string().min(10).max(20000) }),
   z.object({
@@ -213,5 +215,8 @@ export const parsePlanInputSchema = z.union([
   z.object({
     docxBase64: z.string().min(100).max(16 * 1024 * 1024),
     filename: z.string().min(1).max(200),
+  }),
+  z.object({
+    imagesBase64: z.array(z.string().min(100).max(2 * 1024 * 1024)).min(1).max(3),
   }),
 ]);
