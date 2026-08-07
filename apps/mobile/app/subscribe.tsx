@@ -3,9 +3,9 @@ import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { useLanguage, type Direction } from '../src/lib/language';
+import { fetchUsageSnapshot } from '../src/lib/usage';
 import { useTheme, spacing, radius } from '../src/theme';
 
 /**
@@ -21,12 +21,6 @@ const ANNUAL_PRICE = '$59.99';
 const ANNUAL_MONTHLY_EQUIVALENT = '$5.00';
 const ANNUAL_SAVINGS_PCT = 50;
 
-// Same env-driven ceiling Settings already reads (System Design §10) —
-// the free tier is this budget system with a smaller cap, not a second
-// mechanism, so this screen reads the identical usage_ledger row.
-const BUDGET_CENTS = Number(process.env.EXPO_PUBLIC_MONTHLY_BUDGET_CENTS ?? '8');
-const APPROX_CENTS_PER_WORKOUT = 0.6;
-
 type PlanId = 'monthly' | 'annual';
 type Theme = ReturnType<typeof useTheme>;
 
@@ -35,25 +29,17 @@ export default function Subscribe() {
   const { t } = useTranslation();
   const { dir } = useLanguage();
   const [plan, setPlan] = useState<PlanId>('annual');
-  const [spentCents, setSpentCents] = useState(0);
+  const [remaining, setRemaining] = useState(0);
+  const [total, setTotal] = useState(0);
 
   useFocusEffect(
     useCallback(() => {
-      (async () => {
-        const period = new Date().toISOString().slice(0, 7);
-        const { data } = await supabase
-          .from('usage_ledger')
-          .select('cost_cents')
-          .eq('period', period)
-          .maybeSingle();
-        setSpentCents(Number(data?.cost_cents ?? 0));
-      })();
+      fetchUsageSnapshot().then((s) => {
+        setRemaining(s.remaining);
+        setTotal(s.total);
+      });
     }, []),
   );
-
-  const total = Math.round(BUDGET_CENTS / APPROX_CENTS_PER_WORKOUT);
-  const used = Math.min(Math.round(spentCents / APPROX_CENTS_PER_WORKOUT), total);
-  const remaining = Math.max(total - used, 0);
 
   const row = dir === 'rtl' ? 'row-reverse' : 'row';
   const align = dir === 'rtl' ? 'right' : 'left';

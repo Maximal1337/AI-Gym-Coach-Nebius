@@ -16,6 +16,7 @@ import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
 import { useLanguage } from '../../src/lib/language';
 import { useUnits, formatWeightKg, weightUnitLabel, type UnitSystem } from '../../src/lib/units';
+import { fetchUsageSnapshot } from '../../src/lib/usage';
 import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -59,6 +60,13 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
+  // Proactive low-balance signal (Subscription Pricing & Monetization
+  // Strategy doc, §4.2): tell the user before they hit the hard paywall,
+  // not only after — same budgetRemaining()-equivalent data the settings/
+  // subscribe screens already read, just surfaced earlier. Dismissed is
+  // per-app-open only (not persisted) — a light nudge, not a nag.
+  const [remainingWorkouts, setRemainingWorkouts] = useState<number | null>(null);
+  const [lowBalanceDismissed, setLowBalanceDismissed] = useState(false);
   // The composer's bottom padding needs to clear the floating tab bar
   // when it's showing, but that same padding becomes a dead gap above
   // the keyboard once KeyboardAvoidingView has already shifted everything
@@ -85,6 +93,7 @@ export default function Chat() {
     useCallback(() => {
       supabase.from('training_plans').select('id, name').eq('status', 'active')
         .then(({ data }) => setPlans(data ?? []));
+      fetchUsageSnapshot().then((s) => setRemainingWorkouts(s.remaining));
     }, []),
   );
 
@@ -107,8 +116,10 @@ export default function Chat() {
   }
 
   function coachError(e: unknown) {
-    if (e instanceof ApiError && e.code === 'monthly_budget_exhausted') push('system', t('budgetExhausted'));
-    else if (e instanceof ApiError && e.code === 'session_expired') push('system', t('sessionExpired'));
+    if (e instanceof ApiError && e.code === 'monthly_budget_exhausted') {
+      push('system', t('budgetExhausted'));
+      router.push('/subscribe');
+    } else if (e instanceof ApiError && e.code === 'session_expired') push('system', t('sessionExpired'));
     else push('system', t('coachUnavailable'));
   }
 
@@ -358,6 +369,24 @@ export default function Chat() {
           )}
         </View>
       </View>
+
+      {remainingWorkouts != null && remainingWorkouts > 0 && remainingWorkouts <= 2 && !lowBalanceDismissed && (
+        <Pressable
+          onPress={() => router.push('/subscribe')}
+          style={{
+            flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
+            backgroundColor: theme.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+            borderBottomWidth: 1, borderBottomColor: theme.rule,
+          }}
+        >
+          <Text style={{ flex: 1, color: theme.ink, fontSize: 12.5, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+            {t('freeWorkoutsRemaining', { count: remainingWorkouts })}
+          </Text>
+          <Pressable hitSlop={8} onPress={(e) => { e.stopPropagation(); setLowBalanceDismissed(true); }}>
+            <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700' }}>{t('dismiss')}</Text>
+          </Pressable>
+        </Pressable>
+      )}
 
       <FlatList
         ref={list}

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError, callFn } from '../lib/api';
@@ -78,6 +79,7 @@ export function GeneratePlanFlow({
   const [startingWeightsActive, setStartingWeightsActive] = useState(false);
   const [linterChecks, setLinterChecks] = useState<LinterCheck[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
+  const [budgetExhausted, setBudgetExhausted] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
 
   useEffect(() => {
@@ -126,9 +128,9 @@ export function GeneratePlanFlow({
       setLinterChecks(res.linterChecks);
       setStep('preview');
     } catch (e) {
-      setErrorMessage(
-        e instanceof ApiError && e.code === 'monthly_budget_exhausted' ? t('budgetExhausted') : t('generateFailed'),
-      );
+      const exhausted = e instanceof ApiError && e.code === 'monthly_budget_exhausted';
+      setErrorMessage(exhausted ? t('budgetExhausted') : t('generateFailed'));
+      setBudgetExhausted(exhausted);
       setStep('error');
     }
   }
@@ -398,10 +400,10 @@ export function GeneratePlanFlow({
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
         <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{errorMessage}</Text>
         <Pressable
-          onPress={generate}
+          onPress={budgetExhausted ? () => router.push('/subscribe') : generate}
           style={{ backgroundColor: theme.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: radius.pill }}
         >
-          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('tryAgain')}</Text>
+          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{budgetExhausted ? t('subscription') : t('tryAgain')}</Text>
         </Pressable>
         <Pressable onPress={onCancel}>
           <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text>

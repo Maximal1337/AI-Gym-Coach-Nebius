@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,13 +11,11 @@ import { useLanguage } from '../../src/lib/language';
 import { useLanguagePicker } from '../../src/lib/useLanguagePicker';
 import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../../src/lib/units';
 import { UnitsToggle } from '../../src/components/UnitsToggle';
+import { TERMS_URL, PRIVACY_URL } from '../../src/lib/webUrl';
+import { fetchUsageSnapshot } from '../../src/lib/usage';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
-const BUDGET_CENTS = Number(process.env.EXPO_PUBLIC_MONTHLY_BUDGET_CENTS ?? '8');
-const APPROX_CENTS_PER_WORKOUT = 0.6;
-// Notch is free during the wider TestFlight beta — the paywall (app/subscribe.tsx)
-// stays built but hidden until RevenueCat is actually wired up (System Design §15).
-const SUBSCRIPTION_UI_ENABLED = false;
+const SUBSCRIPTION_UI_ENABLED = true;
 
 export default function Settings() {
   const theme = useTheme();
@@ -26,7 +24,7 @@ export default function Settings() {
   const { open: openLanguagePicker } = useLanguagePicker();
   const { units, setUnits } = useUnits();
   const [coach, setCoach] = useState<{ coach_name: string; tone_preset: string } | null>(null);
-  const [spentCents, setSpentCents] = useState(0);
+  const [usage, setUsage] = useState({ used: 0, total: 0 });
   // null = not loaded yet / no row at all — the section only renders once
   // this is a real row (System Design §21: appears only if the user
   // actually typed something in "קצת עליך", never as an empty prompt).
@@ -39,14 +37,13 @@ export default function Settings() {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const period = new Date().toISOString().slice(0, 7);
-        const [{ data: profile }, { data: usage }, { data: fitness }] = await Promise.all([
+        const [{ data: profile }, snapshot, { data: fitness }] = await Promise.all([
           supabase.from('coach_profiles').select('coach_name, tone_preset').maybeSingle(),
-          supabase.from('usage_ledger').select('cost_cents').eq('period', period).maybeSingle(),
+          fetchUsageSnapshot(),
           supabase.from('fitness_profiles').select('gender, age, weight_kg, height_cm').maybeSingle(),
         ]);
         setCoach(profile);
-        setSpentCents(Number(usage?.cost_cents ?? 0));
+        setUsage(snapshot);
         setFitnessProfile(fitness ?? null);
       })();
     }, []),
@@ -84,11 +81,7 @@ export default function Settings() {
     ]);
   }
 
-  const used = Math.min(
-    Math.round(spentCents / APPROX_CENTS_PER_WORKOUT),
-    Math.round(BUDGET_CENTS / APPROX_CENTS_PER_WORKOUT),
-  );
-  const total = Math.round(BUDGET_CENTS / APPROX_CENTS_PER_WORKOUT);
+  const { used, total } = usage;
 
   const row = (
     label: string, value?: string, onPress?: () => void, destructive = false,
@@ -185,8 +178,14 @@ export default function Settings() {
         {row(t('deleteAccount'), undefined, confirmDelete, true)}
       </View>
 
-      <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, overflow: 'hidden' }}>
+      <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
         {row(t('language'), t(`lang_${language}`), openLanguagePicker, false, 'globe-outline')}
+      </View>
+
+      {sectionTitle(t('legalSection'))}
+      <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, overflow: 'hidden' }}>
+        {row(t('termsOfUse'), undefined, () => Linking.openURL(TERMS_URL))}
+        {row(t('privacyPolicy'), undefined, () => Linking.openURL(PRIVACY_URL))}
       </View>
     </ScrollView>
     </Screen>
