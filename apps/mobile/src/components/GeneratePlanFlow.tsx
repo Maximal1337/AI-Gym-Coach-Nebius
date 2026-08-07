@@ -6,7 +6,6 @@ import { ApiError, callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
-import { ConfettiBurst } from './ConfettiBurst';
 import { SketchLoader } from './SketchLoader';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
@@ -67,7 +66,6 @@ export function GeneratePlanFlow({
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
   const [linterChecks, setLinterChecks] = useState<LinterCheck[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [showConfetti, setShowConfetti] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
 
   useEffect(() => {
@@ -121,11 +119,6 @@ export function GeneratePlanFlow({
       );
       setStep('error');
     }
-  }
-
-  function handleApproved() {
-    setShowConfetti(true);
-    setTimeout(onDone, 1500);
   }
 
   const progressStep = { goal: 1, experience: 2, days: 3, about: 4, injuries: 5 }[step as string] ?? 0;
@@ -406,7 +399,7 @@ export function GeneratePlanFlow({
         preview={preview}
         setPreview={setPreview}
         mode={mode === 'onboarding' ? 'onboarding' : 'add'}
-        onDone={handleApproved}
+        onDone={onDone}
         showTryAgain={false}
         extraNote={
           <View style={{ marginBottom: spacing.sm }}>
@@ -424,7 +417,6 @@ export function GeneratePlanFlow({
           </View>
         }
       />
-      <ConfettiBurst active={showConfetti} />
     </DismissKeyboardView>
   );
 }

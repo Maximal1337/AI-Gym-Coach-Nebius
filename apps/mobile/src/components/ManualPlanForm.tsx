@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { callFn, ApiError } from '../lib/api';
+import { ConfettiBurst } from './ConfettiBurst';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { LoadingOverlay } from './LoadingOverlay';
 import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
@@ -35,6 +36,12 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
   const [exercises, setExercises] = useState<ManualExercise[]>([emptyExercise()]);
   const [busy, setBusy] = useState(false);
   const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  function celebrateAndFinish() {
+    setShowConfetti(true);
+    setTimeout(onDone, 1500);
+  }
 
   function updateExercise(idx: number, patch: Partial<ManualExercise>) {
     setExercises((rows) => rows.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -94,7 +101,8 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
   if (startingWeightsPlans) {
     return (
       <View style={{ flex: 1, padding: spacing.lg }}>
-        <StartingWeightsStep plans={startingWeightsPlans} onDone={onDone} />
+        <StartingWeightsStep plans={startingWeightsPlans} onDone={celebrateAndFinish} />
+        <ConfettiBurst active={showConfetti} />
       </View>
     );
   }

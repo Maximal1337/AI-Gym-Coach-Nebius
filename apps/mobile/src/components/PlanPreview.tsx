@@ -9,6 +9,7 @@ import { callFn } from '../lib/api';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
+import { ConfettiBurst } from './ConfettiBurst';
 import { Field } from './Field';
 import { LoadingOverlay } from './LoadingOverlay';
 import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
@@ -173,6 +174,17 @@ export function PlanPreview({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ planIdx: number; exIdx: number } | null>(null);
   const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
+  const [showConfetti, setShowConfetti] = useState(false);
+
+  // Every "add a plan" route (generate/paste/upload/photo/manual) converges
+  // here, so this is the one place a celebration can cover all of them at
+  // once instead of being duplicated per-route (GeneratePlanFlow used to
+  // have its own copy of this). Editing an existing plan isn't "finishing
+  // adding" anything, so it skips this the same way it skips starting-weights.
+  function celebrateAndFinish() {
+    setShowConfetti(true);
+    setTimeout(onDone, 1500);
+  }
 
   function updatePlanName(planIdx: number, name: string) {
     setPreview((prev) => prev && prev.map((p, i) => (i === planIdx ? { ...p, name } : p)));
@@ -234,7 +246,12 @@ export function PlanPreview({
   }
 
   if (startingWeightsPlans) {
-    return <StartingWeightsStep plans={startingWeightsPlans} onDone={onDone} />;
+    return (
+      <>
+        <StartingWeightsStep plans={startingWeightsPlans} onDone={celebrateAndFinish} />
+        <ConfettiBurst active={showConfetti} />
+      </>
+    );
   }
 
   const editingExercise = editing ? preview[editing.planIdx]?.exercises[editing.exIdx] ?? null : null;
