@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
+  ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -56,8 +56,24 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
+  // The composer's bottom padding needs to clear the floating tab bar
+  // when it's showing, but that same padding becomes a dead gap above
+  // the keyboard once KeyboardAvoidingView has already shifted everything
+  // up to sit right on top of it.
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
   const list = useRef<FlatList>(null);
   const nextId = useRef(0);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardVisible(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => setKeyboardVisible(false));
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   // useFocusEffect, not a plain mount-only effect: a plan added/edited/
   // archived via Settings > Manage Training Plans must show up here
@@ -397,7 +413,7 @@ export default function Chat() {
       )}
 
       {!inWorkout ? (
-        <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
+        <View style={{ padding: spacing.md, paddingBottom: keyboardVisible ? spacing.md : TAB_BAR_CLEARANCE }}>
           {plans.length === 0 ? (
             // Reachable whenever onboarding-plan was skipped (its
             // plan_setup_skipped_at flag is what let the user in here
@@ -435,7 +451,7 @@ export default function Chat() {
           )}
         </View>
       ) : (
-        <View style={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule }}>
+        <View style={{ padding: spacing.md, paddingBottom: keyboardVisible ? spacing.md : TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule }}>
           <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
             <TextInput
               placeholder={t('messagePlaceholder')}
