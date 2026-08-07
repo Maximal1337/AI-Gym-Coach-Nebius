@@ -7,6 +7,7 @@ import { buildSystemPrompt, buildConversationPrompt, buildConfirmPrompt } from "
 import { composeWithLlm, costCents, type LlmUsage } from "./llm.js";
 import { llmConfig } from "./config.js";
 import { buildTurnTools, emptyOutcome, type RemainingExerciseCandidate } from "./tools.js";
+import { formatWeightForPrompt } from "./units.js";
 
 /**
  * Free-text mid-workout turn (GYM-61/67, revised for §20's tool-calling
@@ -370,6 +371,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     nextLastLogs: input.nextLastLogs,
     previousExercise: input.previousExercise,
     previousExerciseLogs: input.previousExerciseLogs,
+    units: input.profile.units,
   });
 
   const outcome = emptyOutcome();
@@ -382,6 +384,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
       previousExerciseLogs: input.previousExerciseLogs,
     },
     outcome,
+    input.profile.units,
   );
   const toolsByName = new Map<string, (typeof tools)[number]>(tools.map((t) => [t.name, t]));
 
@@ -519,6 +522,7 @@ export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput
     nextTargets,
     nextLastLogs: input.nextLastLogs,
     nextNotes: input.nextNotes,
+    units: input.profile.units,
     isRevisit: input.isRevisit ?? false,
   });
 
@@ -539,7 +543,7 @@ export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput
   const weightKg = input.confirmedSets[0]?.weightKg ?? 0;
   const reps = input.confirmedSets.map((s) => s.reps).join("/");
   return {
-    message: `Logged ${weightKg}kg x ${reps}. Let's keep going!`,
+    message: `Logged ${formatWeightForPrompt(weightKg, input.profile.units)} x ${reps}. Let's keep going!`,
     usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 },
     degraded: true,
     nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,

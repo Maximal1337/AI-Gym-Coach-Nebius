@@ -45,6 +45,7 @@ export const coachProfileSchema = z.object({
   ]),
   accountabilityStyle: z.enum(["gentle", "no_excuses"]),
   personaFreeform: z.string().max(2000).nullable(),
+  units: z.enum(["metric", "imperial"]).default("metric"),
 });
 
 export const turnInputSchema = z.object({

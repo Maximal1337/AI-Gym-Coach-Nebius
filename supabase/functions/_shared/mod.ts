@@ -159,8 +159,12 @@ export async function callAgent(
   });
 }
 
-/** Camel-case a coach_profiles row into the agent's expected shape. */
-export function profileToAgent(row: Record<string, unknown>) {
+/**
+ * Camel-case a coach_profiles row into the agent's expected shape.
+ * `units` lives on `users`, not `coach_profiles` — callers pass it in
+ * separately from their own users-table read.
+ */
+export function profileToAgent(row: Record<string, unknown>, units: string | null | undefined) {
   return {
     userId: row.user_id,
     coachName: row.coach_name,
@@ -168,6 +172,7 @@ export function profileToAgent(row: Record<string, unknown>) {
     tonePreset: row.tone_preset,
     accountabilityStyle: row.accountability_style,
     personaFreeform: row.persona_freeform ?? null,
+    units: units === "imperial" ? "imperial" : "metric",
   };
 }
 
@@ -498,8 +503,9 @@ export async function runConversationExerciseTurn(
   const { userId, sessionId, planId, exercise, userMessage, recentHistory } = params;
   const exerciseId = exercise.id as string;
 
-  const [{ data: profileRow }, ordered, { attemptedIds, deferred }, thisSessionLogRows, lastOtherExerciseLog] = await Promise.all([
+  const [{ data: profileRow }, { data: userRow }, ordered, { attemptedIds, deferred }, thisSessionLogRows, lastOtherExerciseLog] = await Promise.all([
     db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("users").select("units").eq("id", userId).maybeSingle(),
     orderedExercisesForSession(db, planId, sessionId),
     sessionExerciseState(db, sessionId),
     db.from("set_logs").select("*").eq("session_id", sessionId).eq("exercise_id", exerciseId)
@@ -543,7 +549,7 @@ export async function runConversationExerciseTurn(
 
   const agentRes = await callAgent(
     {
-      profile: profileToAgent(profileRow),
+      profile: profileToAgent(profileRow, userRow?.units),
       exercise: exerciseToAgent(exercise),
       lastLogs: setLogsToAgent(lastLogs),
       notes,
@@ -790,8 +796,9 @@ export async function confirmExerciseSets(
   const { userId, sessionId, planId, exercise, confirmedSets } = params;
   const exerciseId = exercise.id as string;
 
-  const [{ data: profileRow }, ordered, { attemptedIds, deferred }] = await Promise.all([
+  const [{ data: profileRow }, { data: userRow }, ordered, { attemptedIds, deferred }] = await Promise.all([
     db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
+    db.from("users").select("units").eq("id", userId).maybeSingle(),
     orderedExercisesForSession(db, planId, sessionId),
     sessionExerciseState(db, sessionId),
   ]);
@@ -830,7 +837,7 @@ export async function confirmExerciseSets(
 
   const agentRes = await callAgent(
     {
-      profile: profileToAgent(profileRow),
+      profile: profileToAgent(profileRow, userRow?.units),
       exercise: exerciseToAgent(exercise),
       confirmedSets,
       notes,
@@ -878,9 +885,10 @@ export async function runExerciseTurn(
   // just the current exercise. All four reads are independent of each
   // other (only the profile-missing check gates anything downstream),
   // so they run in one round trip instead of four.
-  const [{ data: profileRow }, { data: plan }, { data: planExercises }, lastLogs, notes] =
+  const [{ data: profileRow }, { data: userRow }, { data: plan }, { data: planExercises }, lastLogs, notes] =
     await Promise.all([
       db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
+      db.from("users").select("units").eq("id", userId).maybeSingle(),
       db.from("training_plans").select("name").eq("id", planId)
         .eq("user_id", userId).maybeSingle(),
       db.from("exercises").select("name, order_index").eq("plan_id", planId)
@@ -898,7 +906,7 @@ export async function runExerciseTurn(
       name: e.name,
       orderIndex: e.order_index,
     })),
-    profile: profileToAgent(profileRow),
+    profile: profileToAgent(profileRow, userRow?.units),
     exercise: exerciseToAgent(exercise),
     lastLogs: setLogsToAgent(lastLogs),
     notes,

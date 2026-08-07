@@ -1,5 +1,6 @@
-import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
+import type { CoachProfile, Exercise, SetLog, UnitSystem } from "@gymcoach/shared";
 import type { Targets } from "./progression.js";
+import { formatWeightForPrompt } from "./units.js";
 
 /**
  * Prompt assembly (GYM-20).
@@ -61,10 +62,10 @@ export function buildSystemPrompt(profile: CoachProfile): string {
   return parts.join("\n");
 }
 
-export function formatHistory(logs: SetLog[]): string {
+export function formatHistory(logs: SetLog[], units: UnitSystem): string {
   if (logs.length === 0) return "No previous data for this exercise.";
   return logs
-    .map((l) => `set ${l.setNo}: ${l.weightKg}kg x ${l.reps}${l.note ? ` (${l.note})` : ""}`)
+    .map((l) => `set ${l.setNo}: ${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}${l.note ? ` (${l.note})` : ""}`)
     .join("\n");
 }
 
@@ -77,12 +78,12 @@ export function formatHistory(logs: SetLog[]): string {
  * silently misstate the actual target. Only go per-set when the weights
  * genuinely differ, so this never adds noise to the ordinary case.
  */
-export function formatTargets(targets: Targets): string {
+export function formatTargets(targets: Targets, units: UnitSystem): string {
   const { targetWeights, targetReps } = targets;
   if (!targetWeights || !targetReps) return "";
   const uniform = targetWeights.every((w) => w === targetWeights[0]);
-  if (uniform) return `${targetWeights[0]}kg, sets of ${targetReps.join(", ")} reps`;
-  return targetReps.map((r, i) => `set ${i + 1}: ${targetWeights[i]}kg x ${r} reps`).join(", ");
+  if (uniform) return `${formatWeightForPrompt(targetWeights[0], units)}, sets of ${targetReps.join(", ")} reps`;
+  return targetReps.map((r, i) => `set ${i + 1}: ${formatWeightForPrompt(targetWeights[i], units)} x ${r} reps`).join(", ");
 }
 
 export function buildTurnPrompt(
@@ -90,6 +91,7 @@ export function buildTurnPrompt(
   lastLogs: SetLog[],
   targets: Targets,
   notes: string[],
+  units: UnitSystem,
   plan?: { planName: string; planExercises: Array<{ name: string; orderIndex: number }> },
 ): string {
   const lines: string[] = [];
@@ -107,11 +109,11 @@ export function buildTurnPrompt(
     exercise.warmup ? `Warm-up: ${exercise.warmup}` : "No warm-up for this exercise.",
     "",
     "Last time:",
-    formatHistory(lastLogs),
+    formatHistory(lastLogs, units),
     "",
     targets.reason === "baseline"
       ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${formatTargets(targets)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
+      : `Computed target for today (already validated, present it as the goal): ${formatTargets(targets, units)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
   );
   if (notes.length > 0) {
     lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
@@ -138,11 +140,12 @@ export function buildConfirmPrompt(params: {
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
   nextNotes: string[];
+  units: UnitSystem;
   /** §20: nextExercise is being resurfaced from the deferred pool, not introduced fresh. */
   isRevisit?: boolean;
 }): string {
-  const { exercise, confirmedSets, notes, nextExercise, nextTargets, nextLastLogs, nextNotes, isRevisit } = params;
-  const setsDesc = confirmedSets.map((s) => `${s.weightKg}kg x ${s.reps}`).join(", ");
+  const { exercise, confirmedSets, notes, nextExercise, nextTargets, nextLastLogs, nextNotes, units, isRevisit } = params;
+  const setsDesc = confirmedSets.map((s) => `${formatWeightForPrompt(s.weightKg, units)} x ${s.reps}`).join(", ");
   const lines: string[] = [
     `The user just confirmed they completed ${exercise.name}: ${setsDesc}. This came from a quick-confirm UI button, not typed text — there is nothing to interpret or extract, these numbers are already final and logged. Restate them exactly; never alter them.`,
   ];
@@ -157,10 +160,10 @@ export function buildConfirmPrompt(params: {
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
-      formatHistory(nextLastLogs),
+      formatHistory(nextLastLogs, units),
       nextTargets.reason === "baseline"
         ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets)}.`,
+        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
     );
     if (nextNotes.length > 0) lines.push("", "Saved notes about the next exercise:", ...nextNotes.map((n) => `- ${n}`));
   } else {
@@ -190,8 +193,9 @@ export function buildOrchestrationIntroPrompt(params: {
   nextTargets: Targets;
   nextLastLogs: SetLog[];
   nextNotes: string[];
+  units: UnitSystem;
 }): string {
-  const { isRevisit, deferReason, nextExercise, nextTargets, nextLastLogs, nextNotes } = params;
+  const { isRevisit, deferReason, nextExercise, nextTargets, nextLastLogs, nextNotes, units } = params;
   const lines: string[] = [
     isRevisit
       ? `The user is coming back to ${nextExercise.name}, an exercise deferred earlier this session${deferReason ? ` (reason given at the time: "${deferReason}")` : ""}. Write a short note that plainly says you're returning to it — not introducing it as brand new — then its target.`
@@ -199,10 +203,10 @@ export function buildOrchestrationIntroPrompt(params: {
     `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
     nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
     "Last time on this exercise:",
-    formatHistory(nextLastLogs),
+    formatHistory(nextLastLogs, units),
     nextTargets.reason === "baseline"
       ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets)}.`,
+      : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
   ];
   if (nextNotes.length > 0) lines.push("", "Saved notes about this exercise:", ...nextNotes.map((n) => `- ${n}`));
   lines.push(
@@ -241,21 +245,22 @@ export function buildConversationPrompt(params: {
   /** The exercise (if any) most recently logged this session before the current one — see correctPreviousExerciseSet. */
   previousExercise: Exercise | null;
   previousExerciseLogs: SetLog[];
+  units: UnitSystem;
 }): string {
   const {
     exercise, lastLogs, notes, userMessage, recentHistory,
     currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs,
-    previousExercise, previousExerciseLogs,
+    previousExercise, previousExerciseLogs, units,
   } = params;
   const lines: string[] = [
     `Current exercise: ${exercise.name}`,
     `Structure: ${exercise.sets} work sets, ${exercise.repRange} reps, rest ${exercise.restSec}s, intensity: ${exercise.intensity}.`,
     "Last time:",
-    formatHistory(lastLogs),
+    formatHistory(lastLogs, units),
   ];
   if (currentTargets && currentTargets.suggestedWeightKg != null) {
     lines.push(
-      `The weight this exercise was introduced with (before any renegotiation visible below) was ${currentTargets.suggestedWeightKg}kg.`,
+      `The weight this exercise was introduced with (before any renegotiation visible below) was ${formatWeightForPrompt(currentTargets.suggestedWeightKg, units)}.`,
     );
   }
   lines.push(
@@ -263,14 +268,14 @@ export function buildConversationPrompt(params: {
       // Set numbers spelled out explicitly (not just weight x reps) so a
       // correction ("set 2 was actually 8 reps") can reference a real,
       // unambiguous set number — see correctLoggedSet below.
-      ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `set ${l.setNo}: ${l.weightKg}kg x ${l.reps}`).join(", ")}.`
+      ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `set ${l.setNo}: ${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}`).join(", ")}.`
       : `Nothing logged yet this session for this exercise (0 of ${exercise.sets} work sets).`,
   );
   if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
   if (previousExercise) {
     lines.push(
       "",
-      `The PREVIOUS exercise this session (done right before the current one) was ${previousExercise.name}. Sets logged for it: ${previousExerciseLogs.length > 0 ? previousExerciseLogs.map((l) => `set ${l.setNo}: ${l.weightKg}kg x ${l.reps}`).join(", ") : "none"}.`,
+      `The PREVIOUS exercise this session (done right before the current one) was ${previousExercise.name}. Sets logged for it: ${previousExerciseLogs.length > 0 ? previousExerciseLogs.map((l) => `set ${l.setNo}: ${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}`).join(", ") : "none"}.`,
     );
   }
   if (recentHistory.length > 0) {
@@ -312,10 +317,10 @@ export function buildConversationPrompt(params: {
       `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
-      formatHistory(nextLastLogs),
+      formatHistory(nextLastLogs, units),
       nextTargets.reason === "baseline"
         ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets)}.`,
+        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
     );
   } else if (!nextExercise) {
     lines.push(

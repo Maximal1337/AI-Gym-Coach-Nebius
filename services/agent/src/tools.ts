@@ -1,8 +1,9 @@
 import { tool, type StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
-import type { Exercise, SetLog } from "@gymcoach/shared";
+import type { Exercise, SetLog, UnitSystem } from "@gymcoach/shared";
 import { suggestTargets } from "./progression.js";
 import { formatHistory, formatTargets } from "./prompt.js";
+import { formatWeightForPrompt } from "./units.js";
 import {
   logCompletedSetsArgsSchema,
   stopExerciseEarlyArgsSchema,
@@ -90,7 +91,7 @@ export function emptyOutcome(): TurnOutcome {
   };
 }
 
-export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): StructuredToolInterface[] {
+export function buildTurnTools(context: ToolContext, outcome: TurnOutcome, units: UnitSystem): StructuredToolInterface[] {
   const logCompletedSets = tool(
     async ({ sets }) => {
       outcome.loggedSets.push(...sets);
@@ -167,10 +168,10 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
         `Structure: ${match.exercise.sets} work sets, ${match.exercise.repRange} reps, rest ${match.exercise.restSec}s, intensity: ${match.exercise.intensity}.`,
         match.exercise.warmup ? `Warm-up: ${match.exercise.warmup}` : "No warm-up for this exercise.",
         "Last time on this exercise:",
-        formatHistory(match.lastLogs),
+        formatHistory(match.lastLogs, units),
         targets.reason === "baseline"
           ? "No reliable weight on record — do not invent a starting weight, ask the user what they'd like to start with."
-          : `Computed target for today: ${formatTargets(targets)}.`,
+          : `Computed target for today: ${formatTargets(targets, units)}.`,
       ];
       if (match.notes.length > 0) lines.push("Saved notes about this exercise:", ...match.notes.map((n) => `- ${n}`));
       return lines.join("\n");
@@ -222,7 +223,7 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
       outcome.correctedSet = { setNo, weightKg, reps };
       const newWeight = weightKg ?? existing.weightKg;
       const newReps = reps ?? existing.reps;
-      return `Corrected set ${setNo}: was ${existing.weightKg}kg × ${existing.reps} reps, now ${newWeight}kg × ${newReps} reps.`;
+      return `Corrected set ${setNo}: was ${formatWeightForPrompt(existing.weightKg, units)} × ${existing.reps} reps, now ${formatWeightForPrompt(newWeight, units)} × ${newReps} reps.`;
     },
     {
       name: "correctLoggedSet",
@@ -261,7 +262,7 @@ export function buildTurnTools(context: ToolContext, outcome: TurnOutcome): Stru
       outcome.correctedPreviousExerciseSet = { exerciseId: context.previousExercise.id, setNo, weightKg, reps };
       const newWeight = weightKg ?? existing.weightKg;
       const newReps = reps ?? existing.reps;
-      return `Corrected ${context.previousExercise.name} set ${setNo}: was ${existing.weightKg}kg × ${existing.reps} reps, now ${newWeight}kg × ${newReps} reps.`;
+      return `Corrected ${context.previousExercise.name} set ${setNo}: was ${formatWeightForPrompt(existing.weightKg, units)} × ${existing.reps} reps, now ${formatWeightForPrompt(newWeight, units)} × ${newReps} reps.`;
     },
     {
       name: "correctPreviousExerciseSet",

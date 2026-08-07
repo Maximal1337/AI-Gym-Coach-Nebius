@@ -18,6 +18,7 @@ export type TonePreset =
   | "tough_love"
   | "friendly_casual";
 export type AccountabilityStyle = "gentle" | "no_excuses";
+export type UnitSystem = "metric" | "imperial";
 
 export interface CoachProfile {
   userId: string;
@@ -26,6 +27,8 @@ export interface CoachProfile {
   tonePreset: TonePreset;
   accountabilityStyle: AccountabilityStyle;
   personaFreeform: string | null;
+  /** Weights are always computed/stored in kg — this only governs how they're phrased in coach replies. */
+  units: UnitSystem;
 }
 
 export interface TrainingPlan {

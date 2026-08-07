@@ -55,6 +55,7 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
     input.lastLogs,
     targets,
     input.notes,
+    input.profile.units,
     { planName: input.planName, planExercises: input.planExercises },
   );
 
