@@ -54,17 +54,28 @@ test("a logged weight of 0 is never trusted as a real working weight -> treated 
 test("all sets at range ceiling -> weight jumps by the equipment's real increment, reps reset to bottom", () => {
   const t = suggestTargets(exercise, logs([[50, 10], [50, 10], [50, 11]]));
   assert.equal(t.reason, "increase_weight");
-  assert.equal(t.suggestedWeightKg, 50 + incrementForEquipment("machine"));
+  assert.equal(t.suggestedWeightKg, 50 + incrementForEquipment("machine", 50));
   assert.deepEqual(t.targetReps, [6, 6, 6]);
-  assert.deepEqual(t.targetWeights, [55, 55, 55]);
+  assert.deepEqual(t.targetWeights, [57, 57, 57]);
 });
 
-test("incrementForEquipment: dumbbell/machine/cable jump more than a barbell; unset falls back to the default", () => {
-  assert.equal(incrementForEquipment("barbell"), 2.5);
-  assert.equal(incrementForEquipment("dumbbell"), 5);
-  assert.equal(incrementForEquipment("machine"), 5);
-  assert.equal(incrementForEquipment("cable"), 5);
-  assert.equal(incrementForEquipment(null), DEFAULT_WEIGHT_INCREMENT_KG);
+test("incrementForEquipment: barbell is a flat plate jump; dumbbell and machine/cable step up past a real-world rack/stack threshold; unset falls back to the default", () => {
+  assert.equal(incrementForEquipment("barbell", 20), 2.5);
+  assert.equal(incrementForEquipment("barbell", 100), 2.5);
+  // Dumbbell racks stock ~1kg steps up to ~10kg, ~2kg steps above.
+  assert.equal(incrementForEquipment("dumbbell", 8), 1);
+  assert.equal(incrementForEquipment("dumbbell", 10), 2);
+  assert.equal(incrementForEquipment("dumbbell", 20), 2);
+  // Pin-loaded stacks (machine/cable) step ~10lb (~4.5kg) below ~50lb
+  // (~22.5kg) of total stack, ~15lb (~7kg) above it.
+  assert.equal(incrementForEquipment("machine", 20), 4.5);
+  assert.equal(incrementForEquipment("machine", 22.5), 7);
+  assert.equal(incrementForEquipment("machine", 30), 7);
+  assert.equal(incrementForEquipment("cable", 20), 4.5);
+  assert.equal(incrementForEquipment("cable", 30), 7);
+  assert.equal(incrementForEquipment("bodyweight", 20), DEFAULT_WEIGHT_INCREMENT_KG);
+  assert.equal(incrementForEquipment("other", 20), DEFAULT_WEIGHT_INCREMENT_KG);
+  assert.equal(incrementForEquipment(null, 20), DEFAULT_WEIGHT_INCREMENT_KG);
 });
 
 test("weight-increase suggestion uses the exercise's own equipment type, not a flat constant", () => {
@@ -72,7 +83,8 @@ test("weight-increase suggestion uses the exercise's own equipment type, not a f
   const dumbbellCurl: Exercise = { ...exercise, equipmentType: "dumbbell" };
   const atCeiling = logs([[50, 10], [50, 10], [50, 11]]);
   assert.equal(suggestTargets(barbellSquat, atCeiling).suggestedWeightKg, 52.5);
-  assert.equal(suggestTargets(dumbbellCurl, atCeiling).suggestedWeightKg, 55);
+  // 50kg is past the dumbbell rack's ~10kg step-up threshold -> +2kg.
+  assert.equal(suggestTargets(dumbbellCurl, atCeiling).suggestedWeightKg, 52);
 });
 
 test("no sets below ceiling but not all reached it -> same weight, +1 rep, capped", () => {
@@ -89,9 +101,9 @@ test("real regression: 12/11/7 against a 6-10 range increases weight, not a lowe
   // was already achieved on set 1.
   const t = suggestTargets(exercise, logs([[50, 12], [50, 11], [50, 7]]));
   assert.equal(t.reason, "increase_weight");
-  assert.equal(t.suggestedWeightKg, 50 + incrementForEquipment("machine"));
+  assert.equal(t.suggestedWeightKg, 50 + incrementForEquipment("machine", 50));
   assert.deepEqual(t.targetReps, [6, 6, 6]);
-  assert.deepEqual(t.targetWeights, [55, 55, 55]);
+  assert.deepEqual(t.targetWeights, [57, 57, 57]);
 });
 
 test("a non-first set that independently exceeded ceiling holds there, not reduced, even when weight doesn't increase", () => {
@@ -153,4 +165,29 @@ test("real regression: a low-rep set at a different weight nudges by +1 without 
   assert.equal(t.suggestedWeightKg, 18);
   assert.deepEqual(t.targetReps, [8, 8, 2]);
   assert.deepEqual(t.targetWeights, [18, 18, 16]);
+});
+
+test("real regression: a computed +1 nudge never climbs above the same-weight set before it (GYM feedback: '9 then 10 then 10 doesn't make sense')", () => {
+  // All three sets at the same weight last time, but set 1 happened to
+  // log fewer reps than sets 2-3 (8, 9, 9). Read independently, each
+  // set's own +1 nudge would suggest 9, 10, 10 — reps climbing across
+  // the session, which is backward (fatigue holds or drops capacity, it
+  // doesn't increase it). Each computed nudge clamps to no more than the
+  // same-weight set before it, so the actual suggestion is 9, 9, 9.
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const t = suggestTargets(wideRange, logs([[43, 8], [43, 9], [43, 9]]));
+  assert.equal(t.reason, "add_reps");
+  assert.equal(t.suggestedWeightKg, 43);
+  assert.deepEqual(t.targetReps, [9, 9, 9]);
+  assert.deepEqual(t.targetWeights, [43, 43, 43]);
+});
+
+test("the same-weight clamp never touches a set that legitimately already exceeded the ceiling — only computed nudges are clamped, never a real held value", () => {
+  // Set 3 genuinely hit 11 reps against a 10 ceiling — a real, already-
+  // earned number that must never be walked backward, even to keep the
+  // sequence non-increasing. This is the same fixture as the
+  // "non-first set... holds there" test above, re-asserted here to pin
+  // down that the new same-weight clamp doesn't regress it.
+  const t = suggestTargets(exercise, logs([[50, 6], [50, 6], [50, 11]]));
+  assert.deepEqual(t.targetReps, [7, 7, 11]);
 });

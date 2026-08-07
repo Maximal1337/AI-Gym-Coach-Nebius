@@ -43,23 +43,38 @@ export interface Targets {
  * real-world smallest common jump (a 1.25kg plate per side). */
 export const DEFAULT_WEIGHT_INCREMENT_KG = 2.5;
 
-/**
- * Real-world smallest jump each equipment type can actually give the user.
- * Dumbbell racks step per-dumbbell (2-2.5kg), so the two-hand total jumps
- * 4-5kg at a time — noticeably more than a barbell's per-side plate jump.
- * Machines/cables are typically pin-loaded in coarser 5kg steps.
- */
-const INCREMENT_BY_EQUIPMENT: Record<EquipmentType, number> = {
-  barbell: 2.5,
-  dumbbell: 5,
-  machine: 5,
-  cable: 5,
-  bodyweight: DEFAULT_WEIGHT_INCREMENT_KG,
-  other: DEFAULT_WEIGHT_INCREMENT_KG,
-};
+// Dumbbell racks stock in ~1kg steps up to about 10kg, then ~2kg steps
+// above that — a 4-5kg jump (the old flat rate) skips rungs that
+// actually exist on the rack, especially at the light end.
+const DUMBBELL_STEP_THRESHOLD_KG = 10;
+const DUMBBELL_LOW_INCREMENT_KG = 1;
+const DUMBBELL_HIGH_INCREMENT_KG = 2;
 
-export function incrementForEquipment(equipmentType: EquipmentType | null): number {
-  return equipmentType ? INCREMENT_BY_EQUIPMENT[equipmentType] : DEFAULT_WEIGHT_INCREMENT_KG;
+// Pin-loaded stacks (selectorized machines and cable towers) commonly
+// jump ~10lb per pin below ~50lb of total stack, then ~15lb above it —
+// converted to kg and rounded to numbers a pin selector actually shows.
+const MACHINE_STEP_THRESHOLD_KG = 22.5; // ~50 lb
+const MACHINE_LOW_INCREMENT_KG = 4.5; // ~10 lb
+const MACHINE_HIGH_INCREMENT_KG = 7; // ~15 lb
+
+/**
+ * Real-world smallest jump each equipment type can actually give the
+ * user at their CURRENT working weight — for dumbbell/machine/cable this
+ * isn't a flat rate, since the rack/stack itself steps coarser once
+ * you're past the lighter end (see the constants above).
+ */
+export function incrementForEquipment(equipmentType: EquipmentType | null, currentWeightKg: number): number {
+  switch (equipmentType) {
+    case "dumbbell":
+      return currentWeightKg < DUMBBELL_STEP_THRESHOLD_KG ? DUMBBELL_LOW_INCREMENT_KG : DUMBBELL_HIGH_INCREMENT_KG;
+    case "machine":
+    case "cable":
+      return currentWeightKg < MACHINE_STEP_THRESHOLD_KG ? MACHINE_LOW_INCREMENT_KG : MACHINE_HIGH_INCREMENT_KG;
+    case "barbell":
+      return DEFAULT_WEIGHT_INCREMENT_KG;
+    default:
+      return DEFAULT_WEIGHT_INCREMENT_KG;
+  }
 }
 
 export function parseRepRange(repRange: string): { min: number; max: number } {
@@ -112,7 +127,7 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
     // any that had been trailing at a lower weight) resets to the new
     // weight and the range's floor; there's no "own track" left to
     // preserve once the plan's own working weight has cleared the ceiling.
-    const nextWeight = topWeight + incrementForEquipment(exercise.equipmentType);
+    const nextWeight = topWeight + incrementForEquipment(exercise.equipmentType, topWeight);
     return {
       suggestedWeightKg: nextWeight,
       targetReps: Array(exercise.sets).fill(min),
@@ -135,20 +150,52 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
   const targetWeights: number[] = [];
   for (let i = 0; i < exercise.sets; i++) {
     const last = ordered[i];
+    let weight: number;
+    let reps: number;
+    // Whether `reps` is a freshly COMPUTED nudge (+1 off last time) versus
+    // a real, already-achieved value just being held/passed through
+    // unchanged (last.reps >= max) — the clamp below only ever touches
+    // the former. A held value is the CRUCIAL "user's real numbers are
+    // the source of truth" case from earlier (GYM feedback) and must
+    // never be walked backward, even to satisfy the ordering fix here.
+    let computed: boolean;
     if (!last) {
       // No logged set at all for this index last time -- the plan's own
       // numbers are the only anchor available.
-      targetWeights.push(topWeight);
-      targetReps.push(min);
-      continue;
-    }
-    if (last.weightKg === topWeight) {
-      targetWeights.push(topWeight);
-      targetReps.push(last.reps >= max ? last.reps : Math.min(Math.max(last.reps + 1, min), max));
+      weight = topWeight;
+      reps = min;
+      computed = true;
+    } else if (last.weightKg === topWeight) {
+      weight = topWeight;
+      if (last.reps >= max) {
+        reps = last.reps;
+        computed = false;
+      } else {
+        reps = Math.min(Math.max(last.reps + 1, min), max);
+        computed = true;
+      }
     } else {
-      targetWeights.push(last.weightKg);
-      targetReps.push(last.reps >= max ? last.reps : Math.min(last.reps + 1, max));
+      weight = last.weightKg;
+      if (last.reps >= max) {
+        reps = last.reps;
+        computed = false;
+      } else {
+        reps = Math.min(last.reps + 1, max);
+        computed = true;
+      }
     }
+    // A freshly computed nudge shouldn't climb across CONSECUTIVE sets at
+    // the same weight — a later set's +1 landing above an earlier set's
+    // target reads as backward (fatigue holds or drops capacity across a
+    // session, never raises it). Only clamps a COMPUTED value against the
+    // same weight's immediately preceding target; a real held value (see
+    // above) is exempt, and a genuinely different (typically lower,
+    // fatigue-driven) weight is its own track and keeps its own ceiling.
+    if (computed && i > 0 && targetWeights[i - 1] === weight && reps > targetReps[i - 1]) {
+      reps = targetReps[i - 1];
+    }
+    targetWeights.push(weight);
+    targetReps.push(reps);
   }
 
   const anyBelow = topWeightSets.some((l) => l.reps < max);
