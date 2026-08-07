@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { PersonaForm } from '../src/components/PersonaForm';
 import { Screen } from '../src/components/Screen';
+import { Button } from '../src/components/Button';
 import { supabase } from '../src/lib/supabase';
 import { track } from '../src/lib/analytics';
 import { useLanguage } from '../src/lib/language';
@@ -42,14 +43,11 @@ export default function OnboardingPersona() {
           (unlike consent/onboarding-plan's own root, which have nothing
           sensible before them), so this goes there, not to sign-out. */}
       <View style={{
-        flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between',
+        flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'flex-start',
         paddingHorizontal: spacing.lg, paddingTop: spacing.sm,
       }}>
         <Pressable onPress={() => router.replace('/onboarding-plan')}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
-        </Pressable>
-        <Pressable onPress={skip}>
-          <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('skipForNow')}</Text>
         </Pressable>
       </View>
       <PersonaForm
@@ -59,6 +57,11 @@ export default function OnboardingPersona() {
           router.replace('/');
         }}
       />
+      {/* Bottom, matching onboarding-plan's own "Skip for now" placement,
+          not a corner text link next to Cancel. */}
+      <View style={{ padding: spacing.md, paddingBottom: spacing.lg }}>
+        <Button variant="quiet" block onPress={skip}>{t('skipForNow')}</Button>
+      </View>
     </Screen>
   );
 }

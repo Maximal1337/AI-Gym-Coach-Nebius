@@ -16,9 +16,21 @@ function isAppLanguage(v: unknown): v is AppLanguage {
 }
 
 /** The device's own language, if it's one we support — same pattern most apps use for a first-launch default. */
-function deviceLanguage(): AppLanguage | null {
+export function deviceLanguage(): AppLanguage | null {
   const code = Localization.getLocales()[0]?.languageCode;
   return isAppLanguage(code) ? code : null;
+}
+
+/**
+ * Whether this device has ever gone through the explicit language-choice
+ * step (guidelines/language-discovery.html) — `setLanguage` is the only
+ * writer of this key; the auto-detected default `applyLanguage` falls
+ * back to on first load is deliberately never persisted, so an empty key
+ * here means "never confirmed," not "confirmed English."
+ */
+export async function hasChosenLanguage(): Promise<boolean> {
+  const stored = await AsyncStorage.getItem(STORAGE_KEY).catch(() => null);
+  return isAppLanguage(stored);
 }
 
 interface LanguageContextValue {

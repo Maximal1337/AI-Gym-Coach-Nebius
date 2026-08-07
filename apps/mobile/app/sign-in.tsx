@@ -214,9 +214,11 @@ export default function SignIn() {
             </Pressable>
           )}
 
-          <Text style={{ color: theme.inkSoft, textAlign: 'center', marginVertical: spacing.md }}>
-            {t('or')}
-          </Text>
+          {appleAvailable && (
+            <Text style={{ color: theme.inkSoft, textAlign: 'center', marginVertical: spacing.md }}>
+              {t('or')}
+            </Text>
+          )}
 
           <Field
             value={email}

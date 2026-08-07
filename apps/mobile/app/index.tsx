@@ -2,12 +2,14 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
+import { hasChosenLanguage } from '../src/lib/language';
 import { Screen } from '../src/components/Screen';
 import { useTheme } from '../src/theme';
 
 /**
  * Entry router: resume the user at the right step —
- * signed out -> sign-in; no consent -> consent; no plan -> paste plan;
+ * signed out -> sign-in; no explicit language choice on this device ->
+ * choose language; no consent -> consent; no plan -> paste plan;
  * no persona -> persona; otherwise the app.
  */
 export default function Entry() {
@@ -21,6 +23,13 @@ export default function Entry() {
       const user = data.session?.user;
       if (cancelled) return;
       if (!user) return router.replace('/sign-in');
+
+      // Checked first (guidelines/language-discovery.html's "explicit
+      // step"), on every fresh install/device — a device-local flag, not
+      // a DB column, since a different device can have a different
+      // system language even for the same account.
+      if (!(await hasChosenLanguage())) return router.replace('/onboarding-language');
+      if (cancelled) return;
 
       const [userRes, profileRes, planRes] = await Promise.all([
         supabase.from('users').select('terms_accepted_at, plan_setup_skipped_at').eq('id', user.id).maybeSingle(),
