@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { Alert, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { PlanPasteFlow } from '../src/components/PlanPasteFlow';
@@ -9,6 +9,7 @@ import { Screen } from '../src/components/Screen';
 import { ChoiceCard } from '../src/components/ChoiceCard';
 import { Badge } from '../src/components/Badge';
 import { Button } from '../src/components/Button';
+import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { supabase } from '../src/lib/supabase';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing } from '../src/theme';
@@ -25,6 +26,7 @@ export default function OnboardingPlan() {
   const { t } = useTranslation();
   const { dir } = useLanguage();
   const [choice, setChoice] = useState<Choice>(null);
+  const [skipping, setSkipping] = useState(false);
 
   if (choice === 'generate') {
     return (
@@ -65,14 +67,21 @@ export default function OnboardingPlan() {
   // back here every time instead of reaching the app. Chat nudges them
   // back to plans.tsx (the real "add a plan" surface) when they're ready.
   async function skip() {
-    const { data } = await supabase.auth.getSession();
-    const uid = data.session?.user.id;
-    if (uid) await supabase.from('users').update({ plan_setup_skipped_at: new Date().toISOString() }).eq('id', uid);
-    router.replace('/');
+    setSkipping(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const uid = data.session?.user.id;
+      if (uid) await supabase.from('users').update({ plan_setup_skipped_at: new Date().toISOString() }).eq('id', uid);
+      router.replace('/');
+    } catch {
+      Alert.alert(t('coachUnavailable'));
+      setSkipping(false);
+    }
   }
 
   return (
     <Screen>
+      <LoadingOverlay visible={skipping} object="plate" label={t('loading')} />
       <View style={{ flex: 1 }}>
         {/* Reached via replace() from consent, also replace()'d away — no
             screen behind this one to go back to. Signing out is the one
@@ -137,7 +146,7 @@ export default function OnboardingPlan() {
         </ScrollView>
 
         <View style={{ padding: spacing.md, paddingBottom: spacing.lg }}>
-          <Button variant="quiet" block onPress={skip}>{t('skipForNow')}</Button>
+          <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
         </View>
       </View>
     </Screen>

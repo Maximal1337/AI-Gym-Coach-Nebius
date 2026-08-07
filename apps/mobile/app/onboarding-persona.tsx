@@ -1,9 +1,11 @@
-import { Pressable, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { PersonaForm } from '../src/components/PersonaForm';
 import { Screen } from '../src/components/Screen';
 import { Button } from '../src/components/Button';
+import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { supabase } from '../src/lib/supabase';
 import { track } from '../src/lib/analytics';
 import { useLanguage } from '../src/lib/language';
@@ -13,6 +15,7 @@ export default function OnboardingPersona() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir, language } = useLanguage();
+  const [skipping, setSkipping] = useState(false);
 
   // Persona setup is skippable too — but unlike a missing plan, a missing
   // coach_profiles row is a hard 409 for every chat/session call
@@ -21,23 +24,30 @@ export default function OnboardingPersona() {
   // defaults rather than leaving it absent. Editable anytime from
   // Settings > coach persona.
   async function skip() {
-    const { data } = await supabase.auth.getUser();
-    const userId = data.user?.id;
-    if (!userId) return;
-    await supabase.from('coach_profiles').upsert({
-      user_id: userId,
-      coach_name: t('defaultCoachName'),
-      language,
-      tone_preset: 'friendly_casual',
-      accountability_style: 'gentle',
-      persona_freeform: null,
-    });
-    track('onboarding_completed');
-    router.replace('/');
+    setSkipping(true);
+    try {
+      const { data } = await supabase.auth.getUser();
+      const userId = data.user?.id;
+      if (!userId) return;
+      await supabase.from('coach_profiles').upsert({
+        user_id: userId,
+        coach_name: t('defaultCoachName'),
+        language,
+        tone_preset: 'friendly_casual',
+        accountability_style: 'gentle',
+        persona_freeform: null,
+      });
+      track('onboarding_completed');
+      router.replace('/');
+    } catch {
+      Alert.alert(t('coachUnavailable'));
+      setSkipping(false);
+    }
   }
 
   return (
     <Screen>
+      <LoadingOverlay visible={skipping} object="plate" label={t('loading')} />
       {/* Reached via replace() from onboarding-plan, not push — no native
           back. Going back to plan choice is a real, meaningful step here
           (unlike consent/onboarding-plan's own root, which have nothing
@@ -60,7 +70,7 @@ export default function OnboardingPersona() {
       {/* Bottom, matching onboarding-plan's own "Skip for now" placement,
           not a corner text link next to Cancel. */}
       <View style={{ padding: spacing.md, paddingBottom: spacing.lg }}>
-        <Button variant="quiet" block onPress={skip}>{t('skipForNow')}</Button>
+        <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
       </View>
     </Screen>
   );
