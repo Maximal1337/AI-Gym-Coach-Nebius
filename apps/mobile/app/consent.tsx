@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../src/lib/api';
@@ -7,6 +7,7 @@ import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { useLanguage } from '../src/lib/language';
+import { TERMS_URL } from '../src/lib/webUrl';
 import { useTheme, spacing, radius } from '../src/theme';
 
 export const TERMS_VERSION = '2026-07-26';
@@ -54,6 +55,9 @@ export default function Consent() {
           </Text>
         ))}
       </ScrollView>
+      <Pressable onPress={() => Linking.openURL(TERMS_URL)} style={{ marginTop: spacing.sm, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+        <Text style={{ color: theme.accent, fontSize: 12.5, fontWeight: '700' }}>{t('readFullTerms')}</Text>
+      </Pressable>
       <Pressable
         onPress={() => setChecked(!checked)}
         style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm, marginVertical: spacing.md, alignItems: 'flex-start' }}
