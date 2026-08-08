@@ -16,6 +16,8 @@ export interface PendingTurn {
   exerciseId: string;
   userMessage: string;
   recentHistory: Array<{ from: 'coach' | 'me'; text: string }>;
+  /** Set by the client before the first send attempt — lets a retry reuse the same server-side message row instead of double-sending. */
+  clientMessageId?: string;
 }
 
 export interface TurnResult {
@@ -36,11 +38,11 @@ export interface TurnResult {
 const KEY = 'gymcoach.pending-turn.v1';
 let flushing = false;
 let onDelivered: ((result: TurnResult) => void) | null = null;
-let onFailed: ((error: unknown) => void) | null = null;
+let onFailed: ((error: unknown, clientMessageId?: string) => void) | null = null;
 
 export function setPendingTurnHandlers(handlers: {
   onDelivered: (result: TurnResult) => void;
-  onFailed: (error: unknown) => void;
+  onFailed: (error: unknown, clientMessageId?: string) => void;
 } | null): void {
   onDelivered = handlers?.onDelivered ?? null;
   onFailed = handlers?.onFailed ?? null;
@@ -75,7 +77,7 @@ export async function flushPendingTurn(): Promise<void> {
       if (e instanceof ApiError && e.status >= 400 && e.status < 500 && e.status !== 429) {
         // Session gone / invalid — retrying forever won't help.
         await AsyncStorage.removeItem(KEY);
-        onFailed?.(e);
+        onFailed?.(e, item.clientMessageId);
       }
       // else: offline or server trouble — stay queued, retry on reconnect.
     }

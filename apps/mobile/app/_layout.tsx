@@ -1,10 +1,14 @@
-import { Stack } from 'expo-router';
+import { useEffect } from 'react';
+import { AppState } from 'react-native';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import * as Notifications from 'expo-notifications';
 import * as Sentry from '@sentry/react-native';
 import { palette } from '@gymcoach/shared';
 import { LanguageProvider } from '../src/lib/language';
 import { UnitsProvider } from '../src/lib/units';
+import { UnreadProvider, useUnread } from '../src/lib/unread';
 import '../src/i18n';
 
 // GYM-14: crash/error reporting. An empty DSN leaves the SDK disabled
@@ -16,6 +20,59 @@ Sentry.init({
   tracesSampleRate: 0,
 });
 
+// Durable coach replies (Linear doc "Durable Coach Replies"): push.ts has
+// registered a token since onboarding, but until now nothing reacted to a
+// received notification. While the app is foregrounded, a native alert is
+// an interruption for something already visible as an unread badge on the
+// chat tab (see NotificationBridge below) — only show the OS banner when
+// the app isn't the thing the user is currently looking at.
+Notifications.setNotificationHandler({
+  handleNotification: async () => {
+    const foregrounded = AppState.currentState === 'active';
+    return {
+      shouldShowAlert: !foregrounded,
+      shouldShowBanner: !foregrounded,
+      shouldShowList: !foregrounded,
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    };
+  },
+});
+
+/**
+ * Rendered inside UnreadProvider (unlike the listeners themselves, which
+ * used to live directly in RootLayout) specifically so the received-
+ * notification handler can reach useUnread() — RootLayout renders the
+ * provider as a child, so it can't call the hook itself.
+ */
+function NotificationBridge() {
+  const { increment } = useUnread();
+
+  // Tapping a notification just needs to land on the chat tab — whether
+  // the app was fully closed (resume-on-mount) or only backgrounded (the
+  // AppState listener), index.tsx already knows how to catch up once
+  // it's there.
+  useEffect(() => {
+    const responseSub = Notifications.addNotificationResponseReceivedListener(() => {
+      router.push('/(tabs)');
+    });
+    // Foreground receipt: setNotificationHandler above already suppressed
+    // the native banner for this case — this is what shows the "+1" on
+    // the chat tab instead. Doesn't fetch/apply anything itself; the chat
+    // screen's own catch-up (or just opening it) does that, this is only
+    // the "something happened" signal for whichever tab isn't chat.
+    const receivedSub = Notifications.addNotificationReceivedListener(() => {
+      if (AppState.currentState === 'active') increment();
+    });
+    return () => {
+      responseSub.remove();
+      receivedSub.remove();
+    };
+  }, [increment]);
+
+  return null;
+}
+
 function RootLayout() {
   // Dark mode only, by design decision — not following the system scheme.
   const theme = palette.dark;
@@ -24,13 +81,16 @@ function RootLayout() {
     <SafeAreaProvider>
       <LanguageProvider>
         <UnitsProvider>
-          <StatusBar style="light" />
-          <Stack
-            screenOptions={{
-              headerShown: false,
-              contentStyle: { backgroundColor: theme.bg },
-            }}
-          />
+          <UnreadProvider>
+            <NotificationBridge />
+            <StatusBar style="light" />
+            <Stack
+              screenOptions={{
+                headerShown: false,
+                contentStyle: { backgroundColor: theme.bg },
+              }}
+            />
+          </UnreadProvider>
         </UnitsProvider>
       </LanguageProvider>
     </SafeAreaProvider>

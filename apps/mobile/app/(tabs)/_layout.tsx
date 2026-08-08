@@ -3,14 +3,17 @@ import { Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
+import { useUnread } from '../../src/lib/unread';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
 function TabIcon({
-  name, label, focused,
+  name, label, focused, badge,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   label: string;
   focused: boolean;
+  /** A reply that arrived while this tab wasn't the one showing — see unread.tsx. */
+  badge?: number;
 }) {
   const theme = useTheme();
   return (
@@ -20,7 +23,17 @@ function TabIcon({
       borderRadius: 20,
       backgroundColor: focused ? theme.surface : 'transparent',
     }}>
-      <Ionicons name={name} size={20} color={focused ? theme.accent : theme.inkSoft} />
+      <View>
+        <Ionicons name={name} size={20} color={focused ? theme.accent : theme.inkSoft} />
+        {!!badge && (
+          <View style={{
+            position: 'absolute', top: -4, right: -8, minWidth: 15, height: 15, borderRadius: 8,
+            backgroundColor: theme.accent, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 3,
+          }}>
+            <Text style={{ color: theme.onAccent, fontSize: 9.5, fontWeight: '800' }}>{`+${Math.min(badge, 9)}`}</Text>
+          </View>
+        )}
+      </View>
       <Text style={{ fontSize: 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
         {label}
       </Text>
@@ -31,6 +44,7 @@ function TabIcon({
 export default function TabsLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
+  const { count: unread } = useUnread();
 
   return (
     <Tabs
@@ -79,7 +93,12 @@ export default function TabsLayout() {
         options={{
           title: t('chatTitle'),
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'} label={t('chatTitle')} focused={focused} />
+            <TabIcon
+              name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
+              label={t('chatTitle')}
+              focused={focused}
+              badge={unread}
+            />
           ),
         }}
       />

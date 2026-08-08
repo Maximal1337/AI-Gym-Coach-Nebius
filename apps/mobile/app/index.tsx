@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 import { hasChosenLanguage } from '../src/lib/language';
+import { registerPush } from '../src/lib/push';
 import { Screen } from '../src/components/Screen';
 import { useTheme } from '../src/theme';
 
@@ -49,6 +50,13 @@ export default function Entry() {
       if (!userRes.data?.terms_accepted_at) return router.replace('/consent');
       if (!planRes.count && !userRes.data.plan_setup_skipped_at) return router.replace('/onboarding-plan');
       if (!profileRes.data) return router.replace('/onboarding-persona');
+      // Durable coach replies (Linear doc): registerPush previously only
+      // ran once, during onboarding — anyone who'd already onboarded
+      // before that existed (or whose token went stale) never got one.
+      // Fire-and-forget on every launch instead: idempotent (upsert),
+      // permission is only ever actually prompted once by iOS regardless
+      // of how many times this runs, and it must never block navigation.
+      void registerPush(user.id);
       router.replace('/(tabs)');
     })().finally(() => !cancelled && setChecking(false));
     return () => {

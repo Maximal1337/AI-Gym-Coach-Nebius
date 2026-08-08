@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, Text, TextInput, View,
+  ActivityIndicator, Alert, AppState, FlatList, Keyboard, KeyboardAvoidingView, Platform, Pressable, Text, TextInput,
+  View,
 } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
@@ -10,6 +11,8 @@ import { enqueueTurn, setPendingTurnHandlers, type TurnResult } from '../../src/
 import {
   enqueueSessionStart, setPendingSessionStartHandlers, type SessionStartResult,
 } from '../../src/lib/pendingSessionStart';
+import { fetchResumableSession, fetchMessages, generateMessageId, type DbMessage } from '../../src/lib/messages';
+import { splitCoachReply } from '../../src/lib/messageChunks';
 import { Screen } from '../../src/components/Screen';
 import { MarkdownText } from '../../src/components/MarkdownText';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
@@ -17,6 +20,7 @@ import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
 import { useLanguage } from '../../src/lib/language';
 import { useUnits, formatWeightKg, weightUnitLabel, type UnitSystem } from '../../src/lib/units';
 import { fetchUsageSnapshot } from '../../src/lib/usage';
+import { useUnread } from '../../src/lib/unread';
 import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -29,7 +33,22 @@ interface SuggestedAction {
   targetWeights: number[] | null;
   sets: number;
 }
-interface Msg { id: string; from: 'coach' | 'me' | 'system'; text: string }
+interface Msg {
+  id: string;
+  from: 'coach' | 'me' | 'system';
+  text: string;
+  /** Only ever set on 'me' messages — lets a durable catch-up fetch recognize a message already shown optimistically instead of re-appending it (see catchUp()). */
+  clientMessageId?: string;
+  /** Only set on a request-specific error bubble (e.g. "coachUnavailable" from send()'s own catch) — names the 'me' message it was reacting to, so catchUp() can retroactively remove it once that same exchange's real reply turns out to have landed durably after all (see the race this guards against in send()/confirmSets()). */
+  relatedClientMessageId?: string;
+}
+
+/** A 'me' row's payload carries the raw confirmedSets (see confirmExerciseSets in supabase/functions/_shared/mod.ts) rather than pre-formatted text, since formatting is unit-aware and units live client-side. */
+function messageText(row: DbMessage, units: UnitSystem): string {
+  const confirmedSets = (row.payload as { confirmedSets?: Array<{ weightKg: number; reps: number }> } | null)?.confirmedSets;
+  if (row.from_role === 'me' && Array.isArray(confirmedSets)) return formatConfirmedSets(confirmedSets, units);
+  return row.text;
+}
 
 /** "58kg × 8/8/8" when every set shares a weight (the common case), else a per-set list. Weights are always stored in kg; this is the one boundary that converts to whatever the user has chosen to see (guidelines/units-setting.html). */
 function formatConfirmedSets(sets: Array<{ weightKg: number; reps: number }>, units: UnitSystem): string {
@@ -46,6 +65,7 @@ export default function Chat() {
   const { t } = useTranslation();
   const { dir } = useLanguage();
   const { units } = useUnits();
+  const { setChatFocused } = useUnread();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentExerciseId, setCurrentExerciseId] = useState<string | null>(null);
@@ -74,6 +94,19 @@ export default function Chat() {
   const [keyboardVisible, setKeyboardVisible] = useState(false);
   const list = useRef<FlatList>(null);
   const nextId = useRef(0);
+  // Watermark for the durable catch-up fetch (see catchUp()) — anything
+  // already reflected in `msgs` via the live path updates this so a later
+  // fetch only ever asks for what's genuinely new, never re-fetching what
+  // was already shown live.
+  const lastMessageAt = useRef<string | null>(null);
+  // clientMessageIds the durable path has already delivered a real answer
+  // for — guards against the original live request settling (successfully
+  // or with an error) *after* catchUp()/resume already handled it, which
+  // would otherwise show a stale "coachUnavailable" (or a duplicate reply)
+  // right after the real one. Covers the reverse timing too: if the stale
+  // error shows first, catchUp() finds and removes it once the real
+  // answer for the same id turns up (see catchUp()).
+  const resolvedMessageIds = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
@@ -94,11 +127,23 @@ export default function Chat() {
       supabase.from('training_plans').select('id, name').eq('status', 'active')
         .then(({ data }) => setPlans(data ?? []));
       fetchUsageSnapshot().then((s) => setRemainingWorkouts(s.remaining));
-    }, []),
+      // Viewing this tab is itself "seen it" — same as any messaging app's
+      // unread badge (see unread.tsx / NotificationBridge in _layout.tsx).
+      // Cleared on the way out too, so a badge from a push that arrives
+      // the instant after leaving isn't suppressed by a stale "focused" flag.
+      setChatFocused(true);
+      return () => setChatFocused(false);
+    }, [setChatFocused]),
   );
 
-  function push(from: Msg['from'], text: string) {
-    setMsgs((m) => [...m, { id: String(nextId.current++), from, text }]);
+  function push(from: Msg['from'], text: string, clientMessageId?: string) {
+    setMsgs((m) => [...m, { id: clientMessageId ?? String(nextId.current++), from, text, clientMessageId }]);
+    setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
+  }
+
+  /** Like push('system', ...), but tags the bubble to a specific outgoing message so catchUp() can retroactively remove it if that exchange turns out to have actually succeeded (see resolvedMessageIds). */
+  function pushError(text: string, relatedClientMessageId?: string) {
+    setMsgs((m) => [...m, { id: String(nextId.current++), from: 'system', text, relatedClientMessageId }]);
     setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
   }
 
@@ -108,19 +153,19 @@ export default function Chat() {
   // rendering one long block. A single-topic reply (the common case) is
   // one chunk, pushed immediately, unchanged from before.
   function pushCoachMessage(text: string) {
-    const chunks = text.split(/\n{2,}/).map((c) => c.trim()).filter(Boolean);
+    const chunks = splitCoachReply(text);
     chunks.forEach((chunk, i) => {
       if (i === 0) push('coach', chunk);
       else setTimeout(() => push('coach', chunk), i * 550);
     });
   }
 
-  function coachError(e: unknown) {
+  function coachError(e: unknown, relatedClientMessageId?: string) {
     if (e instanceof ApiError && e.code === 'monthly_budget_exhausted') {
       push('system', t('budgetExhausted'));
       router.push('/subscribe');
     } else if (e instanceof ApiError && e.code === 'session_expired') push('system', t('sessionExpired'));
-    else push('system', t('coachUnavailable'));
+    else pushError(t('coachUnavailable'), relatedClientMessageId);
   }
 
   // The LLM composes messages in prose and can occasionally mistranscribe
@@ -145,20 +190,22 @@ export default function Chat() {
     return `${message}\n\n${line}`;
   }
 
-  function handleTurnResult(res: TurnResult) {
-    // The server always computes the *next* exercise's target so it's ready
-    // if the turn advances, but a turn that stays on the current exercise
-    // (e.g. a note, a question) shouldn't show a target for a different
-    // exercise the user isn't even being introduced to yet.
-    const text = res.advance
-      ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps, res.nextTargetWeights)
-      : res.message;
-    pushCoachMessage(text);
+  // State-only half of handleTurnResult, reused by the durable catch-up
+  // path (resume-on-mount, AppState 'active') — never pushes a chat
+  // bubble (already covered by messagesFromRow), but DOES still trigger
+  // finish() on sessionComplete: the workout is just as genuinely done
+  // whether the client learned that live or caught up on it later, and
+  // finish()/session-complete is idempotent (sessionId already cleared
+  // after the first successful call), so calling it from both paths in
+  // the rare case they'd both fire is harmless. Skipping this here was
+  // an earlier mistake — it meant a session finished while backgrounded
+  // never got its summary printed at all (GYM feedback).
+  function applyTurnState(res: TurnResult, sessionIdOverride?: string) {
     setProgress(res.progress ?? null);
     if (!res.advance) return; // same exercise still in play — leave pendingAction as-is
     if (res.sessionComplete) {
       setPendingAction(null);
-      void finish();
+      void finish(sessionIdOverride);
       return;
     }
     setCurrentExerciseId(res.nextExerciseId);
@@ -176,11 +223,25 @@ export default function Chat() {
     );
   }
 
+  function handleTurnResult(res: TurnResult) {
+    // The server always computes the *next* exercise's target so it's ready
+    // if the turn advances, but a turn that stays on the current exercise
+    // (e.g. a note, a question) shouldn't show a target for a different
+    // exercise the user isn't even being introduced to yet.
+    const text = res.advance
+      ? withTarget(res.message, res.nextSuggestedWeightKg, res.nextTargetReps, res.nextTargetWeights)
+      : res.message;
+    pushCoachMessage(text);
+    lastMessageAt.current = new Date().toISOString();
+    applyTurnState(res); // also triggers finish() on sessionComplete — see applyTurnState's own note
+  }
+
   function handleSessionStartResult(res: SessionStartResult) {
     track('workout_started');
     setSessionId(res.sessionId);
     setCurrentExerciseId(res.exerciseId);
     pushCoachMessage(withTarget(res.message, res.suggestedWeightKg, res.targetReps, res.targetWeights));
+    lastMessageAt.current = new Date().toISOString();
     setPendingAction({
       exerciseId: res.exerciseId,
       weightKg: res.suggestedWeightKg,
@@ -199,13 +260,27 @@ export default function Chat() {
   // the bar in place, tappable again.
   async function confirmSets(exerciseId: string, sets: Array<{ weightKg: number; reps: number }>) {
     if (!sessionId || busy) return;
-    push('me', formatConfirmedSets(sets, units));
+    const clientMessageId = generateMessageId();
+    push('me', formatConfirmedSets(sets, units), clientMessageId);
     setBusy(true);
     try {
-      const res = await callFn<TurnResult>('coach-turn', { sessionId, exerciseId, confirmedSets: sets });
-      handleTurnResult(res);
+      const res = await callFn<TurnResult>('coach-turn', {
+        sessionId, exerciseId, confirmedSets: sets, clientMessageId,
+      });
+      // The durable path (catchUp()/resume) may have already delivered
+      // this exact reply while this request was stuck backgrounded —
+      // showing it again here would duplicate the bubble.
+      if (!resolvedMessageIds.current.has(clientMessageId)) handleTurnResult(res);
     } catch (e) {
-      coachError(e);
+      // Don't just trust that this genuinely failed — check the durable
+      // record fresh first. Otherwise a request that actually succeeded
+      // while backgrounded (but whose own suspended fetch settles with an
+      // error on resume) flashes "coachUnavailable" before the real reply
+      // replaces it a moment later; checking here avoids the flash rather
+      // than just cleaning it up after the fact.
+      await catchUp();
+      if (resolvedMessageIds.current.has(clientMessageId)) return;
+      coachError(e, clientMessageId);
     } finally {
       setBusy(false);
     }
@@ -225,6 +300,110 @@ export default function Chat() {
     return () => setPendingSessionStartHandlers(null);
   }, []);
 
+  // Turns a fetched row into one or more bubbles — shared by resume-on-mount
+  // and catchUp() below so a durably-fetched message formats identically to
+  // its live counterpart. A coach reply covering more than one topic is
+  // stored as a single row (one blank-line-separated `text`), same as the
+  // live path receives it — pushCoachMessage() splits that into separate
+  // bubbles for the live path, so this does the same split here, or a
+  // multi-topic reply that only arrived via resume/catch-up renders as one
+  // undivided block instead of matching what a live reply looks like.
+  function messagesFromRow(row: DbMessage): Msg[] {
+    if (row.from_role !== 'coach') {
+      return [{
+        id: row.client_message_id ?? row.id,
+        from: row.from_role,
+        text: messageText(row, units),
+        clientMessageId: row.client_message_id ?? undefined,
+      }];
+    }
+    const chunks = splitCoachReply(messageText(row, units));
+    return chunks.map((chunk, i) => ({ id: i === 0 ? row.id : `${row.id}-${i}`, from: 'coach' as const, text: chunk }));
+  }
+
+  // Applies whatever TurnResult/SessionStartResult-shaped payload rode
+  // along with the most recent coach row among `rows` — state-only, same
+  // as applyTurnState, so resuming/catching-up never re-triggers a chat
+  // bubble (already covered by messagesFromRow) or finish().
+  async function applyLatestPayload(rows: DbMessage[], sessionIdOverride?: string) {
+    const lastCoach = [...rows].reverse().find((r) => r.from_role === 'coach' && r.payload);
+    if (!lastCoach?.payload) return;
+    const payload = lastCoach.payload as Record<string, unknown>;
+    if ('advance' in payload) {
+      applyTurnState(payload as unknown as TurnResult, sessionIdOverride);
+      return;
+    }
+    if ('exerciseId' in payload) {
+      // SessionStartResult shape — its own reply, before any turn has
+      // happened yet. Unlike TurnResult it carries no exercise name, so
+      // that's the one extra lookup this branch needs.
+      const exId = payload.exerciseId as string;
+      setCurrentExerciseId(exId);
+      setPendingAction({
+        exerciseId: exId,
+        weightKg: (payload.suggestedWeightKg as number | null) ?? null,
+        targetReps: (payload.targetReps as number[] | null) ?? null,
+        targetWeights: (payload.targetWeights as number[] | null) ?? null,
+        sets: (payload.exerciseSets as number | undefined) ?? 1,
+      });
+      const { data } = await supabase.from('exercises').select('name').eq('id', exId).maybeSingle();
+      setCurrentExerciseName(data?.name ?? null);
+    }
+  }
+
+  // Cold-launch recovery: if the app was killed mid-turn, there's no
+  // in-memory state left at all to resume from — this is the only path
+  // back to it, rebuilding the transcript and current-exercise state from
+  // what was durably recorded (see the Linear doc "Durable Coach Replies").
+  useEffect(() => {
+    (async () => {
+      const session = await fetchResumableSession();
+      if (!session) return;
+      const rows = await fetchMessages(session.id);
+      if (rows.length === 0) return;
+      setSessionId(session.id);
+      setMsgs(rows.flatMap(messagesFromRow));
+      lastMessageAt.current = rows[rows.length - 1].created_at;
+      for (const r of rows) if (r.client_message_id) resolvedMessageIds.current.add(r.client_message_id);
+      await applyLatestPayload(rows, session.id);
+      setTimeout(() => list.current?.scrollToEnd({ animated: false }), 50);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Warm-resume recovery: the app was only backgrounded, not evicted —
+  // msgs/sessionId already survived in memory, this just catches up on
+  // whatever landed durably while the direct response had nowhere to go.
+  async function catchUp() {
+    if (!sessionId) return;
+    const rows = await fetchMessages(sessionId, lastMessageAt.current ?? undefined);
+    if (rows.length === 0) return;
+    const newlyResolved = rows.map((r) => r.client_message_id).filter((id): id is string => !!id);
+    setMsgs((m) => {
+      const known = new Set(m.map((x) => x.clientMessageId ?? x.id));
+      const additions = rows.filter((r) => !known.has(r.client_message_id ?? r.id)).flatMap(messagesFromRow);
+      // The stale-request race can resolve either order: if send()'s own
+      // catch already showed "coachUnavailable" for one of these exchanges
+      // before this fetch landed, that error is now known-wrong — drop it
+      // rather than leave it sitting next to the real answer.
+      const cleaned = m.filter((x) => !(x.relatedClientMessageId && newlyResolved.includes(x.relatedClientMessageId)));
+      return additions.length > 0 || cleaned.length !== m.length ? [...cleaned, ...additions] : m;
+    });
+    for (const id of newlyResolved) resolvedMessageIds.current.add(id);
+    lastMessageAt.current = rows[rows.length - 1].created_at;
+    await applyLatestPayload(rows, sessionId);
+    setBusy(false);
+    setTimeout(() => list.current?.scrollToEnd({ animated: true }), 50);
+  }
+
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void catchUp();
+    });
+    return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
   async function start(plan: Plan) {
     setBusy(true);
     push('me', plan.name);
@@ -243,11 +422,23 @@ export default function Chat() {
       if (e instanceof ApiError) {
         coachError(e);
       } else {
-        // A network-level failure, not a server rejection — queue it and
-        // retry on reconnect instead of just giving up (pendingSessionStart.ts).
-        // session-start is idempotent server-side, so retrying is safe.
-        await enqueueSessionStart({ planId: plan.id });
-        push('system', t('queuedOffline'));
+        // A network-level failure, not a server rejection. The common
+        // cause is the OS reporting a just-resumed connection as failed
+        // right after backgrounding — not a real outage — so retry once
+        // immediately before assuming we're genuinely offline; showing
+        // "queuedOffline" for what was actually a momentary blip, right
+        // before the real reply arrives seconds later, is more confusing
+        // than useful. session-start is idempotent, so this retry is safe.
+        try {
+          handleSessionStartResult(
+            await callFn<SessionStartResult>('session-start', { planId: plan.id }),
+          );
+        } catch {
+          // Still failing — queue it and retry on reconnect instead of
+          // just giving up (pendingSessionStart.ts).
+          await enqueueSessionStart({ planId: plan.id });
+          push('system', t('queuedOffline'));
+        }
       }
     } finally {
       setBusy(false);
@@ -258,7 +449,8 @@ export default function Chat() {
     const text = draft.trim();
     if (!text || !sessionId || !currentExerciseId || busy) return;
     setDraft('');
-    push('me', text);
+    const clientMessageId = generateMessageId();
+    push('me', text, clientMessageId);
     setBusy(true);
     // Last few turns, so the coach has short-term memory of this
     // exchange (e.g. a target it just agreed to change).
@@ -266,18 +458,38 @@ export default function Chat() {
       .filter((m) => m.from !== 'system')
       .slice(-10)
       .map((m) => ({ from: m.from as 'coach' | 'me', text: m.text }));
-    const turn = { sessionId, exerciseId: currentExerciseId, userMessage: text, recentHistory };
+    const turn = { sessionId, exerciseId: currentExerciseId, userMessage: text, recentHistory, clientMessageId };
     try {
-      handleTurnResult(await callFn<TurnResult>('coach-turn', turn));
+      const res = await callFn<TurnResult>('coach-turn', turn);
+      // The durable path (catchUp()/resume) may have already delivered
+      // this exact reply while this request was stuck backgrounded —
+      // showing it again here would duplicate the bubble.
+      if (!resolvedMessageIds.current.has(clientMessageId)) handleTurnResult(res);
     } catch (e) {
+      // Don't just trust that this genuinely failed — check the durable
+      // record fresh first (see confirmSets()'s identical comment for why
+      // this avoids a "coachUnavailable" flash rather than just cleaning
+      // one up after the fact).
+      await catchUp();
+      if (resolvedMessageIds.current.has(clientMessageId)) return;
       if (e instanceof ApiError) {
         setDraft(text); // server rejected it outright — let the user retry
-        coachError(e);
+        coachError(e, clientMessageId);
       } else {
-        // A network-level failure, not a server rejection — queue it
-        // instead of losing the report; pendingTurn.ts retries on reconnect.
-        await enqueueTurn(turn);
-        push('system', t('queuedOffline'));
+        // A network-level failure, not a server rejection. As in start()
+        // above: the common cause right after backgrounding is the OS
+        // reporting a stale connection as failed, not a real outage — try
+        // once more immediately (safe: clientMessageId means a retry
+        // reuses the same server-side row, never a second LLM call)
+        // before queuing and showing "queuedOffline" for what's likely
+        // about to succeed anyway.
+        try {
+          const res = await callFn<TurnResult>('coach-turn', turn);
+          if (!resolvedMessageIds.current.has(clientMessageId)) handleTurnResult(res);
+        } catch {
+          await enqueueTurn(turn);
+          push('system', t('queuedOffline'));
+        }
       }
     } finally {
       setBusy(false);
@@ -307,12 +519,18 @@ export default function Chat() {
     );
   }
 
-  async function finish() {
-    if (!sessionId) return;
+  // Accepts an explicit id, rather than only ever reading the sessionId
+  // state, for callers that just determined it themselves in the same
+  // tick as calling setSessionId() (resume-on-mount) — a state setter
+  // doesn't update the current closure synchronously, so relying on the
+  // `sessionId` variable right after setting it would silently no-op here.
+  async function finish(targetSessionId?: string) {
+    const id = targetSessionId ?? sessionId;
+    if (!id) return;
     setBusy(true);
     try {
       const res = await callFn<{ exercises: Array<{ name: string; sets: string[] }> }>(
-        'session-complete', { sessionId },
+        'session-complete', { sessionId: id },
       );
       track('workout_completed');
       const lines = res.exercises.map((e) => `${e.name}: ${e.sets.join(', ')}`).join('\n');
