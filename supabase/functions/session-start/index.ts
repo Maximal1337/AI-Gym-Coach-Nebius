@@ -96,7 +96,7 @@ Deno.serve(withSentry(async (req) => {
     sessionId = session.id;
   }
 
-  const turn = await runExerciseTurn(db, user.id, plan.id, firstExercise);
+  const turn = await runExerciseTurn(db, user.id, plan.id, firstExercise, sessionId);
   if (turn.status === 200) {
     await db.from("workout_sessions").update({ intro_response: turn.body }).eq("id", sessionId);
   }

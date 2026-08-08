@@ -139,6 +139,119 @@ export async function recordUsage(
   }
 }
 
+/**
+ * Ambient global injected by the Supabase Edge Runtime (also present in
+ * the local CLI's edge-runtime) — keeps the function isolate alive for a
+ * background promise after the HTTP response has already been returned,
+ * up to ~150s/400s on the free/paid plan. Not part of standard Deno
+ * typings, and referencing a genuinely undeclared bare identifier throws
+ * a ReferenceError in JS regardless of `?.` — only `typeof` is safe
+ * against that, which is why safeWaitUntil checks it that way rather
+ * than `EdgeRuntime?.waitUntil(...)` (a mistake caught in review: that
+ * form would crash every coaching turn, not just skip the durability
+ * tail, if this global were ever absent).
+ */
+declare const EdgeRuntime: { waitUntil: (promise: Promise<unknown>) => void } | undefined;
+
+function safeWaitUntil(promise: Promise<unknown>): void {
+  if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(promise);
+}
+
+/**
+ * Durable coaching-reply transcript (lean version — Linear doc "Durable
+ * Coach Replies"). Every message gets a row here regardless of whether
+ * the phone is still around to receive the direct response, so a
+ * backgrounded/killed app can catch up on relaunch instead of losing the
+ * reply outright.
+ */
+export async function insertMessage(
+  db: SupabaseClient,
+  params: {
+    sessionId: string;
+    userId: string;
+    fromRole: "coach" | "me" | "system";
+    text: string;
+    payload?: Record<string, unknown> | null;
+    clientMessageId?: string | null;
+  },
+): Promise<{ inserted: boolean }> {
+  const { error } = await db.from("messages").insert({
+    session_id: params.sessionId,
+    user_id: params.userId,
+    from_role: params.fromRole,
+    text: params.text,
+    payload: params.payload ?? null,
+    client_message_id: params.clientMessageId ?? null,
+  });
+  if (error) {
+    // 23505 = unique_violation: a retried send hitting the dedup index —
+    // expected and harmless, the caller decides how to react.
+    if (error.code !== "23505") {
+      console.error("messages insert failed", { sessionId: params.sessionId, error: error.message });
+    }
+    return { inserted: false };
+  }
+  return { inserted: true };
+}
+
+/**
+ * A duplicate 'me' insert means this exact client message was already
+ * processed by an earlier request (the client only retries after
+ * believing its original send failed). Rather than call the agent a
+ * second time, replay whatever coach reply already followed it — best
+ * effort: if that reply hasn't landed yet (a rare race with the original
+ * request's own waitUntil tail), returns null and the caller proceeds
+ * normally rather than blocking/polling for it.
+ */
+async function findReplayReply(
+  db: SupabaseClient,
+  sessionId: string,
+  clientMessageId: string,
+): Promise<Record<string, unknown> | null> {
+  const { data: original } = await db.from("messages")
+    .select("created_at")
+    .eq("session_id", sessionId)
+    .eq("from_role", "me")
+    .eq("client_message_id", clientMessageId)
+    .maybeSingle();
+  if (!original) return null;
+  const { data: reply } = await db.from("messages")
+    .select("payload")
+    .eq("session_id", sessionId)
+    .eq("from_role", "coach")
+    .gt("created_at", original.created_at)
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  return (reply?.payload as Record<string, unknown> | undefined) ?? null;
+}
+
+/**
+ * Finishes the GYM-31 relay this table's writers were left half-built for
+ * (a push_tokens row and nothing that ever sent one). Best-effort/never
+ * throws, matching push.ts's own "never crash on push" discipline — a
+ * failed send here must never fail the coaching turn itself.
+ */
+export async function sendPushForTurn(
+  db: SupabaseClient,
+  userId: string,
+  title: string,
+  body: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  try {
+    const { data: tokens } = await db.from("push_tokens").select("token").eq("user_id", userId);
+    if (!tokens || tokens.length === 0) return;
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json" },
+      body: JSON.stringify(tokens.map((t) => ({ to: t.token, title, body, data }))),
+    });
+  } catch (e) {
+    console.error("push send failed", { userId, error: (e as Error).message });
+  }
+}
+
 /** Call the agent service. GYM-56's kill switch lives on the agent side. */
 export async function callAgent(
   payload: unknown,
@@ -497,10 +610,25 @@ export async function runConversationExerciseTurn(
     exercise: Record<string, unknown>;
     userMessage: string;
     recentHistory: Array<{ from: "coach" | "me"; text: string }>;
+    /** Set by the client on send — the duplicate-send guard (see insertMessage/findReplayReply). */
+    clientMessageId?: string | null;
   },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { userId, sessionId, planId, exercise, userMessage, recentHistory } = params;
+  const { userId, sessionId, planId, exercise, userMessage, recentHistory, clientMessageId } = params;
   const exerciseId = exercise.id as string;
+
+  if (clientMessageId) {
+    const { inserted } = await insertMessage(db, {
+      sessionId, userId, fromRole: "me", text: userMessage, clientMessageId,
+    });
+    if (!inserted) {
+      const replay = await findReplayReply(db, sessionId, clientMessageId);
+      if (replay) return { status: 200, body: replay };
+      // else: original reply hasn't landed yet (rare race) — fall through and process normally.
+    }
+  } else {
+    await insertMessage(db, { sessionId, userId, fromRole: "me", text: userMessage });
+  }
 
   const [{ data: profileRow }, { data: userRow }, ordered, { attemptedIds, deferred }, thisSessionLogRows, lastOtherExerciseLog] = await Promise.all([
     db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
@@ -734,31 +862,24 @@ export async function runConversationExerciseTurn(
     }
   }
 
-  if (!advance) {
-    return {
-      status: 200,
-      body: {
-        message: turn.message,
-        advance: false,
-        nextExerciseId: exerciseId,
-        nextExerciseName: exercise.name as string,
-        nextExerciseSets: exercise.sets as number,
-        sessionComplete: false,
-        degraded: !!turn.degraded,
-        nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
-        nextTargetReps: turn.nextTargetReps ?? null,
-        nextTargetWeights: turn.nextTargetWeights ?? null,
-        progress: computeProgress(ordered, attemptedIds),
-      },
-    };
-  }
-
-  // The agent already composed one unified reply covering whichever
-  // exercise is actually next (default, switched, or substituted) — no
-  // second HTTP round trip needed here, unlike the pre-tool-calling design.
-  return {
-    status: 200,
-    body: {
+  const body = !advance
+    ? {
+      message: turn.message,
+      advance: false,
+      nextExerciseId: exerciseId,
+      nextExerciseName: exercise.name as string,
+      nextExerciseSets: exercise.sets as number,
+      sessionComplete: false,
+      degraded: !!turn.degraded,
+      nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
+      nextTargetReps: turn.nextTargetReps ?? null,
+      nextTargetWeights: turn.nextTargetWeights ?? null,
+      progress: computeProgress(ordered, attemptedIds),
+    }
+    // The agent already composed one unified reply covering whichever
+    // exercise is actually next (default, switched, or substituted) — no
+    // second HTTP round trip needed here, unlike the pre-tool-calling design.
+    : {
       message: turn.message,
       advance: true,
       nextExerciseId: nextRow?.id ?? null,
@@ -770,8 +891,21 @@ export async function runConversationExerciseTurn(
       nextTargetReps: turn.nextTargetReps ?? null,
       nextTargetWeights: turn.nextTargetWeights ?? null,
       progress: computeProgress(ordered, attemptedIds),
-    },
-  };
+    };
+
+  // Durability tail (lean version): guarded by waitUntil so it finishes
+  // even if the phone already disconnected — the direct response below
+  // still returns immediately either way.
+  safeWaitUntil((async () => {
+    await insertMessage(db, {
+      sessionId, userId, fromRole: "coach", text: body.message as string, payload: body, clientMessageId: null,
+    });
+    await sendPushForTurn(
+      db, userId, (profileRow.coach_name as string) ?? "Coach", String(body.message).slice(0, 120), { sessionId },
+    );
+  })());
+
+  return { status: 200, body };
 }
 
 /**
@@ -790,10 +924,28 @@ export async function confirmExerciseSets(
     planId: string;
     exercise: Record<string, unknown>;
     confirmedSets: Array<{ weightKg: number; reps: number }>;
+    /** Set by the client on send — the duplicate-send guard (see insertMessage/findReplayReply). */
+    clientMessageId?: string | null;
   },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { userId, sessionId, planId, exercise, confirmedSets } = params;
+  const { userId, sessionId, planId, exercise, confirmedSets, clientMessageId } = params;
   const exerciseId = exercise.id as string;
+
+  // Kept as a plain kg fallback for text — the client reformats this into
+  // the user's chosen unit from `payload.confirmedSets` on resume, the
+  // same way its own optimistic bubble already does live.
+  const meText = confirmedSets.map((s) => `${s.weightKg}kg×${s.reps}`).join(", ");
+  if (clientMessageId) {
+    const { inserted } = await insertMessage(db, {
+      sessionId, userId, fromRole: "me", text: meText, payload: { confirmedSets }, clientMessageId,
+    });
+    if (!inserted) {
+      const replay = await findReplayReply(db, sessionId, clientMessageId);
+      if (replay) return { status: 200, body: replay };
+    }
+  } else {
+    await insertMessage(db, { sessionId, userId, fromRole: "me", text: meText, payload: { confirmedSets } });
+  }
 
   const [{ data: profileRow }, { data: userRow }, ordered, { attemptedIds, deferred }] = await Promise.all([
     db.from("coach_profiles").select("*").eq("user_id", userId).maybeSingle(),
@@ -852,22 +1004,30 @@ export async function confirmExerciseSets(
   const turn = await agentRes.json();
   await recordUsage(db, userId, turn.usage);
 
-  return {
-    status: 200,
-    body: {
-      message: turn.message,
-      advance: true,
-      nextExerciseId: nextRow?.id ?? null,
-      nextExerciseName: nextRow?.name ?? null,
-      nextExerciseSets: (nextRow?.sets as number | undefined) ?? null,
-      sessionComplete: !nextRow,
-      degraded: !!turn.degraded,
-      nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
-      nextTargetReps: turn.nextTargetReps ?? null,
-      nextTargetWeights: turn.nextTargetWeights ?? null,
-      progress: computeProgress(ordered, attemptedIds),
-    },
+  const body = {
+    message: turn.message,
+    advance: true,
+    nextExerciseId: nextRow?.id ?? null,
+    nextExerciseName: nextRow?.name ?? null,
+    nextExerciseSets: (nextRow?.sets as number | undefined) ?? null,
+    sessionComplete: !nextRow,
+    degraded: !!turn.degraded,
+    nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
+    nextTargetReps: turn.nextTargetReps ?? null,
+    nextTargetWeights: turn.nextTargetWeights ?? null,
+    progress: computeProgress(ordered, attemptedIds),
   };
+
+  safeWaitUntil((async () => {
+    await insertMessage(db, {
+      sessionId, userId, fromRole: "coach", text: body.message as string, payload: body, clientMessageId: null,
+    });
+    await sendPushForTurn(
+      db, userId, (profileRow.coach_name as string) ?? "Coach", String(body.message).slice(0, 120), { sessionId },
+    );
+  })());
+
+  return { status: 200, body };
 }
 
 /**
@@ -879,6 +1039,7 @@ export async function runExerciseTurn(
   userId: string,
   planId: string,
   exercise: Record<string, unknown>,
+  sessionId: string,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   // Plan context (GYM-20): the coach should know the whole workout, not
   // just the current exercise. All four reads are independent of each
@@ -915,16 +1076,28 @@ export async function runExerciseTurn(
   const turn = await agentRes.json();
   await recordUsage(db, userId, turn.usage);
 
-  return {
-    status: 200,
-    body: {
-      exerciseId: exercise.id,
-      message: turn.message,
-      suggestedWeightKg: turn.suggestedWeightKg,
-      targetReps: turn.targetReps,
-      targetWeights: turn.targetWeights,
-      exerciseSets: exercise.sets,
-      degraded: turn.degraded,
-    },
+  const body = {
+    exerciseId: exercise.id,
+    message: turn.message,
+    suggestedWeightKg: turn.suggestedWeightKg,
+    targetReps: turn.targetReps,
+    targetWeights: turn.targetWeights,
+    exerciseSets: exercise.sets,
+    degraded: turn.degraded,
   };
+
+  // No 'me' message here — session-start has no user-authored text, only
+  // the coach's own intro. session-start's own intro_response cache
+  // already covers the "client retried the exact same call" case, so no
+  // dedup guard is needed on this path.
+  safeWaitUntil((async () => {
+    await insertMessage(db, {
+      sessionId, userId, fromRole: "coach", text: body.message as string, payload: body, clientMessageId: null,
+    });
+    await sendPushForTurn(
+      db, userId, (profileRow.coach_name as string) ?? "Coach", String(body.message).slice(0, 120), { sessionId },
+    );
+  })());
+
+  return { status: 200, body };
 }

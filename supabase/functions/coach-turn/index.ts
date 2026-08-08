@@ -39,10 +39,15 @@ Deno.serve(withSentry(async (req) => {
   let userMessage: string | undefined;
   let confirmedSets: Array<{ weightKg: number; reps: number }> | undefined;
   let recentHistory: Array<{ from: unknown; text: unknown }> = [];
+  let clientMessageId: string | null = null;
   try {
     const body = await req.json();
     ({ sessionId, exerciseId } = body);
     if (typeof sessionId !== "string" || typeof exerciseId !== "string") throw new Error();
+    if (body.clientMessageId !== undefined) {
+      if (typeof body.clientMessageId !== "string" || body.clientMessageId.length > 100) throw new Error();
+      clientMessageId = body.clientMessageId;
+    }
 
     // Generative-UI confirm action (System Design §19): confirmedSets is a
     // deterministic alternative to userMessage — no LLM call, so it's
@@ -112,6 +117,7 @@ Deno.serve(withSentry(async (req) => {
       planId: session.plan_id,
       exercise,
       confirmedSets,
+      clientMessageId,
     });
     return json(turn.status, turn.body);
   }
@@ -123,6 +129,7 @@ Deno.serve(withSentry(async (req) => {
     exercise,
     userMessage: userMessage!,
     recentHistory: cleanHistory,
+    clientMessageId,
   });
   return json(turn.status, turn.body);
 }));
