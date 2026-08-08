@@ -1,9 +1,10 @@
-import { Tabs } from 'expo-router';
+import { Tabs, usePathname } from 'expo-router';
 import { Text, View } from 'react-native';
 import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUnread } from '../../src/lib/unread';
+import { RestTimer } from '../../src/components/RestTimer';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
 function TabIcon({
@@ -45,8 +46,15 @@ export default function TabsLayout() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { count: unread } = useUnread();
+  const pathname = usePathname();
+  // The chat screen ("/") shows its own docked RestTimer above the
+  // composer — this pill is the same object at a third, quieter density
+  // for every other tab (guidelines/rest-timer.html), so it only renders
+  // away from chat. RestTimer itself already renders nothing while idle.
+  const showRestPill = pathname !== '/';
 
   return (
+    <View style={{ flex: 1 }}>
     <Tabs
       screenOptions={{
         headerShown: false,
@@ -130,5 +138,7 @@ export default function TabsLayout() {
         }}
       />
     </Tabs>
+    {showRestPill && <RestTimer variant="pill" />}
+    </View>
   );
 }

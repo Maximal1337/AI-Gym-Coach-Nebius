@@ -27,6 +27,8 @@ export interface TurnResult {
   /** §20: the current/next exercise may be a session-only substitution the client has never fetched — carry its name so the header doesn't need a lookup that can miss. */
   nextExerciseName: string | null;
   nextExerciseSets: number | null;
+  /** Seconds to rest before the next set/exercise, from the plan's own rest_sec — null when the plan carries none (guidelines/rest-timer.html falls back to the last manual config in that case). */
+  nextExerciseRestSec: number | null;
   sessionComplete: boolean;
   nextSuggestedWeightKg: number | null;
   nextTargetReps: number[] | null;

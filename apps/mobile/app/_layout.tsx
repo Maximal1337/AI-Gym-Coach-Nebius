@@ -9,6 +9,7 @@ import { palette } from '@gymcoach/shared';
 import { LanguageProvider } from '../src/lib/language';
 import { UnitsProvider } from '../src/lib/units';
 import { UnreadProvider, useUnread } from '../src/lib/unread';
+import { RestTimerProvider, REST_NOTIFICATION_TYPE } from '../src/lib/restTimer';
 import '../src/i18n';
 
 // GYM-14: crash/error reporting. An empty DSN leaves the SDK disabled
@@ -27,7 +28,20 @@ Sentry.init({
 // chat tab (see NotificationBridge below) — only show the OS banner when
 // the app isn't the thing the user is currently looking at.
 Notifications.setNotificationHandler({
-  handleNotification: async () => {
+  handleNotification: async (notification) => {
+    // A rest ending is meant to ring "like a native timer" regardless of
+    // whether the app happens to be foregrounded (guidelines/rest-timer.html)
+    // — unlike a coach reply, which is redundant with the in-app unread
+    // badge while the user is already looking at the app.
+    if (notification.request.content.data?.type === REST_NOTIFICATION_TYPE) {
+      return {
+        shouldShowAlert: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      };
+    }
     const foregrounded = AppState.currentState === 'active';
     return {
       shouldShowAlert: !foregrounded,
@@ -82,14 +96,16 @@ function RootLayout() {
       <LanguageProvider>
         <UnitsProvider>
           <UnreadProvider>
-            <NotificationBridge />
-            <StatusBar style="light" />
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: theme.bg },
-              }}
-            />
+            <RestTimerProvider>
+              <NotificationBridge />
+              <StatusBar style="light" />
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: theme.bg },
+                }}
+              />
+            </RestTimerProvider>
           </UnreadProvider>
         </UnitsProvider>
       </LanguageProvider>

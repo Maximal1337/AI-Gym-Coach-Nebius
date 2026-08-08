@@ -25,6 +25,8 @@ export interface SessionStartResult {
   /** Per-set weight — the real source of truth when a set carried its own track (a fatigue drop kept at its own weight); suggestedWeightKg alone can't express that. */
   targetWeights: number[] | null;
   exerciseSets: number;
+  /** See TurnResult.nextExerciseRestSec. */
+  exerciseRestSec: number | null;
 }
 
 const KEY = 'gymcoach.pending-session-start.v1';

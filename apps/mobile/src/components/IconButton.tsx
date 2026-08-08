@@ -9,13 +9,15 @@ import { useTheme, radius } from '../theme';
  * Always pass `label` — it's the only accessible name the button has.
  */
 export function IconButton({
-  name, label, size = 19, onPress, style,
+  name, label, size = 19, onPress, style, color,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   label: string;
   size?: number;
   onPress?: () => void;
   style?: object;
+  /** Defaults to the muted inkSoft tone; pass theme.accent for an accented entry point (e.g. the composer's timer button, guidelines/rest-timer.html's tone="accent"). */
+  color?: string;
 }) {
   const theme = useTheme();
 
@@ -31,7 +33,7 @@ export function IconButton({
         ...style,
       }}
     >
-      <Ionicons name={name} size={size} color={theme.inkSoft} />
+      <Ionicons name={name} size={size} color={color ?? theme.inkSoft} />
     </Pressable>
   );
 }

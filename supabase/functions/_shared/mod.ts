@@ -869,6 +869,7 @@ export async function runConversationExerciseTurn(
       nextExerciseId: exerciseId,
       nextExerciseName: exercise.name as string,
       nextExerciseSets: exercise.sets as number,
+      nextExerciseRestSec: exercise.rest_sec as number,
       sessionComplete: false,
       degraded: !!turn.degraded,
       nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
@@ -885,6 +886,7 @@ export async function runConversationExerciseTurn(
       nextExerciseId: nextRow?.id ?? null,
       nextExerciseName: nextRow?.name ?? null,
       nextExerciseSets: (nextRow?.sets as number | undefined) ?? null,
+      nextExerciseRestSec: (nextRow?.rest_sec as number | undefined) ?? null,
       sessionComplete: !nextRow,
       degraded: !!turn.degraded,
       nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
@@ -1010,6 +1012,7 @@ export async function confirmExerciseSets(
     nextExerciseId: nextRow?.id ?? null,
     nextExerciseName: nextRow?.name ?? null,
     nextExerciseSets: (nextRow?.sets as number | undefined) ?? null,
+    nextExerciseRestSec: (nextRow?.rest_sec as number | undefined) ?? null,
     sessionComplete: !nextRow,
     degraded: !!turn.degraded,
     nextSuggestedWeightKg: turn.nextSuggestedWeightKg ?? null,
@@ -1083,6 +1086,7 @@ export async function runExerciseTurn(
     targetReps: turn.targetReps,
     targetWeights: turn.targetWeights,
     exerciseSets: exercise.sets,
+    exerciseRestSec: exercise.rest_sec,
     degraded: turn.degraded,
   };
 

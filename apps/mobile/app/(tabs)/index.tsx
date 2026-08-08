@@ -17,6 +17,9 @@ import { Screen } from '../../src/components/Screen';
 import { MarkdownText } from '../../src/components/MarkdownText';
 import { ConfettiBurst } from '../../src/components/ConfettiBurst';
 import { SuggestedActionBar } from '../../src/components/SuggestedActionBar';
+import { RestTimer } from '../../src/components/RestTimer';
+import { useRestTimer } from '../../src/lib/restTimer';
+import { IconButton } from '../../src/components/IconButton';
 import { useLanguage } from '../../src/lib/language';
 import { useUnits, formatWeightKg, weightUnitLabel, type UnitSystem } from '../../src/lib/units';
 import { fetchUsageSnapshot } from '../../src/lib/usage';
@@ -32,6 +35,8 @@ interface SuggestedAction {
   /** Per-set weight — the real source of truth when a set carried its own track (e.g. a fatigue drop kept at a lower weight); weightKg alone can't express that. */
   targetWeights: number[] | null;
   sets: number;
+  /** Seconds to rest before this exercise's next set — see RestTimerProvider.start. */
+  restSec: number | null;
 }
 interface Msg {
   id: string;
@@ -66,6 +71,7 @@ export default function Chat() {
   const { dir } = useLanguage();
   const { units } = useUnits();
   const { setChatFocused } = useUnread();
+  const restTimer = useRestTimer();
   const [plans, setPlans] = useState<Plan[]>([]);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [currentExerciseId, setCurrentExerciseId] = useState<string | null>(null);
@@ -153,6 +159,11 @@ export default function Chat() {
   // rendering one long block. A single-topic reply (the common case) is
   // one chunk, pushed immediately, unchanged from before.
   function pushCoachMessage(text: string) {
+    // A coach message is the one thing that outranks an open rest dial —
+    // collapse it back so the new reply isn't hidden behind the composer-
+    // sized dial (guidelines/rest-timer.html: "collapses ... on any coach
+    // message arriving"). The docked collapsed bar itself stays up.
+    restTimer.setExpanded(false);
     const chunks = splitCoachReply(text);
     chunks.forEach((chunk, i) => {
       if (i === 0) push('coach', chunk);
@@ -218,6 +229,7 @@ export default function Chat() {
             targetReps: res.nextTargetReps,
             targetWeights: res.nextTargetWeights,
             sets: res.nextExerciseSets ?? 1,
+            restSec: res.nextExerciseRestSec,
           }
         : null,
     );
@@ -248,6 +260,7 @@ export default function Chat() {
       targetReps: res.targetReps,
       targetWeights: res.targetWeights,
       sets: res.exerciseSets ?? 1,
+      restSec: res.exerciseRestSec,
     });
   }
 
@@ -267,6 +280,12 @@ export default function Chat() {
       const res = await callFn<TurnResult>('coach-turn', {
         sessionId, exerciseId, confirmedSets: sets, clientMessageId,
       });
+      // Confirming a set is the one deterministic "a set was just logged"
+      // signal in this app (free-text set-logging has no equivalent flag
+      // on TurnResult) — so this is the only place rest auto-starts
+      // (guidelines/rest-timer.html: "confirming a set starts the rest").
+      // Skipped on sessionComplete: there's no next set to rest before.
+      if (!res.sessionComplete) restTimer.start(res.nextExerciseRestSec);
       // The durable path (catchUp()/resume) may have already delivered
       // this exact reply while this request was stuck backgrounded —
       // showing it again here would duplicate the bubble.
@@ -345,6 +364,7 @@ export default function Chat() {
         targetReps: (payload.targetReps as number[] | null) ?? null,
         targetWeights: (payload.targetWeights as number[] | null) ?? null,
         sets: (payload.exerciseSets as number | undefined) ?? 1,
+        restSec: (payload.exerciseRestSec as number | null) ?? null,
       });
       const { data } = await supabase.from('exercises').select('name').eq('id', exId).maybeSingle();
       setCurrentExerciseName(data?.name ?? null);
@@ -433,11 +453,18 @@ export default function Chat() {
           handleSessionStartResult(
             await callFn<SessionStartResult>('session-start', { planId: plan.id }),
           );
-        } catch {
-          // Still failing — queue it and retry on reconnect instead of
-          // just giving up (pendingSessionStart.ts).
-          await enqueueSessionStart({ planId: plan.id });
-          push('system', t('queuedOffline'));
+        } catch (e2) {
+          // A real server rejection on retry (rate-limited, budget
+          // exhausted, etc.) is not "offline" — show what actually
+          // happened instead of a misleading "saved on device" message.
+          if (e2 instanceof ApiError) {
+            coachError(e2);
+          } else {
+            // Still failing at the network level — queue it and retry on
+            // reconnect instead of just giving up (pendingSessionStart.ts).
+            await enqueueSessionStart({ planId: plan.id });
+            push('system', t('queuedOffline'));
+          }
         }
       }
     } finally {
@@ -486,9 +513,17 @@ export default function Chat() {
         try {
           const res = await callFn<TurnResult>('coach-turn', turn);
           if (!resolvedMessageIds.current.has(clientMessageId)) handleTurnResult(res);
-        } catch {
-          await enqueueTurn(turn);
-          push('system', t('queuedOffline'));
+        } catch (e2) {
+          // A real server rejection on retry (rate-limited, budget
+          // exhausted, etc.) is not "offline" — show what actually
+          // happened instead of a misleading "saved on device" message.
+          if (e2 instanceof ApiError) {
+            setDraft(text);
+            coachError(e2, clientMessageId);
+          } else {
+            await enqueueTurn(turn);
+            push('system', t('queuedOffline'));
+          }
         }
       }
     } finally {
@@ -649,21 +684,29 @@ export default function Chat() {
       )}
 
       {inWorkout && pendingAction && (
-        <SuggestedActionBar
-          // Keyed by exercise, not just by its suggested numbers: two
-          // consecutive baseline (no-history) exercises can share the same
-          // weightKg/targetReps/sets shape (all null/null/N), so the
-          // internal rows state wouldn't otherwise reset and the next
-          // exercise would inherit whatever the user typed for the last one.
-          key={pendingAction.exerciseId}
-          exerciseName={currentExerciseName}
-          targetWeights={pendingAction.targetWeights}
-          targetReps={pendingAction.targetReps}
-          sets={pendingAction.sets}
-          disabled={busy}
-          onSubmitSets={(sets) => void confirmSets(pendingAction.exerciseId, sets)}
-        />
+        // Rest timer and this bar share one slot and are mutually
+        // exclusive (guidelines/rest-timer.html) — but this stays MOUNTED
+        // throughout a rest (display:none, not unmounted) so any
+        // in-progress weight/reps edit the user made survives and is
+        // still there when the bar reappears, rather than resetting.
+        <View style={{ display: restTimer.phase === 'idle' ? 'flex' : 'none' }}>
+          <SuggestedActionBar
+            // Keyed by exercise, not just by its suggested numbers: two
+            // consecutive baseline (no-history) exercises can share the same
+            // weightKg/targetReps/sets shape (all null/null/N), so the
+            // internal rows state wouldn't otherwise reset and the next
+            // exercise would inherit whatever the user typed for the last one.
+            key={pendingAction.exerciseId}
+            exerciseName={currentExerciseName}
+            targetWeights={pendingAction.targetWeights}
+            targetReps={pendingAction.targetReps}
+            sets={pendingAction.sets}
+            disabled={busy}
+            onSubmitSets={(sets) => void confirmSets(pendingAction.exerciseId, sets)}
+          />
+        </View>
       )}
+      {inWorkout && <RestTimer variant="docked" />}
 
       {!inWorkout ? (
         <View style={{ padding: spacing.md, paddingBottom: keyboardVisible ? spacing.md : TAB_BAR_CLEARANCE }}>
@@ -703,9 +746,23 @@ export default function Chat() {
             </>
           )}
         </View>
-      ) : (
-        <View style={{ padding: spacing.md, paddingBottom: keyboardVisible ? spacing.md : TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule }}>
-          <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
+      ) : !(restTimer.expanded && (restTimer.phase === 'running' || restTimer.phase === 'paused')) ? (
+        // The expanded rest dial takes this same space instead (design:
+        // "someone adjusting rest time isn't typing") — collapsing it
+        // (tap the dial, or a coach message arriving) brings this back.
+        <View style={{
+          paddingHorizontal: spacing.sm, paddingTop: spacing.md,
+          paddingBottom: keyboardVisible ? spacing.md : TAB_BAR_CLEARANCE, borderTopWidth: 1, borderTopColor: theme.rule,
+        }}>
+          <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.md, alignItems: 'center' }}>
+            <IconButton
+              name="timer-outline"
+              label={t('startRestTimer')}
+              size={21}
+              color={theme.accent}
+              onPress={() => restTimer.start(pendingAction?.restSec ?? null)}
+              style={{ width: 46, height: 46, backgroundColor: theme.surface, borderRadius: radius.pill }}
+            />
             <TextInput
               placeholder={t('messagePlaceholder')}
               placeholderTextColor={theme.inkSoft}
@@ -713,9 +770,11 @@ export default function Chat() {
               onChangeText={setDraft}
               multiline
               maxLength={200}
+              textAlignVertical="center"
               style={{
                 flex: 1, backgroundColor: theme.surface, borderRadius: radius.field,
-                padding: 10, color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left', maxHeight: 100,
+                paddingHorizontal: 10, paddingVertical: 8, color: theme.ink,
+                textAlign: dir === 'rtl' ? 'right' : 'left', maxHeight: 100,
               }}
             />
             <Pressable
@@ -723,7 +782,7 @@ export default function Chat() {
               onPress={send}
               style={{
                 backgroundColor: draft.trim() ? theme.accent : theme.rule,
-                borderRadius: radius.pill, paddingHorizontal: 16, justifyContent: 'center',
+                borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 46, alignItems: 'center', justifyContent: 'center',
               }}
             >
               <Text style={{ color: draft.trim() ? theme.onAccent : theme.inkSoft, fontWeight: '700' }}>
@@ -732,7 +791,7 @@ export default function Chat() {
             </Pressable>
           </View>
         </View>
-      )}
+      ) : null}
     </KeyboardAvoidingView>
     <ConfettiBurst active={showConfetti} />
     </Screen>
