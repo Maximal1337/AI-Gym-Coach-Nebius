@@ -1,4 +1,4 @@
-import { callFn } from './api';
+import { ApiError, callFn } from './api';
 
 /**
  * Thin client for the `studio-session` Edge Function. Types here mirror the
@@ -70,6 +70,8 @@ export interface GenerateStudioIntake {
   fitnessLevel: 'beginner' | 'intermediate' | 'advanced';
   durationMin: number;
   equipment: StudioEquipment[];
+  /** Free-text equipment beyond the preset list, e.g. "battle ropes". */
+  customEquipment: string[];
   focus: 'conditioning' | 'strength' | 'mixed';
   injuryNotes: string | null;
   language: 'en' | 'he' | 'ar';
@@ -144,6 +146,19 @@ export function listStudioSessions(): Promise<{
   recent: StudioSessionListSummary[];
 }> {
   return callFn('studio-session', { action: 'list' });
+}
+
+/** Every `open` entry point (photograph/paste/upload/generate/build-own/
+ * do-again) 409s with "session_already_open" if one is already open — the
+ * DB's own one-open-session-per-user rule. Rather than each call site
+ * showing a generic failure for what's actually an expected, recoverable
+ * state, this looks the existing session up so the caller can route there
+ * directly instead. Returns null for any other error (a real failure) or
+ * if the lookup itself fails. */
+export async function existingOpenSessionId(e: unknown): Promise<string | null> {
+  if (!(e instanceof ApiError) || e.code !== 'session_already_open') return null;
+  const list = await listStudioSessions().catch(() => null);
+  return list?.open?.id ?? null;
 }
 
 export function getStudioSession(sessionId: string): Promise<{

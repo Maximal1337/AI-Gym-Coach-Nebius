@@ -30,6 +30,9 @@ export const generateStudioInputSchema = z.object({
   fitnessLevel: z.enum(["beginner", "intermediate", "advanced"]),
   durationMin: z.number().int().min(10).max(60),
   equipment: z.array(z.enum(EQUIPMENT_OPTIONS)).min(1).max(EQUIPMENT_OPTIONS.length),
+  // Free-text equipment beyond the preset list (e.g. "battle ropes", "sled")
+  // — folded into the same equipment line in the prompt, not a separate rule.
+  customEquipment: z.array(z.string().min(1).max(30)).max(5).default([]),
   focus: z.enum(["conditioning", "strength", "mixed"]),
   injuryNotes: z.string().max(500).nullable().default(null),
   // The app's currently selected UI language — workout/movement names must
@@ -102,7 +105,10 @@ function buildSystemPrompt(language: AppLanguage): string {
 }
 
 function buildHumanPrompt(input: GenerateStudioInput): string {
-  const equipmentList = input.equipment.map((e) => EQUIPMENT_LABELS[e]).join(", ");
+  const equipmentList = [
+    ...input.equipment.map((e) => EQUIPMENT_LABELS[e]),
+    ...input.customEquipment,
+  ].join(", ");
   const lines = [
     `Fitness level: ${LEVEL_LABELS[input.fitnessLevel]}`,
     `Target duration: about ${input.durationMin} minutes total`,

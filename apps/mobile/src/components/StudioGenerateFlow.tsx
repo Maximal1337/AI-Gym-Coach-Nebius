@@ -4,7 +4,10 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '../lib/api';
-import { openStudioSession, STUDIO_EQUIPMENT_OPTIONS, type GenerateStudioIntake, type StudioEquipment } from '../lib/studioApi';
+import {
+  existingOpenSessionId, openStudioSession, STUDIO_EQUIPMENT_OPTIONS,
+  type GenerateStudioIntake, type StudioEquipment,
+} from '../lib/studioApi';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { SketchLoader } from './SketchLoader';
 import { Chip } from './Chip';
@@ -49,6 +52,8 @@ export function StudioGenerateFlow({
   const [fitnessLevel, setFitnessLevel] = useState<FitnessLevel | null>(null);
   const [durationMin, setDurationMin] = useState<number | null>(null);
   const [equipment, setEquipment] = useState<StudioEquipment[]>(['bodyweight']);
+  const [customEquipment, setCustomEquipment] = useState<string[]>([]);
+  const [customEquipmentInput, setCustomEquipmentInput] = useState('');
   const [focus, setFocus] = useState<Focus | null>(null);
   const [injuryNotes, setInjuryNotes] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -59,6 +64,17 @@ export function StudioGenerateFlow({
     setEquipment((cur) => (cur.includes(opt) ? cur.filter((e) => e !== opt) : [...cur, opt]));
   }
 
+  function addCustomEquipment() {
+    const value = customEquipmentInput.trim();
+    if (!value || customEquipment.length >= 5 || customEquipment.includes(value)) return;
+    setCustomEquipment((cur) => [...cur, value]);
+    setCustomEquipmentInput('');
+  }
+
+  function removeCustomEquipment(value: string) {
+    setCustomEquipment((cur) => cur.filter((e) => e !== value));
+  }
+
   async function generate() {
     setStep('generating');
     const id = setInterval(() => setLineIdx((i) => (i + 1) % GENERATING_LINES.length), 1800);
@@ -67,6 +83,7 @@ export function StudioGenerateFlow({
         fitnessLevel: fitnessLevel!,
         durationMin: durationMin!,
         equipment: equipment.length > 0 ? equipment : ['bodyweight'],
+        customEquipment,
         focus: focus!,
         injuryNotes: injuryNotes.trim() ? injuryNotes.trim() : null,
         language,
@@ -74,6 +91,8 @@ export function StudioGenerateFlow({
       const res = await openStudioSession({ generate: intake });
       onDone(res.sessionId);
     } catch (e) {
+      const existing = await existingOpenSessionId(e);
+      if (existing) { onDone(existing); return; }
       const exhausted = e instanceof ApiError && e.code === 'monthly_budget_exhausted';
       setErrorMessage(exhausted ? t('budgetExhausted') : t('generateStudioFailed'));
       setBudgetExhausted(exhausted);
@@ -189,22 +208,55 @@ export function StudioGenerateFlow({
         <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
           {t('studioEquipmentSub')}
         </Text>
-        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.lg }}>
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md }}>
           {STUDIO_EQUIPMENT_OPTIONS.map((opt) => (
             <Chip key={opt} selected={equipment.includes(opt)} onPress={() => toggleEquipment(opt)}>
               {t(`equipment_${opt}`)}
             </Chip>
           ))}
+          {customEquipment.map((item) => (
+            // A custom item's only interaction is removal — accessible label
+            // spells that out since the "×" alone doesn't read aloud.
+            <Chip key={item} selected onPress={() => removeCustomEquipment(item)}>
+              {`${item} ×`}
+            </Chip>
+          ))}
         </View>
+        {customEquipment.length < 5 && (
+          <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm, marginBottom: spacing.lg }}>
+            <TextInput
+              value={customEquipmentInput}
+              onChangeText={setCustomEquipmentInput}
+              onSubmitEditing={addCustomEquipment}
+              placeholder={t('customEquipmentPlaceholder')}
+              placeholderTextColor={theme.inkSoft}
+              style={{
+                flex: 1, backgroundColor: theme.surface, borderRadius: radius.field,
+                paddingHorizontal: 14, paddingVertical: 10, color: theme.ink, textAlign: dir === 'rtl' ? 'right' : 'left',
+              }}
+            />
+            <Pressable
+              disabled={!customEquipmentInput.trim()}
+              onPress={addCustomEquipment}
+              accessibilityLabel={t('customEquipmentAdd')}
+              style={{
+                width: 44, height: 44, borderRadius: radius.field, alignItems: 'center', justifyContent: 'center',
+                backgroundColor: customEquipmentInput.trim() ? theme.accent : theme.rule,
+              }}
+            >
+              <Ionicons name="add" size={20} color={customEquipmentInput.trim() ? theme.onAccent : theme.inkSoft} />
+            </Pressable>
+          </View>
+        )}
         <Pressable
-          disabled={equipment.length === 0}
+          disabled={equipment.length === 0 && customEquipment.length === 0}
           onPress={() => setStep('focus')}
           style={{
-            backgroundColor: equipment.length === 0 ? theme.rule : theme.accent,
+            backgroundColor: equipment.length === 0 && customEquipment.length === 0 ? theme.rule : theme.accent,
             padding: 14, borderRadius: radius.pill, alignItems: 'center',
           }}
         >
-          <Text style={{ color: equipment.length === 0 ? theme.inkSoft : theme.onAccent, fontWeight: '700' }}>
+          <Text style={{ color: equipment.length === 0 && customEquipment.length === 0 ? theme.inkSoft : theme.onAccent, fontWeight: '700' }}>
             {t('continue')}
           </Text>
         </Pressable>

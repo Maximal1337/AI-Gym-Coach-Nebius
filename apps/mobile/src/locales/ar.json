@@ -260,6 +260,8 @@
   "equipment_erg_bike_row": "جهاز إرغو (دراجة/تجديف/سكي)",
   "equipment_wall_ball": "كرة الحائط",
   "equipment_pull_up_bar": "بار العقلة",
+  "customEquipmentPlaceholder": "معدات أخرى (مثل حبال المعركة)",
+  "customEquipmentAdd": "إضافة معدات",
   "studioFocusTitle": "ما هو تركيز اليوم؟",
   "focus_conditioning": "لياقة قلبية",
   "focus_strength": "قوة",

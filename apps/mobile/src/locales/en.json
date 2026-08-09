@@ -260,6 +260,8 @@
   "equipment_erg_bike_row": "Erg (bike/row/ski)",
   "equipment_wall_ball": "Wall ball",
   "equipment_pull_up_bar": "Pull-up bar",
+  "customEquipmentPlaceholder": "Other equipment (e.g. battle ropes)",
+  "customEquipmentAdd": "Add equipment",
   "studioFocusTitle": "What's today about?",
   "focus_conditioning": "Conditioning",
   "focus_strength": "Strength",

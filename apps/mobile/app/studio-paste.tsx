@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { openStudioSession, type StudioSessionSource } from '../src/lib/studioApi';
+import { existingOpenSessionId, openStudioSession, type StudioSessionSource } from '../src/lib/studioApi';
 import { DismissKeyboardView } from '../src/components/DismissKeyboardView';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { Screen } from '../src/components/Screen';
@@ -60,7 +60,9 @@ export default function StudioPasteScreen() {
     try {
       const res = await openStudioSession({ source });
       router.replace({ pathname: '/studio-session', params: { sessionId: res.sessionId } });
-    } catch {
+    } catch (e) {
+      const existing = await existingOpenSessionId(e);
+      if (existing) { router.replace({ pathname: '/studio-session', params: { sessionId: existing } }); return; }
       Alert.alert(t('parseFailed'));
     } finally {
       setBusy(false);

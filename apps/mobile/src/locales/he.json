@@ -260,6 +260,8 @@
   "equipment_erg_bike_row": "מכשיר ארגו (אופניים/חתירה/סקי)",
   "equipment_wall_ball": "כדור קיר",
   "equipment_pull_up_bar": "מתח",
+  "customEquipmentPlaceholder": "ציוד אחר (למשל חבלי קרב)",
+  "customEquipmentAdd": "הוסף ציוד",
   "studioFocusTitle": "על מה מתמקדים היום?",
   "focus_conditioning": "קונדישן",
   "focus_strength": "כוח",

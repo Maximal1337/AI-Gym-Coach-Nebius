@@ -15,7 +15,7 @@ import { ChoiceCard } from '../../src/components/ChoiceCard';
 import { AddWorkoutSheet, type AddWorkoutMethod } from '../../src/components/AddWorkoutSheet';
 import { WorkoutCard, type WorkoutCardData } from '../../src/components/WorkoutCard';
 import { Badge } from '../../src/components/Badge';
-import { listStudioSessions, openStudioSession } from '../../src/lib/studioApi';
+import { existingOpenSessionId, listStudioSessions, openStudioSession } from '../../src/lib/studioApi';
 import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -184,8 +184,8 @@ export default function Plans() {
       const res = await openStudioSession({ sourceSessionId: sessionId });
       openStudioCard(res.sessionId);
     } catch (e) {
-      const code = (e as { code?: string })?.code;
-      if (code === 'session_already_open') load();
+      const existing = await existingOpenSessionId(e);
+      if (existing) openStudioCard(existing);
       else Alert.alert(t('coachUnavailable'));
     } finally {
       setBusy(false);
@@ -199,8 +199,15 @@ export default function Plans() {
       setAddOpen(false);
       setPendingMethod(null);
       navigateAfterSheetCloses(() => openStudioCard(res.sessionId));
-    } catch {
-      Alert.alert(t('coachUnavailable'));
+    } catch (e) {
+      const existing = await existingOpenSessionId(e);
+      if (existing) {
+        setAddOpen(false);
+        setPendingMethod(null);
+        navigateAfterSheetCloses(() => openStudioCard(existing));
+      } else {
+        Alert.alert(t('coachUnavailable'));
+      }
     } finally {
       setBusy(false);
     }

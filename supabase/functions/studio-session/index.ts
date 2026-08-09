@@ -504,6 +504,14 @@ function validateGenerateIntake(raw: unknown): Record<string, unknown> | null {
   ) {
     return null;
   }
+  if (r.customEquipment !== undefined) {
+    if (
+      !Array.isArray(r.customEquipment) || r.customEquipment.length > 5 ||
+      r.customEquipment.some((e) => typeof e !== "string" || e.length < 1 || e.length > 30)
+    ) {
+      return null;
+    }
+  }
   if (typeof r.focus !== "string" || !FOCUS_OPTIONS.includes(r.focus)) return null;
   if (
     r.injuryNotes !== undefined && r.injuryNotes !== null &&
@@ -516,6 +524,7 @@ function validateGenerateIntake(raw: unknown): Record<string, unknown> | null {
     fitnessLevel: r.fitnessLevel,
     durationMin: r.durationMin,
     equipment: r.equipment,
+    customEquipment: r.customEquipment ?? [],
     focus: r.focus,
     injuryNotes: r.injuryNotes ?? null,
     language: r.language ?? "en",
