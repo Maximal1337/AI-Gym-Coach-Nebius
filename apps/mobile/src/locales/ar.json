@@ -329,6 +329,7 @@
   "scoreType_amrap": "AMRAP",
   "scoreType_emom": "EMOM",
   "scoreType_strength": "قوة",
+  "scoreType_stations": "عدد الجولات التي أكملتها",
   "scoreRounds": "جولات",
   "scorePlusReps": "+ تكرار",
   "scoreRoundsCompleted": "الجولات المكتملة",
@@ -355,5 +356,17 @@
   "savingSession": "جارٍ حفظ الجلسة…",
   "discardingSession": "جارٍ الحذف…",
   "choosePasteWorkout": "لدي النص مكتوبًا — سألصقه",
-  "buildOwnWorkout": "أنشئ تمرينًا بنفسك"
+  "buildOwnWorkout": "أنشئ تمرينًا بنفسك",
+  "perSide": "لكل جانب",
+  "roundChip": "جولة {{n}} · {{value}}",
+  "removeRound": "إزالة الجولة الأخيرة",
+  "addRound": "إضافة جولة",
+  "reparseCta": "هل أخطأت في قراءة شيء ما؟",
+  "reparseHint": "بكلماتك الخاصة — سأعيد بناء الخطة كلها، وليس هذا الصف فقط.",
+  "reparsePlaceholder": "وزن الرفعة الميتة ينخفض 10-8-6-3-3 عبر الجولات",
+  "reparseSubmit": "أعد البناء",
+  "reparseRemovesTitle": "هذا يغيّر بعض الأشياء",
+  "reparseRemovesBody": "هذه لن تكون في الخطة المعاد بناؤها: {{names}}. هل تريد المتابعة؟",
+  "reparseApply": "متابعة",
+  "reparseNoSource": "لا يوجد لوح أصلي لإعادة قراءته لهذا التمرين — عدّل الصف مباشرة بدلاً من ذلك."
 }

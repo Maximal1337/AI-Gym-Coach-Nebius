@@ -329,6 +329,7 @@
   "scoreType_amrap": "AMRAP",
   "scoreType_emom": "EMOM",
   "scoreType_strength": "כוח",
+  "scoreType_stations": "כמה סבבים השלמת",
   "scoreRounds": "סבבים",
   "scorePlusReps": "+ חזרות",
   "scoreRoundsCompleted": "סבבים שהושלמו",
@@ -355,5 +356,17 @@
   "savingSession": "שומר את האימון…",
   "discardingSession": "מוחק…",
   "choosePasteWorkout": "יש לי את זה כתוב — אני אדביק את זה",
-  "buildOwnWorkout": "בניית אימון בעצמך"
+  "buildOwnWorkout": "בניית אימון בעצמך",
+  "perSide": "לכל צד",
+  "roundChip": "סבב {{n}} · {{value}}",
+  "removeRound": "הסרת הסבב האחרון",
+  "addRound": "הוספת סבב",
+  "reparseCta": "קראתי משהו לא נכון?",
+  "reparseHint": "במילים שלכם — אני אבנה את התוכנית מחדש, לא רק את השורה הזו.",
+  "reparsePlaceholder": "המשקל בדדליפט יורד 10-8-6-3-3 לאורך הסבבים",
+  "reparseSubmit": "לבנות מחדש",
+  "reparseRemovesTitle": "זה משנה כמה דברים",
+  "reparseRemovesBody": "אלה לא יופיעו בתוכנית המחודשת: {{names}}. להמשיך?",
+  "reparseApply": "המשך",
+  "reparseNoSource": "אין לוח מקורי לקרוא מחדש עבור האימון הזה — ערכו את השורה ישירות."
 }

@@ -181,7 +181,7 @@ export default function ManagePlans() {
         onClose={() => setAddOpen(false)}
         methods={[
           {
-            emphasis: 'primary', icon: 'sparkles', label: t('generatePlanCta'), description: t('goalSub'),
+            emphasis: 'primary', icon: 'sparkles-outline', label: t('generatePlanCta'), description: t('goalSub'),
             badge: <Badge>AI</Badge>,
             onPress: () => openAddRoute(() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } })),
           },

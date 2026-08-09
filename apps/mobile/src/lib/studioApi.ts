@@ -17,6 +17,12 @@ export interface StudioMetric {
   value: number;
   tiers: number[] | null;
   tierIndex: number | null;
+  /** "6/6 pistol" — one value, done each side. Mutually exclusive with
+   * tiers/ladder. */
+  perSide: boolean;
+  /** "10-8-6-3-3 Deadlift" — one value per round. Mutually exclusive with
+   * tiers/perSide; `value` is only a fallback (round 1) when this is set. */
+  ladder: number[] | null;
 }
 
 export interface StudioExercise {
@@ -88,6 +94,19 @@ export function saveStudioSession(
 
 export function discardStudioSession(sessionId: string): Promise<{ discarded: true }> {
   return callFn('studio-session', { action: 'discard', sessionId });
+}
+
+/** "Did I get something wrong?" — re-parses the session's original source
+ * (photo/text/file) alongside a free-text correction. Returns a merged tree
+ * WITHOUT writing it: the caller reviews removedExerciseNames (anything the
+ * new read no longer mentions by name) and, if they proceed, persists the
+ * result themselves via updateStudioSession — this never writes on its own. */
+export function reparseStudioSession(sessionId: string, correctionText: string): Promise<{
+  tree: StudioTree;
+  removedExerciseNames: string[];
+  last: StudioLastMap;
+}> {
+  return callFn('studio-session', { action: 'reparse', sessionId, correctionText });
 }
 
 export interface StudioSessionListSummary {

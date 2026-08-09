@@ -108,7 +108,7 @@ export default function OnboardingPlan() {
         >
           <ChoiceCard
             emphasis="primary"
-            icon="sparkles"
+            icon="sparkles-outline"
             label={t('generatePlanCta')}
             description={t('goalSub')}
             badge={<Badge>AI</Badge>}

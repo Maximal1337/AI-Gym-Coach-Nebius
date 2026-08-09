@@ -8,7 +8,9 @@ import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 import {
   addCustomUnit, discardStudioSession, getStudioSession, saveStudioSession, updateStudioSession,
-  type StudioBlock, type StudioCustomUnit, type StudioExercise, type StudioFormatType, type StudioLastMap, type StudioTree,
+  reparseStudioSession,
+  type StudioBlock, type StudioCustomUnit, type StudioExercise, type StudioFormatType, type StudioLastMap,
+  type StudioMetric, type StudioTree,
 } from '../lib/studioApi';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
@@ -70,6 +72,20 @@ function unitLabel(unit: string, customUnits: StudioCustomUnit[], t: (k: string)
   return translated === key ? unit : translated;
 }
 
+/** "6/6 pistol" reads as "6 / 6", not a bare "6" — the repeated number IS
+ * the per-side information; "10-8-6-3-3 Deadlift" reads as the whole
+ * sequence, since that's the actual result, not any single round. */
+function metricValueDisplay(m: StudioMetric): string {
+  if (m.ladder) return m.ladder.join('-');
+  if (m.perSide) return `${m.value} / ${m.value}`;
+  return String(m.value);
+}
+
+function metricUnitLabel(m: StudioMetric, customUnits: StudioCustomUnit[], t: (k: string) => string): string {
+  const base = unitLabel(m.unit, customUnits, t);
+  return m.perSide ? `${base} ${t('perSide')}` : base;
+}
+
 interface RemovedItem {
   kind: 'exercise' | 'block';
   blockIndex: number;
@@ -106,6 +122,12 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   const [customUnitForm, setCustomUnitForm] = useState<{ label: string; step: string } | null>(null);
   const [removed, setRemoved] = useState<RemovedItem | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Which round's chip is selected for editing, per laddered exercise —
+  // keyed the same as openRowKey (`${bi}-${ei}`), defaulting to round 1.
+  const [ladderRound, setLadderRound] = useState<Record<string, number>>({});
+  const [reparseOpen, setReparseOpen] = useState(false);
+  const [reparseText, setReparseText] = useState('');
+  const [reparsing, setReparsing] = useState(false);
 
   const [showIntensitySheet, setShowIntensitySheet] = useState(false);
   const [score, setScore] = useState<Record<string, string>>({});
@@ -127,11 +149,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         setScore(res.score ?? {});
         setIntensity(res.intensity);
         setNote(res.note ?? '');
-        const snapshot = new Map<string, number>();
-        res.tree.blocks.forEach((b, bi) => b.exercises.forEach((e, ei) => e.metrics.forEach((m, mi) => {
-          snapshot.set(`${bi}-${ei}-${mi}`, m.value);
-        })));
-        plannedRef.current = snapshot;
+        snapshotPlanned(res.tree);
       } catch {
         Alert.alert(t('coachUnavailable'));
         onClose();
@@ -183,13 +201,84 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
     }));
   }
 
+  function patchLadderValue(bi: number, ei: number, roundIndex: number, value: number) {
+    patch((d) => ({
+      ...d,
+      blocks: d.blocks.map((b, i) => i !== bi ? b : {
+        ...b,
+        exercises: b.exercises.map((e, j) => j !== ei ? e : {
+          ...e,
+          metrics: e.metrics.map((m, k) => (k !== 0 || !m.ladder) ? m : {
+            ...m, ladder: m.ladder.map((v, ri) => ri === roundIndex ? value : v),
+          }),
+        }),
+      }),
+    }));
+  }
+
+  /** The ladder's length IS the block's round count — syncing formatParams
+   * .count here (only when the block's own format is unset or already
+   * "rounds") keeps the two numbers from ever disagreeing, the same
+   * invariant the parser and the edge function both enforce server-side. */
+  function syncBlockRoundCount(bi: number, count: number) {
+    patch((d) => ({
+      ...d,
+      blocks: d.blocks.map((b, i) => {
+        if (i !== bi || (b.formatType != null && b.formatType !== 'rounds')) return b;
+        return { ...b, formatType: 'rounds', formatParams: { ...b.formatParams, count } };
+      }),
+    }));
+  }
+
+  function addLadderRound(bi: number, ei: number) {
+    animateNext();
+    const exercise = tree?.blocks[bi]?.exercises[ei];
+    const ladder = exercise?.metrics[0]?.ladder;
+    if (!ladder) return;
+    const next = [...ladder, ladder[ladder.length - 1]];
+    patch((d) => ({
+      ...d,
+      blocks: d.blocks.map((b, i) => i !== bi ? b : {
+        ...b,
+        exercises: b.exercises.map((e, j) => j !== ei ? e : {
+          ...e, metrics: e.metrics.map((m, k) => (k !== 0 || !m.ladder) ? m : { ...m, ladder: next }),
+        }),
+      }),
+    }));
+    syncBlockRoundCount(bi, next.length);
+    setLadderRound((prev) => ({ ...prev, [`${bi}-${ei}`]: next.length - 1 }));
+  }
+
+  /** Removes the LAST round, not the selected one — rounds are ordered and
+   * unnamed, so deleting from the middle would renumber everything after
+   * it. Floors at 1 (a ladder needs at least one round to mean anything). */
+  function removeLadderRound(bi: number, ei: number) {
+    animateNext();
+    const exercise = tree?.blocks[bi]?.exercises[ei];
+    const ladder = exercise?.metrics[0]?.ladder;
+    if (!ladder || ladder.length <= 1) return;
+    const next = ladder.slice(0, -1);
+    patch((d) => ({
+      ...d,
+      blocks: d.blocks.map((b, i) => i !== bi ? b : {
+        ...b,
+        exercises: b.exercises.map((e, j) => j !== ei ? e : {
+          ...e, metrics: e.metrics.map((m, k) => (k !== 0 || !m.ladder) ? m : { ...m, ladder: next }),
+        }),
+      }),
+    }));
+    syncBlockRoundCount(bi, next.length);
+    const key = `${bi}-${ei}`;
+    setLadderRound((prev) => (prev[key] >= next.length ? { ...prev, [key]: next.length - 1 } : prev));
+  }
+
   function addExercise(bi: number) {
     animateNext();
     patch((d) => ({
       ...d,
       blocks: d.blocks.map((b, i) => i !== bi ? b : {
         ...b,
-        exercises: [...b.exercises, { name: '', parseConfidence: null, metrics: [{ unit: 'reps', value: 10, tiers: null, tierIndex: null }] }],
+        exercises: [...b.exercises, { name: '', parseConfidence: null, metrics: [{ unit: 'reps', value: 10, tiers: null, tierIndex: null, perSide: false, ladder: null }] }],
       }),
     }));
     setOpenRowKey(`${bi}-${(tree?.blocks[bi].exercises.length ?? 0)}`);
@@ -215,7 +304,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   function setMetricUnit(bi: number, ei: number, metricIndex: number, unit: string) {
     const preset = customUnits.find((c) => c.key === unit);
     const defaultValue = preset ? preset.step * 4 : (UNIT_PRESETS[unit]?.step ?? 1) * 8;
-    const fresh = { unit, value: defaultValue, tiers: null, tierIndex: null };
+    const fresh = { unit, value: defaultValue, tiers: null, tierIndex: null, perSide: false, ladder: null };
     patch((d) => ({
       ...d,
       blocks: d.blocks.map((b, i) => i !== bi ? b : {
@@ -356,7 +445,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
     try {
       await saveStudioSession(sessionId, {
         tree,
-        score: tree.scoreType ? score : null,
+        score: effectiveScoreType ? score : null,
         intensity,
         note: note.trim() || null,
       });
@@ -365,6 +454,53 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
       Alert.alert(t('coachUnavailable'));
     } finally {
       setSaving(false);
+    }
+  }
+
+  function snapshotPlanned(t: StudioTree) {
+    const snapshot = new Map<string, number>();
+    t.blocks.forEach((b, bi) => b.exercises.forEach((e, ei) => e.metrics.forEach((m, mi) => {
+      snapshot.set(`${bi}-${ei}-${mi}`, m.value);
+    })));
+    plannedRef.current = snapshot;
+  }
+
+  /** "Did I get something wrong?" — re-parses the whole workout from the
+   * original source plus this correction, rather than patching a field.
+   * Structural mistakes (a ladder read as one set) are exactly what
+   * field-patching can't reach. */
+  async function submitReparse() {
+    if (reparseText.trim().length < 3) return;
+    setReparsing(true);
+    try {
+      const res = await reparseStudioSession(sessionId, reparseText.trim());
+      const apply = () => {
+        setTree(res.tree);
+        setLast(res.last);
+        snapshotPlanned(res.tree);
+        setOpenRowKey(null);
+        setOpenBlockIndex(null);
+        setLadderRound({});
+        setReparseOpen(false);
+        setReparseText('');
+      };
+      if (res.removedExerciseNames.length > 0) {
+        Alert.alert(
+          t('reparseRemovesTitle'),
+          t('reparseRemovesBody', { names: res.removedExerciseNames.join(', ') }),
+          [
+            { text: t('cancel'), style: 'cancel' },
+            { text: t('reparseApply'), onPress: apply },
+          ],
+        );
+      } else {
+        apply();
+      }
+    } catch (e) {
+      const code = (e as { code?: string })?.code;
+      Alert.alert(code === 'no_source_to_reparse' ? t('reparseNoSource') : t('coachUnavailable'));
+    } finally {
+      setReparsing(false);
     }
   }
 
@@ -392,6 +528,17 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
     () => !!tree && (tree.blocks.length > 1 || tree.blocks[0]?.name !== null),
     [tree],
   );
+
+  // Stations aren't a distinct entity (guidelines/studio-workout-entry.html
+  // addendum §3) — they're ordinary blocks whose name says "Station N," so
+  // that's the only signal available for offering this field. A board with
+  // a real scoreType (fortime/amrap/etc.) already has its one headline
+  // number — stations never adds a second score card alongside it.
+  const hasStations = useMemo(
+    () => !!tree && !tree.scoreType && tree.blocks.some((b) => b.name && /station/i.test(b.name)),
+    [tree],
+  );
+  const effectiveScoreType = tree?.scoreType ?? (hasStations ? 'stations' : null);
 
   if (loading || !tree) {
     return (
@@ -504,7 +651,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                           {exercise.parseConfidence === 'low' && (
                             <Ionicons name="alert-circle" size={12} color={theme.warning} />
                           )}
-                          {lastPrimary == null ? (
+                          {primary.ladder ? null : lastPrimary == null ? (
                             <Text style={{ color: theme.inkSoft, fontSize: 11.5 }}>{t('firstTime')}</Text>
                           ) : primary.value === lastPrimary ? (
                             <>
@@ -512,7 +659,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                               <Text style={{ color: theme.inkSoft, fontSize: 11.5 }}>{t('sameAsLastTime')}</Text>
                             </>
                           ) : (
-                            <DeltaChip value={Math.round((primary.value - lastPrimary) * 100) / 100} unit={unitLabel(primary.unit, customUnits, t)} />
+                            <DeltaChip value={Math.round((primary.value - lastPrimary) * 100) / 100} unit={metricUnitLabel(primary, customUnits, t)} />
                           )}
                         </View>
                       </View>
@@ -521,12 +668,12 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                           <Text style={{ color: theme.onAccent, fontSize: 10, fontWeight: '800' }}>{t('changedBadge')}</Text>
                         </View>
                       )}
-                      <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800' }}>
-                        {primary.value}
-                        <Text style={{ fontSize: 11.5, color: theme.inkSoft, fontWeight: '600' }}> {unitLabel(primary.unit, customUnits, t)}</Text>
+                      <Text style={{ color: theme.ink, fontSize: primary.ladder ? 15 : 18, fontWeight: '800' }} numberOfLines={1}>
+                        {metricValueDisplay(primary)}
+                        <Text style={{ fontSize: 11.5, color: theme.inkSoft, fontWeight: '600' }}> {metricUnitLabel(primary, customUnits, t)}</Text>
                         {extra && (
                           <Text style={{ fontSize: 13, color: theme.inkSoft, fontWeight: '600' }}>
-                            {' · '}{extra.value} {unitLabel(extra.unit, customUnits, t)}
+                            {' · '}{metricValueDisplay(extra)} {metricUnitLabel(extra, customUnits, t)}
                           </Text>
                         )}
                       </Text>
@@ -551,7 +698,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                             style={{ flexDirection: rowDir, alignItems: 'center', gap: 3 }}
                           >
                             <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
-                              {unitLabel(primary.unit, customUnits, t)}
+                              {metricUnitLabel(primary, customUnits, t)}
                             </Text>
                             <Ionicons name="chevron-down" size={10} color={theme.inkSoft} />
                           </Pressable>
@@ -562,10 +709,49 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                             <IconButton name="close" size={14} label={t('remove')} color={theme.inkSoft} onPress={() => removeMetric(bi, ei, 0)} />
                           )}
                         </View>
-                        <UnitScroller
-                          value={primary.value} unit={primary.unit} tiers={primary.tiers} last={lastPrimary}
-                          onChange={(v) => patchMetricValue(bi, ei, 0, v)}
-                        />
+                        {primary.ladder ? (
+                          <>
+                            <View style={{ flexDirection: rowDir, flexWrap: 'wrap', alignItems: 'center', gap: 6, marginBottom: spacing.sm }}>
+                              {primary.ladder.map((v, ri) => (
+                                <Chip
+                                  key={ri}
+                                  selected={(ladderRound[key] ?? 0) === ri}
+                                  onPress={() => setLadderRound((prev) => ({ ...prev, [key]: ri }))}
+                                >
+                                  {t('roundChip', { n: ri + 1, value: v })}
+                                </Chip>
+                              ))}
+                              <Pressable
+                                onPress={() => removeLadderRound(bi, ei)}
+                                disabled={primary.ladder.length <= 1}
+                                accessibilityLabel={t('removeRound')}
+                                style={{
+                                  width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center',
+                                  backgroundColor: theme.bg, opacity: primary.ladder.length <= 1 ? 0.4 : 1,
+                                }}
+                              >
+                                <Ionicons name="remove" size={16} color={theme.inkSoft} />
+                              </Pressable>
+                              <Pressable
+                                onPress={() => addLadderRound(bi, ei)}
+                                accessibilityLabel={t('addRound')}
+                                style={{ width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: theme.bg }}
+                              >
+                                <Ionicons name="add" size={16} color={theme.inkSoft} />
+                              </Pressable>
+                            </View>
+                            <UnitScroller
+                              value={primary.ladder[Math.min(ladderRound[key] ?? 0, primary.ladder.length - 1)]}
+                              unit={primary.unit}
+                              onChange={(v) => patchLadderValue(bi, ei, Math.min(ladderRound[key] ?? 0, primary.ladder!.length - 1), v)}
+                            />
+                          </>
+                        ) : (
+                          <UnitScroller
+                            value={primary.value} unit={primary.unit} tiers={primary.tiers} last={lastPrimary}
+                            onChange={(v) => patchMetricValue(bi, ei, 0, v)}
+                          />
+                        )}
                         {extra && (
                           <View style={{ marginTop: spacing.sm }}>
                             <View style={{ flexDirection: rowDir, alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
@@ -574,7 +760,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                                 style={{ flexDirection: rowDir, alignItems: 'center', gap: 3 }}
                               >
                                 <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
-                                  {unitLabel(extra.unit, customUnits, t)}
+                                  {metricUnitLabel(extra, customUnits, t)}
                                 </Text>
                                 <Ionicons name="chevron-down" size={10} color={theme.inkSoft} />
                               </Pressable>
@@ -622,15 +808,24 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
           {t('addBlock')}
         </Button>
 
-        {tree.scoreType && (
+        {effectiveScoreType && (
           <ScoreEntry
-            type={tree.scoreType} value={score}
+            type={effectiveScoreType} value={score}
             onChange={(k, v) => setScore((s) => ({ ...s, [k]: v }))}
             style={{ marginBottom: spacing.md }}
           />
         )}
 
         <NoticeCard>{t('savesAsPlanned')}</NoticeCard>
+
+        {/* At the foot, not the top — asking before someone has read the
+            form invites an answer they haven't formed yet. Phrased as the
+            app's mistake ("did I get something wrong"), not the trainee's
+            task, so reporting a bad parse feels like helping rather than
+            doing the app's job. */}
+        <Button variant="secondary" size="md" block onPress={() => setReparseOpen(true)} style={{ marginTop: spacing.md }}>
+          {t('reparseCta')}
+        </Button>
       </ScrollView>
 
       {removed && (
@@ -708,6 +903,19 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         )}
         <Button block busy={saving} onPress={finishSave} style={{ marginTop: spacing.md }}>
           {intensity ? t('done') : t('skip')}
+        </Button>
+      </BottomSheet>
+
+      <BottomSheet visible={reparseOpen} title={t('reparseCta')} onClose={() => setReparseOpen(false)}>
+        <Text style={{ color: theme.inkSoft, fontSize: 12.5, marginBottom: spacing.sm, textAlign: align }}>
+          {t('reparseHint')}
+        </Text>
+        <Field
+          value={reparseText} onChangeText={setReparseText} placeholder={t('reparsePlaceholder')}
+          style={{ marginBottom: spacing.md }}
+        />
+        <Button block busy={reparsing} disabled={reparseText.trim().length < 3} onPress={submitReparse}>
+          {t('reparseSubmit')}
         </Button>
       </BottomSheet>
 

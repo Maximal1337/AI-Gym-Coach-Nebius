@@ -231,12 +231,20 @@ const server = createServer(async (req, res) => {
         json(413, { error: "body_too_large" });
         return;
       }
-      const parsed = parsePlanInputSchema.safeParse(JSON.parse(rawBody.toString()));
+      const rawJson = JSON.parse(rawBody.toString());
+      const parsed = parsePlanInputSchema.safeParse(rawJson);
       if (!parsed.success) {
         json(400, { error: "invalid_input" });
         return;
       }
-      const result = await parseStudioWorkout(parsed.data);
+      // "Did I get something wrong?" re-parse: the trainee's own words about
+      // what a previous read got wrong, sent alongside the SAME source.
+      // Not part of parsePlanInputSchema (shared with gym's /parse-plan,
+      // which has no equivalent), so pulled off the raw body directly.
+      const correctionNote = typeof rawJson.correctionNote === "string" && rawJson.correctionNote.length <= 500
+        ? rawJson.correctionNote
+        : undefined;
+      const result = await parseStudioWorkout(parsed.data, correctionNote);
       if (!result) {
         json(503, { error: "llm_not_configured" });
         return;

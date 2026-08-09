@@ -329,6 +329,7 @@
   "scoreType_amrap": "AMRAP",
   "scoreType_emom": "EMOM",
   "scoreType_strength": "Strength",
+  "scoreType_stations": "Rounds you got through",
   "scoreRounds": "rounds",
   "scorePlusReps": "+ reps",
   "scoreRoundsCompleted": "rounds completed",
@@ -355,5 +356,17 @@
   "savingSession": "Saving your session…",
   "discardingSession": "Discarding…",
   "choosePasteWorkout": "I have it written down — I'll paste it in",
-  "buildOwnWorkout": "Build a workout yourself"
+  "buildOwnWorkout": "Build a workout yourself",
+  "perSide": "per side",
+  "roundChip": "R{{n}} · {{value}}",
+  "removeRound": "Remove last round",
+  "addRound": "Add a round",
+  "reparseCta": "Did I get something wrong?",
+  "reparseHint": "In your own words — I'll redo the plan, not just this row.",
+  "reparsePlaceholder": "The deadlift drops 10-8-6-3-3 over the rounds",
+  "reparseSubmit": "Redo it",
+  "reparseRemovesTitle": "This changes some things",
+  "reparseRemovesBody": "These won't be in the redone plan: {{names}}. Continue?",
+  "reparseApply": "Continue",
+  "reparseNoSource": "There's no original board to re-read for this workout — edit the row directly instead."
 }

@@ -184,11 +184,23 @@ export interface StudioExercise {
   value: number;
   tiers: number[] | null;
   tierIndex: number | null;
-  /** The "+ unit" second metric — always optional, never a third. */
+  /** "6/6 pistol" — one value, done each side. NOT the same as a two-value
+   * tier ladder ("15/20"), which is two different numbers; per_side is
+   * always two IDENTICAL numbers on the board. */
+  perSide: boolean;
+  /** "10-8-6-3-3 Deadlift" — one value per round, mutually exclusive with
+   * tiers/perSide. When set, `value` is only a fallback (the first round);
+   * the real data is this array, index-aligned with the block's own round
+   * count when the block's format is `rounds`. */
+  ladder: number[] | null;
+  /** The "+ unit" second metric — always optional, never a third. Ladders
+   * are primary-metric only — a laddered exercise pairing a second unit
+   * with its own separate ladder isn't a real board pattern. */
   extraUnit: string | null;
   extraValue: number | null;
   extraTiers: number[] | null;
   extraTierIndex: number | null;
+  extraPerSide: boolean;
 }
 
 export interface StudioCustomUnit {

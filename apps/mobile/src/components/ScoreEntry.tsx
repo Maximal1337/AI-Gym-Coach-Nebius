@@ -3,13 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { useTheme, spacing, radius } from '../theme';
 import { useLanguage } from '../lib/language';
 
-export type StudioScoreType = 'fortime' | 'amrap' | 'emom' | 'strength';
+export type StudioScoreType = 'fortime' | 'amrap' | 'emom' | 'strength' | 'stations';
 
 const FIELDS: Record<StudioScoreType, Array<{ key: string; unitKey: string }>> = {
   fortime: [{ key: 'min', unitKey: 'unit_min' }, { key: 'sec', unitKey: 'unit_sec' }],
   amrap: [{ key: 'rounds', unitKey: 'scoreRounds' }, { key: 'reps', unitKey: 'scorePlusReps' }],
   emom: [{ key: 'rounds', unitKey: 'scoreRoundsCompleted' }],
   strength: [{ key: 'weight', unitKey: 'unit_kg' }, { key: 'reps', unitKey: 'unit_reps' }],
+  // A station rotation's own headline number: not parsed from the board
+  // (nothing there says how many rounds a trainee will actually complete),
+  // so this is never set by tree.scoreType — StudioSessionScreen offers it
+  // whenever a block's name looks like a station, independent of scoreType.
+  stations: [{ key: 'rounds', unitKey: 'scoreRoundsCompleted' }],
 };
 
 function pad(n: string | undefined): string {
