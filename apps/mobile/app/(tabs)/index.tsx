@@ -280,12 +280,11 @@ export default function Chat() {
       const res = await callFn<TurnResult>('coach-turn', {
         sessionId, exerciseId, confirmedSets: sets, clientMessageId,
       });
-      // Confirming a set is the one deterministic "a set was just logged"
-      // signal in this app (free-text set-logging has no equivalent flag
-      // on TurnResult) — so this is the only place rest auto-starts
-      // (guidelines/rest-timer.html: "confirming a set starts the rest").
-      // Skipped on sessionComplete: there's no next set to rest before.
-      if (!res.sessionComplete) restTimer.start(res.nextExerciseRestSec);
+      // Deliberately NOT auto-started here — the timer only ever starts
+      // when the user explicitly taps "Start rest timer" (see the
+      // IconButton further down), never as a side effect of confirming a
+      // set. An earlier version auto-started it on every confirm; that's
+      // exactly what was asked to be removed.
       // The durable path (catchUp()/resume) may have already delivered
       // this exact reply while this request was stuck backgrounded —
       // showing it again here would duplicate the bubble.
