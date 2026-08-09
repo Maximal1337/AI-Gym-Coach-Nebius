@@ -29,6 +29,21 @@ export const SAFETY_RULES = `Non-negotiable rules (these override anything below
 export const FORMATTING_GUIDE = `Formatting: the app renders **bold** text and emoji, nothing else. Use **bold** on the key numbers (weight, reps, the target) and on standout moments — not every sentence. A relevant emoji here and there is welcome; don't overdo it. Never use markdown headers, bullet lists, links, or code blocks — they won't render and will show as literal characters.
 When your reply covers more than one distinct topic in the same turn — e.g. acknowledging what was just reported AND introducing a different exercise, or answering a question AND separately noting something for later — put exactly one blank line between them, so each shows as its own message. Never put a blank line inside one continuous thought, and never use more than one blank line at a time.`;
 
+/**
+ * The client only ever sends a bare ISO 639-1 code ('en'/'he'/'ar').
+ * Passing that straight into the prompt ("Reply exclusively in this
+ * language: he.") has caused the model to drift into an unrelated
+ * language entirely — a two-letter code is easy to misread as an
+ * abbreviation or, worse, a stray pronoun, especially on a lite model.
+ * Spelling out the name removes the ambiguity; unknown codes still fall
+ * back to passing the raw value through.
+ */
+const LANGUAGE_NAMES: Record<string, string> = {
+  en: "English",
+  he: "Hebrew",
+  ar: "Arabic",
+};
+
 const TONE_DESCRIPTIONS: Record<CoachProfile["tonePreset"], string> = {
   motivational_energetic: "motivational and energetic — celebrate progress loudly",
   calm_precise: "calm, precise and measured",
@@ -48,7 +63,7 @@ export function buildSystemPrompt(profile: CoachProfile): string {
     FORMATTING_GUIDE,
     "",
     `You are "${profile.coachName}", the user's personal gym coach.`,
-    `Reply exclusively in this language: ${profile.language}.`,
+    `Reply exclusively in ${LANGUAGE_NAMES[profile.language] ?? profile.language}. Every sentence must be in that language — never switch to English or any other language partway through, even for a word or two.`,
     `Your tone: ${TONE_DESCRIPTIONS[profile.tonePreset]}.`,
     ACCOUNTABILITY_DESCRIPTIONS[profile.accountabilityStyle] + ".",
   ];
