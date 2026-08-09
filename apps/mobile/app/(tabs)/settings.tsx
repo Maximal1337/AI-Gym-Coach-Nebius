@@ -10,7 +10,6 @@ import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLanguage } from '../../src/lib/language';
 import { useLanguagePicker } from '../../src/lib/useLanguagePicker';
 import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../../src/lib/units';
-import { UnitsToggle } from '../../src/components/UnitsToggle';
 import { TERMS_URL, PRIVACY_URL } from '../../src/lib/webUrl';
 import { fetchUsageSnapshot } from '../../src/lib/usage';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
@@ -22,7 +21,7 @@ export default function Settings() {
   const { t } = useTranslation();
   const { dir, language } = useLanguage();
   const { open: openLanguagePicker } = useLanguagePicker();
-  const { units, setUnits } = useUnits();
+  const { units } = useUnits();
   const [coach, setCoach] = useState<{ coach_name: string; tone_preset: string } | null>(null);
   const [usage, setUsage] = useState({ used: 0, total: 0 });
   // null = not loaded yet / no row at all — the section only renders once
@@ -135,21 +134,10 @@ export default function Settings() {
         {row(t('tone'), coach ? t(`tone_${coach.tone_preset}`) : '—', () => router.push('/edit-persona'))}
       </View>
 
-      {sectionTitle(t('profileSection'))}
-      <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-        {/* Not gated on fitnessProfile existing — this is a general
-            preference, immediately above the two fields it governs
-            (guidelines/units-setting.html), so it needs a home even for
-            someone who never filled in "About you" at all. */}
-        <View style={{
-          flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between', alignItems: 'center',
-          padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule,
-        }}>
-          <Text style={{ color: theme.ink }}>{t('unitsLabel')}</Text>
-          <UnitsToggle units={units} onChange={setUnits} />
-        </View>
-        {fitnessProfile && (
-          <>
+      {fitnessProfile && (
+        <>
+          {sectionTitle(t('profileSection'))}
+          <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
             {row(t('genderLabel'), fitnessProfile.gender ? t(`gender_${fitnessProfile.gender}`) : '—', () => router.push('/edit-fitness-profile'))}
             {row(t('ageLabel'), fitnessProfile.age != null ? String(fitnessProfile.age) : '—', () => router.push('/edit-fitness-profile'))}
             {row(
@@ -162,9 +150,9 @@ export default function Settings() {
               fitnessProfile.height_cm != null ? formatHeightCm(fitnessProfile.height_cm, units) : '—',
               () => router.push('/edit-fitness-profile'),
             )}
-          </>
-        )}
-      </View>
+          </View>
+        </>
+      )}
 
       {sectionTitle(t('account'))}
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>

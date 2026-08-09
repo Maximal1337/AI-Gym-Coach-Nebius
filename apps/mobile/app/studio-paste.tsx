@@ -7,6 +7,7 @@ import { File } from 'expo-file-system';
 import { openStudioSession, type StudioSessionSource } from '../src/lib/studioApi';
 import { DismissKeyboardView } from '../src/components/DismissKeyboardView';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
+import { Screen } from '../src/components/Screen';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
@@ -92,6 +93,7 @@ export default function StudioPasteScreen() {
   }
 
   return (
+    <Screen>
     <DismissKeyboardView style={{ padding: spacing.lg }}>
       <LoadingOverlay visible={busy && !picking} object="plate" label={t('parsing')} />
       <Pressable onPress={() => router.back()} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
@@ -144,5 +146,6 @@ export default function StudioPasteScreen() {
         </View>
       )}
     </DismissKeyboardView>
+    </Screen>
   );
 }
