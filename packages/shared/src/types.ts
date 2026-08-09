@@ -121,3 +121,82 @@ export interface CommonExercise {
   equipmentType: EquipmentType;
   isCompound: boolean;
 }
+
+// --------------------------------------------------------------- studio
+// A second, fully independent training kind for class/functional-fitness
+// trainees — whiteboard boards with blocks, coach-set scaling tiers and
+// per-movement units, rather than gym sets/reps/kg. See
+// supabase/migrations/20260809120000_studio_workouts.sql.
+
+export type StudioScoreType = "fortime" | "amrap" | "emom" | "strength";
+
+export type StudioBlockFormatType =
+  | "buyin"
+  | "rounds"
+  | "fortime"
+  | "amrap"
+  | "emom"
+  | "intervals"
+  | "custom";
+
+/** Params shape depends on format_type — {} for buyin/fortime, {count} for
+ * rounds, {cap} for amrap (minutes), {every,total} for emom (minutes),
+ * {on,off} for intervals (seconds). Derive the display string from this in
+ * one place (client-side), never store a formatted label. */
+export type StudioBlockFormatParams = Record<string, number>;
+
+export interface StudioSession {
+  id: string;
+  userId: string;
+  sourceSessionId: string | null;
+  name: string;
+  startedAt: string;
+  /** null = still open/live — the sole lifecycle signal. Set only by a
+   * deliberate Save; there is no auto-save/abandoned state. */
+  savedAt: string | null;
+  scoreType: StudioScoreType | null;
+  score: Record<string, string | number> | null;
+  intensity: 1 | 2 | 3 | 4 | 5 | null;
+  note: string | null;
+}
+
+export interface StudioBlock {
+  id: string;
+  sessionId: string;
+  orderIndex: number;
+  /** null = flat list, no block header rendered. */
+  name: string | null;
+  /** null = no format was ever chosen for this block — most boards don't
+   * write one for every block. Not the same as 'buyin', which is a real,
+   * distinct format (a bookending buy-in/buy-out pairing). */
+  formatType: StudioBlockFormatType | null;
+  formatParams: StudioBlockFormatParams;
+  formatCustom: string | null;
+}
+
+export interface StudioExercise {
+  id: string;
+  blockId: string;
+  orderIndex: number;
+  name: string;
+  parseConfidence: "low" | null;
+  unit: string;
+  value: number;
+  tiers: number[] | null;
+  tierIndex: number | null;
+  /** The "+ unit" second metric — always optional, never a third. */
+  extraUnit: string | null;
+  extraValue: number | null;
+  extraTiers: number[] | null;
+  extraTierIndex: number | null;
+}
+
+export interface StudioCustomUnit {
+  id: string;
+  userId: string;
+  key: string;
+  label: string;
+  step: number;
+  min: number;
+  max: number;
+}

@@ -10,7 +10,7 @@ import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { Button } from '../../src/components/Button';
 import { IconButton } from '../../src/components/IconButton';
 import { BottomSheet } from '../../src/components/BottomSheet';
-import { ChoiceCard } from '../../src/components/ChoiceCard';
+import { AddWorkoutSheet } from '../../src/components/AddWorkoutSheet';
 import { Badge } from '../../src/components/Badge';
 import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
@@ -174,42 +174,35 @@ export default function ManagePlans() {
         />
       </BottomSheet>
 
-      <BottomSheet visible={addOpen} title={t('addPlanTitle')} onClose={() => setAddOpen(false)}>
-        <View style={{ gap: spacing.sm }}>
-          <ChoiceCard
-            emphasis="primary"
-            icon="sparkles"
-            label={t('generatePlanCta')}
-            description={t('goalSub')}
-            badge={<Badge>AI</Badge>}
-            onPress={() => openAddRoute(() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } }))}
-          />
-          <ChoiceCard
-            icon="camera-outline"
-            label={t('choosePhoto')}
-            description={t('choosePhotoDesc')}
-            onPress={() => openAddRoute(() => router.push({ pathname: '/plan-photo', params: { mode: 'add' } }))}
-          />
-          <ChoiceCard
-            icon="clipboard-outline"
-            label={t('choosePaste')}
-            onPress={() => openAddRoute(() => router.push({ pathname: '/plan-edit', params: { mode: 'add' } }))}
-          />
-          <ChoiceCard
-            icon="document-attach-outline"
-            label={t('chooseUpload')}
-            onPress={() => openAddRoute(() => router.push({ pathname: '/plan-edit', params: { mode: 'add', initialMode: 'upload' } }))}
-          />
-          <ChoiceCard
-            icon="construct-outline"
-            label={t('buildOwnPlan')}
-            onPress={() => openAddRoute(() => router.push('/plan-build'))}
-          />
-        </View>
-        <Text style={{ color: theme.inkSoft, fontSize: 10.5, lineHeight: 15, textAlign: dir === 'rtl' ? 'right' : 'left', marginTop: spacing.sm }}>
-          {t('generatePlanCaption')}
-        </Text>
-      </BottomSheet>
+      <AddWorkoutSheet
+        visible={addOpen}
+        title={t('addPlanTitle')}
+        caption={t('generatePlanCaption')}
+        onClose={() => setAddOpen(false)}
+        methods={[
+          {
+            emphasis: 'primary', icon: 'sparkles', label: t('generatePlanCta'), description: t('goalSub'),
+            badge: <Badge>AI</Badge>,
+            onPress: () => openAddRoute(() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } })),
+          },
+          {
+            icon: 'camera-outline', label: t('choosePhoto'), description: t('choosePhotoDesc'),
+            onPress: () => openAddRoute(() => router.push({ pathname: '/plan-photo', params: { mode: 'add' } })),
+          },
+          {
+            icon: 'clipboard-outline', label: t('choosePaste'),
+            onPress: () => openAddRoute(() => router.push({ pathname: '/plan-edit', params: { mode: 'add' } })),
+          },
+          {
+            icon: 'document-attach-outline', label: t('chooseUpload'),
+            onPress: () => openAddRoute(() => router.push({ pathname: '/plan-edit', params: { mode: 'add', initialMode: 'upload' } })),
+          },
+          {
+            icon: 'construct-outline', label: t('buildOwnPlan'),
+            onPress: () => openAddRoute(() => router.push('/plan-build')),
+          },
+        ]}
+      />
     </Screen>
   );
 }

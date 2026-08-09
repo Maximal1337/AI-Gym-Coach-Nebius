@@ -27,6 +27,7 @@ import {
   parsePlanInputSchema,
 } from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
+import { parseStudioWorkout } from "./parseStudio.js";
 import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
 
 // Safety net for anything that slips past every route's own try/catch below.
@@ -216,6 +217,33 @@ const server = createServer(async (req, res) => {
       }
     } catch (e) {
       console.error("parse failed:", (e as Error)?.message);
+      Sentry.captureException(e);
+      json(422, { error: "unparseable" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/parse-studio") {
+    if (!checkAuth(req, json)) return;
+    try {
+      const rawBody = await readBody(req, MAX_PDF_BODY_BYTES);
+      if (!rawBody) {
+        json(413, { error: "body_too_large" });
+        return;
+      }
+      const parsed = parsePlanInputSchema.safeParse(JSON.parse(rawBody.toString()));
+      if (!parsed.success) {
+        json(400, { error: "invalid_input" });
+        return;
+      }
+      const result = await parseStudioWorkout(parsed.data);
+      if (!result) {
+        json(503, { error: "llm_not_configured" });
+        return;
+      }
+      json(200, result);
+    } catch (e) {
+      console.error("parse-studio failed:", (e as Error)?.message);
       Sentry.captureException(e);
       json(422, { error: "unparseable" });
     }

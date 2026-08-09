@@ -1,0 +1,11 @@
+-- Not every block on a whiteboard carries a clock/format notation (many are
+-- just a plain list of movements) — format_type was NOT NULL, defaulting
+-- everywhere to 'buyin', which silently mislabeled a block with no written
+-- format as "Buy-in / buy-out" (a real, distinct format, not a null
+-- placeholder). Genuinely optional: null means "no format was ever chosen
+-- for this block," not "buy-in/buy-out."
+--
+-- The existing check constraint (format_type in (...)) already only ever
+-- applies to non-null values in standard SQL, so it needs no change here —
+-- only the not-null constraint itself goes.
+alter table public.studio_blocks alter column format_type drop not null;

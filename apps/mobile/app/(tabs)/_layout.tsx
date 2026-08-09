@@ -5,22 +5,26 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUnread } from '../../src/lib/unread';
 import { RestTimer } from '../../src/components/RestTimer';
+import { STUDIO_WORKOUTS_ENABLED } from '../../src/lib/featureFlags';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
 function TabIcon({
-  name, label, focused, badge,
+  name, label, focused, badge, compact,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   label: string;
   focused: boolean;
   /** A reply that arrived while this tab wasn't the one showing — see unread.tsx. */
   badge?: number;
+  /** Five tabs (Studio enabled) need tighter spacing than the pill's
+   * original four-tab layout was sized for. */
+  compact?: boolean;
 }) {
   const theme = useTheme();
   return (
     <View style={{
       alignItems: 'center', justifyContent: 'center', gap: 2,
-      paddingHorizontal: spacing.md, paddingVertical: 8,
+      paddingHorizontal: compact ? spacing.sm : spacing.md, paddingVertical: 8,
       borderRadius: 20,
       backgroundColor: focused ? theme.surface : 'transparent',
     }}>
@@ -35,7 +39,7 @@ function TabIcon({
           </View>
         )}
       </View>
-      <Text style={{ fontSize: 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
+      <Text style={{ fontSize: compact ? 9 : 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
         {label}
       </Text>
     </View>
@@ -64,7 +68,7 @@ export default function TabsLayout() {
         // small for TabIcon's icon+label column, which was getting
         // squashed down to nothing inside it. This is the supported
         // override for a custom combined icon+label.
-        tabBarIconStyle: { width: 84, height: TAB_BAR_HEIGHT - 12 },
+        tabBarIconStyle: { width: STUDIO_WORKOUTS_ENABLED ? 66 : 84, height: TAB_BAR_HEIGHT - 12 },
         tabBarStyle: {
           position: 'absolute',
           left: 20,
@@ -106,7 +110,22 @@ export default function TabsLayout() {
               label={t('chatTitle')}
               focused={focused}
               badge={unread}
+              compact={STUDIO_WORKOUTS_ENABLED}
             />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="studio"
+        options={{
+          title: t('studioTab'),
+          // Kept registered even when the flag is off (a route with no tab
+          // entry, per Expo Router's own pattern) rather than removed —
+          // conditionally mounting/unmounting a Tabs.Screen breaks the
+          // navigator's own tab state.
+          href: STUDIO_WORKOUTS_ENABLED ? undefined : null,
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'flame' : 'flame-outline'} label={t('studioTab')} focused={focused} compact />
           ),
         }}
       />
@@ -115,7 +134,7 @@ export default function TabsLayout() {
         options={{
           title: t('progressTitle'),
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} label={t('progressTitle')} focused={focused} />
+            <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} label={t('progressTitle')} focused={focused} compact={STUDIO_WORKOUTS_ENABLED} />
           ),
         }}
       />
@@ -124,7 +143,7 @@ export default function TabsLayout() {
         options={{
           title: t('trainingPlans'),
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'barbell' : 'barbell-outline'} label={t('trainingPlans')} focused={focused} />
+            <TabIcon name={focused ? 'barbell' : 'barbell-outline'} label={t('trainingPlans')} focused={focused} compact={STUDIO_WORKOUTS_ENABLED} />
           ),
         }}
       />
@@ -133,7 +152,7 @@ export default function TabsLayout() {
         options={{
           title: t('settingsTitle'),
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'settings' : 'settings-outline'} label={t('settingsTitle')} focused={focused} />
+            <TabIcon name={focused ? 'settings' : 'settings-outline'} label={t('settingsTitle')} focused={focused} compact={STUDIO_WORKOUTS_ENABLED} />
           ),
         }}
       />

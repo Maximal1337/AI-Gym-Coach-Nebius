@@ -1,5 +1,5 @@
-import type { ReactNode } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Keyboard, LayoutAnimation, Modal, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../lib/language';
@@ -24,6 +24,37 @@ export function BottomSheet({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  // KeyboardAvoidingView's padding heuristic doesn't reliably reposition an
+  // absolutely-positioned child inside a Modal (a separate native window —
+  // a known flaky combination), which is what left a focused Field (e.g.
+  // the intensity sheet's note field) sitting under the keyboard even after
+  // adding it. Tracking the keyboard's own height directly and applying it
+  // as this sheet's `bottom` offset sidesteps that entirely. "will" events
+  // on iOS fire as the keyboard starts animating, so LayoutAnimation below
+  // rides the same motion instead of snapping after the fact; Android only
+  // has "did" events (post-animation), so it corrects a beat later instead.
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      LayoutAnimation.configureNext(LayoutAnimation.create(
+        Platform.OS === 'ios' ? e.duration || 250 : 200,
+        LayoutAnimation.Types.easeInEaseOut,
+        LayoutAnimation.Properties.opacity,
+      ));
+      setKeyboardHeight(e.endCoordinates.height);
+    });
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setKeyboardHeight(0);
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
 
   return (
     <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
@@ -33,7 +64,7 @@ export function BottomSheet({
         accessibilityLabel={t('close')}
       />
       <View style={{
-        position: 'absolute', left: 0, right: 0, bottom: 0, maxHeight: '85%',
+        position: 'absolute', left: 0, right: 0, bottom: keyboardHeight, maxHeight: '85%',
         backgroundColor: theme.bg, borderTopLeftRadius: 20, borderTopRightRadius: 20, overflow: 'hidden',
       }}>
         <View style={{
