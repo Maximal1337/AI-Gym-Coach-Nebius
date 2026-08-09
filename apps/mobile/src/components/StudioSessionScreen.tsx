@@ -435,7 +435,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                 }}
               >
                 <Text style={{ color: theme.accent, fontSize: 11, fontWeight: '800', letterSpacing: 0.6, textTransform: 'uppercase' }}>
-                  {block.name ? `${bi + 1} · ${block.name}` : `${t('block')} ${bi + 1}`}
+                  {block.name ? `${block.name} · ${bi + 1}` : `${t('block')} ${bi + 1}`}
                 </Text>
                 <View style={{ flexDirection: rowDir, alignItems: 'center', gap: 5 }}>
                   {block.formatType != null && (

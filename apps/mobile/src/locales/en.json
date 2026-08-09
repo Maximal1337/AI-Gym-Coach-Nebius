@@ -175,7 +175,7 @@
   "chooseHowSub": "You can have AI build you a plan, paste an existing one, or build it yourself.",
   "choosePaste": "I have a plan — I'll paste it in",
   "choosePhoto": "I have it on paper — I'll take a photo",
-  "choosePhotoDesc": "A printout, a page from your trainer, a whiteboard",
+  "choosePhotoDesc": "Take a photo now, or choose one from your gallery",
   "chooseUpload": "I have a file — I'll upload it (PDF, Word, or text)",
   "chooseManual": "I'll build it myself",
   "cameraTitle": "Photograph your plan",
@@ -271,10 +271,7 @@
   "addNewWorkout": "Add a new workout",
   "orDoOneAgain": "Or do one again",
   "photographBoard": "Photograph the board",
-  "photographBoardDesc": "A whiteboard, a printout, a page from your coach",
   "pasteItIn": "Paste it in",
-  "uploadFile": "Upload a file",
-  "buildItMyself": "Build it myself",
   "blocksAndExercises": "{{blocks}} blocks · {{exercises}} exercises",
   "addBlock": "Add a block",
   "addUnit": "Add a unit",
@@ -356,5 +353,7 @@
   "customUnitCta": "+ Custom unit",
   "unit_lbs": "lbs",
   "savingSession": "Saving your session…",
-  "discardingSession": "Discarding…"
+  "discardingSession": "Discarding…",
+  "choosePasteWorkout": "I have it written down — I'll paste it in",
+  "buildOwnWorkout": "Build a workout yourself"
 }

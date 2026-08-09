@@ -175,7 +175,7 @@
   "chooseHowSub": "يمكنك أن يبني لك الذكاء الاصطناعي خطة، أو تلصق خطة موجودة، أو تبنيها بنفسك.",
   "choosePaste": "لدي خطة — سألصقها",
   "choosePhoto": "لدي الخطة على ورق — سألتقط صورة لها",
-  "choosePhotoDesc": "ورقة مطبوعة، صفحة من مدربك، سبورة",
+  "choosePhotoDesc": "التقط صورة الآن، أو اختر واحدة من معرض الصور",
   "chooseUpload": "لدي ملف — سأرفعه (PDF أو Word أو نص)",
   "chooseManual": "سأبنيها بنفسي",
   "cameraTitle": "التقط صورة لخطتك",
@@ -271,10 +271,7 @@
   "addNewWorkout": "إضافة تمرين جديد",
   "orDoOneAgain": "أو كرّر تمرينًا سابقًا",
   "photographBoard": "تصوير اللوح",
-  "photographBoardDesc": "سبورة، ورقة مطبوعة، أو صفحة من مدربك",
   "pasteItIn": "لصق نص",
-  "uploadFile": "رفع ملف",
-  "buildItMyself": "إنشاؤه بنفسي",
   "blocksAndExercises": "{{blocks}} أقسام · {{exercises}} تمارين",
   "addBlock": "إضافة قسم",
   "addUnit": "إضافة وحدة",
@@ -356,5 +353,7 @@
   "customUnitCta": "+ وحدة مخصصة",
   "unit_lbs": "رطل",
   "savingSession": "جارٍ حفظ الجلسة…",
-  "discardingSession": "جارٍ الحذف…"
+  "discardingSession": "جارٍ الحذف…",
+  "choosePasteWorkout": "لدي النص مكتوبًا — سألصقه",
+  "buildOwnWorkout": "أنشئ تمرينًا بنفسك"
 }

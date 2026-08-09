@@ -142,22 +142,28 @@ export default function StudioTab() {
         visible={addOpen}
         title={t('addNewWorkout')}
         onClose={() => setAddOpen(false)}
+        // Same component, icons and copy tone as the gym's "Add plan" sheet
+        // (plans.tsx) — just without the AI-generate option, which has no
+        // studio equivalent. choosePhoto/choosePhotoDesc/chooseUpload are
+        // reused verbatim (nothing gym-specific in that wording); the paste
+        // and build-your-own cards get studio-worded siblings, since the
+        // gym originals literally say "plan".
         methods={[
           {
-            icon: 'camera-outline', label: t('photographBoard'), description: t('photographBoardDesc'),
+            icon: 'camera-outline', label: t('choosePhoto'), description: t('choosePhotoDesc'),
             emphasis: 'primary',
             onPress: () => openAddRoute(() => router.push('/studio-photo')),
           },
           {
-            icon: 'clipboard-outline', label: t('pasteItIn'),
+            icon: 'clipboard-outline', label: t('choosePasteWorkout'),
             onPress: () => openAddRoute(() => router.push('/studio-paste')),
           },
           {
-            icon: 'document-attach-outline', label: t('uploadFile'),
+            icon: 'document-attach-outline', label: t('chooseUpload'),
             onPress: () => openAddRoute(() => router.push({ pathname: '/studio-paste', params: { initialMode: 'upload' } })),
           },
           {
-            icon: 'construct-outline', label: t('buildItMyself'),
+            icon: 'construct-outline', label: t('buildOwnWorkout'),
             onPress: () => void buildOwn(),
           },
         ]}
