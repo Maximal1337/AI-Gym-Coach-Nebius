@@ -5,19 +5,19 @@ import { useTheme, spacing, radius } from '../theme';
 import { useLanguage } from '../lib/language';
 import { INTENSITY_LEVELS } from './IntensityPicker';
 
-export interface StudioSessionSummary {
+export interface WorkoutCardData {
   id: string;
+  kind: 'studio' | 'gym';
   name: string;
-  blockCount: number;
-  exerciseCount: number;
+  meta: string; // "7 blocks · 16 exercises" (studio) or "8 exercises" (gym) — never a duration
   movements: string[];
   movementsMore: number;
-  savedAt: string | null;
+  lastDoneAt: string | null;
   intensity: 1 | 2 | 3 | 4 | 5 | null;
 }
 
-function relativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string {
-  if (!iso) return '';
+function relativeTime(iso: string | null, t: (k: string, opts?: Record<string, unknown>) => string): string | null {
+  if (!iso) return null;
   const days = Math.floor((Date.now() - new Date(iso).getTime()) / (24 * 60 * 60 * 1000));
   if (days <= 0) return t('today');
   if (days === 1) return t('yesterday');
@@ -26,38 +26,47 @@ function relativeTime(iso: string | null, t: (k: string, opts?: Record<string, u
 }
 
 /**
- * "Or do one again" — a saved studio workout, carrying exactly what a
- * trainee recognises a session by: its shape (blocks/exercises), a few
- * movements as a memory hook, and when it was last done. Deliberately no
- * score/Rx badge (guidelines/studio-workout-entry.html) — a circuit has
- * none, and where one exists it's a stale number attached to a board that
- * may have since changed. Tapping the card IS the choice — no
- * select-then-confirm.
+ * One card, both kinds (studio-implementation-brief.md §3.1) — the leading
+ * icon tile carries the type (flame-outline studio / barbell-outline gym),
+ * same glyph the add-workout entry point uses, so nothing else in the card
+ * needs to say "studio" or "gym" out loud. Tapping the card opens it
+ * directly; there's no select-then-confirm.
  */
-export function StudioWorkoutCard({ workout, onPress }: { workout: StudioSessionSummary; onPress: () => void }) {
+export function WorkoutCard({
+  workout, onPress, onLongPress,
+}: {
+  workout: WorkoutCardData;
+  onPress: () => void;
+  /** Gym plans' edit/archive actions — no visible menu button per the
+   * brief's "tapping the card IS the choice" (§3.1); reachable instead via
+   * the standard long-press affordance, same as the old plan-actions sheet. */
+  onLongPress?: () => void;
+}) {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
-  const meta = workout.blockCount > 0
-    ? t('blocksAndExercises', { blocks: workout.blockCount, exercises: workout.exerciseCount })
-    : t('exercisesCount', { count: workout.exerciseCount });
   const face = workout.intensity ? INTENSITY_LEVELS[workout.intensity - 1].glyph : null;
+  const when = relativeTime(workout.lastDoneAt, t);
 
   return (
     <Pressable
       onPress={onPress}
-      style={{
-        backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md, overflow: 'hidden',
-      }}
+      onLongPress={onLongPress}
+      style={{ backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md }}
     >
-      <View style={{ position: 'absolute', top: 0, bottom: 0, [dir === 'rtl' ? 'right' : 'left']: 0, width: 3, backgroundColor: theme.accent, opacity: 0.7 }} />
       <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'flex-start', gap: spacing.sm }}>
+        <View style={{
+          width: 36, height: 36, borderRadius: radius.card, backgroundColor: theme.bg,
+          alignItems: 'center', justifyContent: 'center',
+        }}>
+          <Ionicons name={workout.kind === 'studio' ? 'flame-outline' : 'barbell-outline'} size={18} color={theme.accent} />
+        </View>
         <View style={{ flex: 1 }}>
           <Text style={{ color: theme.ink, fontSize: 15, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
             {workout.name}
           </Text>
           <Text style={{ color: theme.inkSoft, fontSize: 12, marginTop: 2, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-            {meta}
+            {workout.meta}
           </Text>
         </View>
         <Ionicons name={dir === 'rtl' ? 'chevron-back' : 'chevron-forward'} size={17} color={theme.inkSoft} />
@@ -80,11 +89,13 @@ export function StudioWorkoutCard({ workout, onPress }: { workout: StudioSession
         </View>
       )}
 
-      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
-        <Ionicons name="time-outline" size={13} color={theme.inkSoft} />
-        <Text style={{ color: theme.inkSoft, fontSize: 11 }}>{relativeTime(workout.savedAt, t)}</Text>
-        {face && <Text style={{ fontSize: 14, marginInlineStart: 2 }}>{face}</Text>}
-      </View>
+      {when && (
+        <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm }}>
+          <Ionicons name="time-outline" size={13} color={theme.inkSoft} />
+          <Text style={{ color: theme.inkSoft, fontSize: 11 }}>{when}</Text>
+          {face && <Text style={{ fontSize: 14, marginInlineStart: 2 }}>{face}</Text>}
+        </View>
+      )}
     </Pressable>
   );
 }

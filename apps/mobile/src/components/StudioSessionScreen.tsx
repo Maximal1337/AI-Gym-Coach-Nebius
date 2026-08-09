@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, LayoutAnimation, Platform, Pressable, ScrollView, Text, UIManager, View,
+  ActivityIndicator, Alert, LayoutAnimation, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
@@ -389,6 +389,10 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
     setRemoved(null);
   }
 
+  function patchSessionName(name: string) {
+    patch((d) => ({ ...d, name }));
+  }
+
   function patchBlockName(bi: number, name: string) {
     patch((d) => ({ ...d, blocks: d.blocks.map((b, i) => i !== bi ? b : { ...b, name }) }));
   }
@@ -562,9 +566,14 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
           <Ionicons name={isRTL ? 'chevron-forward' : 'chevron-back'} size={22} color={theme.inkSoft} />
         </Pressable>
         <View style={{ flex: 1 }}>
-          <Text style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: align }} numberOfLines={1}>
-            {tree.name}
-          </Text>
+          <TextInput
+            value={tree.name}
+            onChangeText={patchSessionName}
+            placeholder={t('workoutName')}
+            placeholderTextColor={theme.inkSoft}
+            numberOfLines={1}
+            style={{ color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: align, padding: 0 }}
+          />
           <Text style={{ color: theme.inkSoft, fontSize: 12, textAlign: align }}>{t('studioSessionSubtitle')}</Text>
         </View>
         <IconButton name="trash-outline" label={t('discardWorkoutCta')} onPress={confirmDiscard} color={theme.critical} />

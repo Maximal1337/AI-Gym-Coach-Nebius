@@ -3,16 +3,16 @@ import { Alert, Linking, Pressable, ScrollView, Text, View } from 'react-native'
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
-import { supabase } from '../../src/lib/supabase';
-import { callFn } from '../../src/lib/api';
-import { Screen } from '../../src/components/Screen';
-import { LoadingOverlay } from '../../src/components/LoadingOverlay';
-import { useLanguage } from '../../src/lib/language';
-import { useLanguagePicker } from '../../src/lib/useLanguagePicker';
-import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../../src/lib/units';
-import { TERMS_URL, PRIVACY_URL } from '../../src/lib/webUrl';
-import { fetchUsageSnapshot } from '../../src/lib/usage';
-import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
+import { supabase } from '../src/lib/supabase';
+import { callFn } from '../src/lib/api';
+import { Screen } from '../src/components/Screen';
+import { LoadingOverlay } from '../src/components/LoadingOverlay';
+import { useLanguage } from '../src/lib/language';
+import { useLanguagePicker } from '../src/lib/useLanguagePicker';
+import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../src/lib/units';
+import { TERMS_URL, PRIVACY_URL } from '../src/lib/webUrl';
+import { fetchUsageSnapshot } from '../src/lib/usage';
+import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../src/theme';
 
 const SUBSCRIPTION_UI_ENABLED = true;
 

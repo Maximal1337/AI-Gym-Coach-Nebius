@@ -64,11 +64,12 @@ function NotificationBridge() {
 
   // Tapping a notification just needs to land on the chat tab — whether
   // the app was fully closed (resume-on-mount) or only backgrounded (the
-  // AppState listener), index.tsx already knows how to catch up once
-  // it's there.
+  // AppState listener), train.tsx already knows how to catch up once
+  // it's there. Chat lives at "/train" now that Plans is the app's
+  // index/default tab (app/(tabs)/index.tsx).
   useEffect(() => {
     const responseSub = Notifications.addNotificationResponseReceivedListener(() => {
-      router.push('/(tabs)');
+      router.push('/(tabs)/train');
     });
     // Foreground receipt: setNotificationHandler above already suppressed
     // the native banner for this case — this is what shows the "+1" on

@@ -124,7 +124,7 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
   if (variant === 'pill') {
     return (
       <Pressable
-        onPress={() => router.push('/(tabs)')}
+        onPress={() => router.push('/(tabs)/train')}
         accessibilityRole="button"
         accessibilityLabel={`${done ? t('restDone') : `${t('restLabel')} ${countdown}`} — ${t('chatTitle')}`}
         style={{

@@ -5,26 +5,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUnread } from '../../src/lib/unread';
 import { RestTimer } from '../../src/components/RestTimer';
-import { STUDIO_WORKOUTS_ENABLED } from '../../src/lib/featureFlags';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
 function TabIcon({
-  name, label, focused, badge, compact,
+  name, label, focused, badge,
 }: {
   name: keyof typeof Ionicons.glyphMap;
   label: string;
   focused: boolean;
   /** A reply that arrived while this tab wasn't the one showing — see unread.tsx. */
   badge?: number;
-  /** Five tabs (Studio enabled) need tighter spacing than the pill's
-   * original four-tab layout was sized for. */
-  compact?: boolean;
 }) {
   const theme = useTheme();
   return (
     <View style={{
       alignItems: 'center', justifyContent: 'center', gap: 2,
-      paddingHorizontal: compact ? spacing.sm : spacing.md, paddingVertical: 8,
+      paddingHorizontal: spacing.md, paddingVertical: 8,
       borderRadius: 20,
       backgroundColor: focused ? theme.surface : 'transparent',
     }}>
@@ -39,7 +35,7 @@ function TabIcon({
           </View>
         )}
       </View>
-      <Text style={{ fontSize: compact ? 9 : 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
+      <Text style={{ fontSize: 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
         {label}
       </Text>
     </View>
@@ -51,11 +47,11 @@ export default function TabsLayout() {
   const { t } = useTranslation();
   const { count: unread } = useUnread();
   const pathname = usePathname();
-  // The chat screen ("/") shows its own docked RestTimer above the
+  // The chat screen ("/train") shows its own docked RestTimer above the
   // composer — this pill is the same object at a third, quieter density
   // for every other tab (guidelines/rest-timer.html), so it only renders
   // away from chat. RestTimer itself already renders nothing while idle.
-  const showRestPill = pathname !== '/';
+  const showRestPill = pathname !== '/train';
 
   return (
     <View style={{ flex: 1 }}>
@@ -68,7 +64,7 @@ export default function TabsLayout() {
         // small for TabIcon's icon+label column, which was getting
         // squashed down to nothing inside it. This is the supported
         // override for a custom combined icon+label.
-        tabBarIconStyle: { width: STUDIO_WORKOUTS_ENABLED ? 66 : 84, height: TAB_BAR_HEIGHT - 12 },
+        tabBarIconStyle: { width: 84, height: TAB_BAR_HEIGHT - 12 },
         tabBarStyle: {
           position: 'absolute',
           left: 20,
@@ -100,32 +96,23 @@ export default function TabsLayout() {
         ),
       }}
     >
+      {/* "index" is now the Plans screen (app/(tabs)/index.tsx) — Plans is
+          the app's default/cold-start tab, which in Expo Router means
+          whichever file is literally named index.tsx, not a navigator-level
+          setting. Chat lives at "train" instead. Tab bar visual order
+          (Train, Progress, Plans) is independent of this and just follows
+          the order these are declared below. */}
       <Tabs.Screen
-        name="index"
+        name="train"
         options={{
-          title: t('chatTitle'),
+          title: t('trainTab'),
           tabBarIcon: ({ focused }) => (
             <TabIcon
               name={focused ? 'chatbubble-ellipses' : 'chatbubble-ellipses-outline'}
-              label={t('chatTitle')}
+              label={t('trainTab')}
               focused={focused}
               badge={unread}
-              compact={STUDIO_WORKOUTS_ENABLED}
             />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="studio"
-        options={{
-          title: t('studioTab'),
-          // Kept registered even when the flag is off (a route with no tab
-          // entry, per Expo Router's own pattern) rather than removed —
-          // conditionally mounting/unmounting a Tabs.Screen breaks the
-          // navigator's own tab state.
-          href: STUDIO_WORKOUTS_ENABLED ? undefined : null,
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'flame' : 'flame-outline'} label={t('studioTab')} focused={focused} compact />
           ),
         }}
       />
@@ -134,25 +121,16 @@ export default function TabsLayout() {
         options={{
           title: t('progressTitle'),
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} label={t('progressTitle')} focused={focused} compact={STUDIO_WORKOUTS_ENABLED} />
+            <TabIcon name={focused ? 'stats-chart' : 'stats-chart-outline'} label={t('progressTitle')} focused={focused} />
           ),
         }}
       />
       <Tabs.Screen
-        name="plans"
+        name="index"
         options={{
-          title: t('trainingPlans'),
+          title: t('plansTab'),
           tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'barbell' : 'barbell-outline'} label={t('trainingPlans')} focused={focused} compact={STUDIO_WORKOUTS_ENABLED} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: t('settingsTitle'),
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name={focused ? 'settings' : 'settings-outline'} label={t('settingsTitle')} focused={focused} compact={STUDIO_WORKOUTS_ENABLED} />
+            <TabIcon name={focused ? 'barbell' : 'barbell-outline'} label={t('plansTab')} focused={focused} />
           ),
         }}
       />

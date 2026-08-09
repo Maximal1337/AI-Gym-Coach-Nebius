@@ -10,6 +10,8 @@ import { callFn } from '../../src/lib/api';
 import { DismissKeyboardView } from '../../src/components/DismissKeyboardView';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
+import { NavBar } from '../../src/components/NavBar';
+import { CoachMark } from '../../src/components/CoachMark';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLanguage } from '../../src/lib/language';
 import { useUnits, formatWeightKg, weightUnitLabel } from '../../src/lib/units';
@@ -272,9 +274,7 @@ export default function Progress() {
     <Screen>
     <View style={{ flex: 1, padding: spacing.md }}>
       <ScrollView contentContainerStyle={{ paddingBottom: TAB_BAR_CLEARANCE }}>
-        <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>
-          {t('progressTitle')}
-        </Text>
+        <NavBar title={t('progressTitle')} trailing={<CoachMark />} />
         <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm, marginBottom: spacing.md }}>
           {stat(sessions.length, t('totalWorkouts'))}
           {stat(monthCount, t('thisMonth'))}
