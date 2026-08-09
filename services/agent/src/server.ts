@@ -29,6 +29,7 @@ import {
 import { parsePlanText, parseSummaryText } from "./parse.js";
 import { parseStudioWorkout } from "./parseStudio.js";
 import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
+import { generateStudioInputSchema, generateStudioWorkout } from "./generateStudio.js";
 
 // Safety net for anything that slips past every route's own try/catch below.
 process.on("uncaughtException", (err) => Sentry.captureException(err));
@@ -37,6 +38,9 @@ process.on("unhandledRejection", (err) => Sentry.captureException(err));
 const parseSummaryInput = z.object({
   text: z.string().min(10).max(20000),
   knownExercises: z.array(z.string().max(200)).max(100).default([]),
+});
+const generateStudioRequestSchema = z.object({
+  intake: generateStudioInputSchema,
 });
 const generatePlanRequestSchema = z.object({
   intake: generatePlanInputSchema,
@@ -279,6 +283,33 @@ const server = createServer(async (req, res) => {
       json(200, result);
     } catch (e) {
       console.error("generate-plan failed:", (e as Error)?.message);
+      Sentry.captureException(e);
+      json(422, { error: "ungeneratable" });
+    }
+    return;
+  }
+
+  if (req.method === "POST" && req.url === "/generate-studio") {
+    if (!checkAuth(req, json)) return;
+    try {
+      const body = await readBody(req);
+      if (!body) {
+        json(413, { error: "body_too_large" });
+        return;
+      }
+      const parsed = generateStudioRequestSchema.safeParse(JSON.parse(body.toString()));
+      if (!parsed.success) {
+        json(400, { error: "invalid_input" });
+        return;
+      }
+      const result = await generateStudioWorkout(parsed.data.intake);
+      if (!result) {
+        json(503, { error: "llm_not_configured" });
+        return;
+      }
+      json(200, result);
+    } catch (e) {
+      console.error("generate-studio failed:", (e as Error)?.message);
       Sentry.captureException(e);
       json(422, { error: "ungeneratable" });
     }

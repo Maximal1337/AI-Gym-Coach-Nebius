@@ -1,4 +1,6 @@
-import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
+import {
+  admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage, withSentry,
+} from "../_shared/mod.ts";
 
 /**
  * Studio workout sessions — a second, independent training kind alongside
@@ -15,7 +17,13 @@ import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } f
  *    reference).
  *  { action: "open", blank: true } -> "Build it myself": one empty,
  *    unlabelled block ready for the user to add exercises to.
- *  All three "open" forms 409 if the user already has an open session —
+ *  { action: "open", generate: {fitnessLevel, durationMin, equipment,
+ *    focus, injuryNotes?, language?} } -> "Build with AI": generates a
+ *    workout from scratch via the agent's /generate-studio (no board to
+ *    read), then persists it exactly like a parsed one. Rate-limited and
+ *    budget-checked the same way plan-generate is (a real LLM call, not a
+ *    cheap parse) — see runStudioGeneration.
+ *  All four "open" forms 409 if the user already has an open session —
  *  the DB's partial unique index is the actual enforcement; this just
  *  surfaces it as a clean error instead of a constraint-violation 500.
  *
@@ -35,24 +43,29 @@ import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } f
  *  { action: "add-custom-unit", key, label, step, min, max } -> upserts a
  *    per-trainee custom unit (studio_custom_units), keyed by (user, key).
  *  { action: "reparse", sessionId, correctionText } -> "Did I get something
- *    wrong?" — re-sends the session's ORIGINAL source (whatever `open`
- *    parsed it from) to the agent alongside the trainee's free-text
+ *    wrong?" — for a parsed session, re-sends the ORIGINAL source (whatever
+ *    `open` parsed it from) to the agent alongside the trainee's free-text
  *    correction, and re-parses the whole workout rather than patching a
  *    field (the point of this affordance is fixing structural misreads —
  *    a ladder read as one set, a per-side value read as two tiers — which
- *    field-patching can't reach). Returns the merged tree WITHOUT writing
- *    it: exercises whose name AND shape still match the current (possibly
- *    hand-edited) tree keep the trainee's edits; exercises the new parse
- *    doesn't mention by name at all are listed in removedExerciseNames for
- *    the client to confirm before calling "update" to actually persist it.
- *    404s with no_source_to_reparse-shaped 422 if the session has no
- *    original source (a "Build it myself" or "do one again" session).
+ *    field-patching can't reach). For a GENERATED session, there's no board
+ *    to re-send, so this instead re-generates from the same original
+ *    intake plus the correction folded in as an extra constraint. Either
+ *    way, returns the merged tree WITHOUT writing it: exercises whose name
+ *    AND shape still match the current (possibly hand-edited) tree keep
+ *    the trainee's edits; exercises the new read/generation doesn't
+ *    mention by name at all are listed in removedExerciseNames for the
+ *    client to confirm before calling "update" to actually persist it.
+ *    404s with no_source_to_reparse-shaped 422 if the session has neither
+ *    (a "Build it myself" or "do one again" session).
  *
- * source_payload (studio_sessions): the original source `open` parsed a
- * fresh session from, kept ONLY while the session stays open so "reparse"
- * can re-send it — `save` nulls it out, matching the original "discard the
- * photo after parsing" decision, just widened to "after parsing AND the
- * session closes" rather than immediately.
+ * source_payload (studio_sessions): the original source `open` parsed OR
+ * generated a fresh session from ({text|pdfBase64+filename|docxBase64+
+ * filename|imagesBase64} for a parse, {generate: intake} for an AI
+ * generation), kept ONLY while the session stays open so "reparse" can
+ * re-send/re-run it — `save` nulls it out, matching the original "discard
+ * the photo after parsing" decision, just widened to "after parsing AND
+ * the session closes" rather than immediately.
  */
 
 type FormatType = "buyin" | "rounds" | "fortime" | "amrap" | "emom" | "intervals" | "custom";
@@ -466,6 +479,85 @@ async function readTree(db: ReturnType<typeof admin>, sessionId: string): Promis
   };
 }
 
+// Mirrors services/agent/src/generateStudio.ts's EQUIPMENT_OPTIONS/enums —
+// two runtimes (this Deno edge function, that Node service) that can't
+// share a module, same reason FORMAT_TYPES/FORMAT_PARAM_BOUNDS above are
+// already duplicated against parseStudio.ts's own copies.
+const FITNESS_LEVELS = ["beginner", "intermediate", "advanced"];
+const FOCUS_OPTIONS = ["conditioning", "strength", "mixed"];
+const EQUIPMENT_OPTIONS = [
+  "bodyweight", "dumbbells", "kettlebell", "barbell", "box",
+  "jump_rope", "erg_bike_row", "wall_ball", "pull_up_bar",
+];
+const GENERATE_LANGUAGES = ["en", "he", "ar"];
+
+function validateGenerateIntake(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.fitnessLevel !== "string" || !FITNESS_LEVELS.includes(r.fitnessLevel)) return null;
+  if (!Number.isInteger(r.durationMin) || (r.durationMin as number) < 10 || (r.durationMin as number) > 60) {
+    return null;
+  }
+  if (
+    !Array.isArray(r.equipment) || r.equipment.length < 1 || r.equipment.length > EQUIPMENT_OPTIONS.length ||
+    r.equipment.some((e) => typeof e !== "string" || !EQUIPMENT_OPTIONS.includes(e))
+  ) {
+    return null;
+  }
+  if (typeof r.focus !== "string" || !FOCUS_OPTIONS.includes(r.focus)) return null;
+  if (
+    r.injuryNotes !== undefined && r.injuryNotes !== null &&
+    (typeof r.injuryNotes !== "string" || r.injuryNotes.length > 500)
+  ) {
+    return null;
+  }
+  if (r.language !== undefined && !GENERATE_LANGUAGES.includes(r.language as string)) return null;
+  return {
+    fitnessLevel: r.fitnessLevel,
+    durationMin: r.durationMin,
+    equipment: r.equipment,
+    focus: r.focus,
+    injuryNotes: r.injuryNotes ?? null,
+    language: r.language ?? "en",
+    correctionNote: null,
+  };
+}
+
+/** Shared by the "open" generate branch and a "reparse" of a generated
+ * session — a real LLM call either way, so both go through the same
+ * rate-limit + budget gate plan-generate itself uses, unlike a parse
+ * (OCR-reading an existing board is treated as the cheaper, unmetered
+ * case throughout this file). */
+async function runStudioGeneration(
+  db: ReturnType<typeof admin>,
+  userId: string,
+  intake: Record<string, unknown>,
+): Promise<
+  | { tree: Tree; sourcePayload: { generate: Record<string, unknown> } }
+  | { error: string; status: number }
+> {
+  if (!(await allowRate(db, userId, "studio-generate", 5, 300))) {
+    return { error: "rate_limited", status: 429 };
+  }
+  const budget = await budgetRemaining(db, userId);
+  if (!budget.ok) {
+    return { error: "monthly_budget_exhausted", status: 402 };
+  }
+  const res = await callAgent({ intake }, "/generate-studio");
+  if (!res.ok) {
+    return {
+      error: res.status === 422 ? "ungeneratable" : "generator_unavailable",
+      status: res.status === 422 ? 422 : 503,
+    };
+  }
+  const result = await res.json() as {
+    workout: Tree;
+    usage: { tokensInput: number; tokensOutput: number; costCents: number };
+  };
+  await recordUsage(db, userId, result.usage);
+  return { tree: result.workout, sourcePayload: { generate: intake } };
+}
+
 Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json(405, { error: "method_not_allowed" });
@@ -514,6 +606,13 @@ Deno.serve(withSentry(async (req) => {
       if (!copied) return json(404, { error: "session_not_found" });
       tree = copied;
       sourceSessionId = owned.id;
+    } else if (body.generate && typeof body.generate === "object") {
+      const intake = validateGenerateIntake(body.generate);
+      if (!intake) return json(400, { error: "invalid_input" });
+      const gen = await runStudioGeneration(db, user.id, intake);
+      if ("error" in gen) return json(gen.status, { error: gen.error });
+      tree = gen.tree;
+      sourcePayload = gen.sourcePayload;
     } else {
       const source = body.source as Record<string, unknown> | undefined;
       let agentPayload:
@@ -662,16 +761,22 @@ Deno.serve(withSentry(async (req) => {
     const oldTree = await readTree(db, owned.id);
     if (!oldTree) return json(404, { error: "session_not_found" });
 
-    const res = await callAgent(
-      { ...(owned.source_payload as Record<string, unknown>), correctionNote: correctionText },
-      "/parse-studio",
-    );
-    if (!res.ok) {
-      return json(res.status === 422 ? 422 : 503, {
-        error: res.status === 422 ? "unparseable" : "parser_unavailable",
-      });
+    const payload = owned.source_payload as Record<string, unknown>;
+    let newTree: Tree;
+    if (payload.generate && typeof payload.generate === "object") {
+      const intake = { ...(payload.generate as Record<string, unknown>), correctionNote: correctionText };
+      const gen = await runStudioGeneration(db, user.id, intake);
+      if ("error" in gen) return json(gen.status, { error: gen.error });
+      newTree = gen.tree;
+    } else {
+      const res = await callAgent({ ...payload, correctionNote: correctionText }, "/parse-studio");
+      if (!res.ok) {
+        return json(res.status === 422 ? 422 : 503, {
+          error: res.status === 422 ? "unparseable" : "parser_unavailable",
+        });
+      }
+      newTree = (await res.json()) as Tree;
     }
-    const newTree = (await res.json()) as Tree;
 
     const names = newTree.blocks.flatMap((b) => b.exercises.map((e) => e.name));
     const history = await lastValuesByName(db, user.id, names);

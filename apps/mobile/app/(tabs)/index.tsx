@@ -29,7 +29,7 @@ interface PlanRow {
 /** The four "add a workout" methods a top-level tap can start, per
  * studio-implementation-brief.md §3.1 — resolved to a gym-or-studio route by
  * the second sheet below, since the real classifier (§2.0) is Phase 3. */
-type AddMethod = 'photo' | 'paste' | 'upload' | 'build';
+type AddMethod = 'generate' | 'photo' | 'paste' | 'upload' | 'build';
 
 /** A single row inside the plan-actions sheet (guidelines/plan-actions.html's ActionRow). */
 function ActionRow({
@@ -220,12 +220,14 @@ export default function Plans() {
     if (kind === 'studio' && method === 'build') { void buildOwnStudio(); return; }
     navigateAfterSheetCloses(() => {
       if (kind === 'gym') {
-        if (method === 'photo') router.push({ pathname: '/plan-photo', params: { mode: 'add' } });
+        if (method === 'generate') router.push({ pathname: '/plan-generate', params: { mode: 'add' } });
+        else if (method === 'photo') router.push({ pathname: '/plan-photo', params: { mode: 'add' } });
         else if (method === 'paste') router.push({ pathname: '/plan-edit', params: { mode: 'add' } });
         else if (method === 'upload') router.push({ pathname: '/plan-edit', params: { mode: 'add', initialMode: 'upload' } });
         else router.push('/plan-build');
       } else {
-        if (method === 'photo') router.push('/studio-photo');
+        if (method === 'generate') router.push('/studio-generate');
+        else if (method === 'photo') router.push('/studio-photo');
         else if (method === 'paste') router.push('/studio-paste');
         else router.push({ pathname: '/studio-paste', params: { initialMode: 'upload' } });
       }
@@ -234,9 +236,9 @@ export default function Plans() {
 
   const addMethods: AddWorkoutMethod[] = [
     {
-      emphasis: 'primary', icon: 'sparkles-outline', label: t('generatePlanCta'), description: t('goalSub'),
+      emphasis: 'primary', icon: 'sparkles-outline', label: t('generateWithAiCta'), description: t('generateWithAiDesc'),
       badge: <Badge>AI</Badge>,
-      onPress: () => { setAddOpen(false); navigateAfterSheetCloses(() => router.push({ pathname: '/plan-generate', params: { mode: 'add' } })); },
+      onPress: () => openKindChooser('generate'),
     },
     { icon: 'camera-outline', label: t('choosePhoto'), description: t('choosePhotoDesc'), onPress: () => openKindChooser('photo') },
     { icon: 'clipboard-outline', label: t('choosePasteWorkout'), onPress: () => openKindChooser('paste') },

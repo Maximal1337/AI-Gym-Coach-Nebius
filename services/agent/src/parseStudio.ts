@@ -101,7 +101,7 @@ export type ParsedStudioWorkout = z.infer<typeof parsedStudioWorkoutSchema>;
  * `validMetric` rejects a self-inconsistent metric (e.g. tierIndex set with
  * tiers null) the moment the client's first autosave sends the tree back,
  * so this has to run before the tree ever leaves the parser. */
-function normalizeMetrics(workout: ParsedStudioWorkout): ParsedStudioWorkout {
+export function normalizeMetrics(workout: ParsedStudioWorkout): ParsedStudioWorkout {
   for (const block of workout.blocks) {
     let maxLadderLen = 0;
     for (const exercise of block.exercises) {
@@ -158,7 +158,7 @@ const FORMAT_PARAM_SPEC: Record<string, Record<string, { def: number; min: numbe
  * empty params and no custom text — there's nothing to normalize. Runs
  * after normalizeMetrics, so a ladder-derived round count is already in
  * formatParams.count by the time this clamps it into bounds. */
-function normalizeFormats(workout: ParsedStudioWorkout): ParsedStudioWorkout {
+export function normalizeFormats(workout: ParsedStudioWorkout): ParsedStudioWorkout {
   for (const block of workout.blocks) {
     if (block.formatType == null) {
       block.formatParams = {};

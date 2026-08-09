@@ -17,7 +17,7 @@ import { costCents, type LlmUsage } from "./llm.js";
  * tool-calling loop to earn its cost on.
  */
 
-const appLanguageSchema = z.enum(["en", "he", "ar"]);
+export const appLanguageSchema = z.enum(["en", "he", "ar"]);
 export type AppLanguage = z.infer<typeof appLanguageSchema>;
 
 export const generatePlanInputSchema = z.object({

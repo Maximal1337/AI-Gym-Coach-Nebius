@@ -60,6 +60,21 @@ export interface StudioSessionSource {
   imagesBase64?: string[];
 }
 
+export const STUDIO_EQUIPMENT_OPTIONS = [
+  'bodyweight', 'dumbbells', 'kettlebell', 'barbell', 'box',
+  'jump_rope', 'erg_bike_row', 'wall_ball', 'pull_up_bar',
+] as const;
+export type StudioEquipment = (typeof STUDIO_EQUIPMENT_OPTIONS)[number];
+
+export interface GenerateStudioIntake {
+  fitnessLevel: 'beginner' | 'intermediate' | 'advanced';
+  durationMin: number;
+  equipment: StudioEquipment[];
+  focus: 'conditioning' | 'strength' | 'mixed';
+  injuryNotes: string | null;
+  language: 'en' | 'he' | 'ar';
+}
+
 export interface StudioCustomUnit {
   id: string;
   key: string;
@@ -70,7 +85,11 @@ export interface StudioCustomUnit {
 }
 
 export function openStudioSession(
-  input: { source: StudioSessionSource } | { sourceSessionId: string } | { blank: true },
+  input:
+    | { source: StudioSessionSource }
+    | { sourceSessionId: string }
+    | { blank: true }
+    | { generate: GenerateStudioIntake },
 ): Promise<{ sessionId: string; tree: StudioTree; last: StudioLastMap; customUnits: StudioCustomUnit[] }> {
   return callFn('studio-session', { action: 'open', ...input });
 }

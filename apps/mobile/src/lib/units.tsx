@@ -1,38 +1,10 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as Localization from 'expo-localization';
-import { supabase } from './supabase';
+import { createContext, useContext, useMemo, type ReactNode } from 'react';
+import { useLanguage } from './language';
 
 export type UnitSystem = 'metric' | 'imperial';
 
-const STORAGE_KEY = 'notch:units';
 const KG_TO_LB = 2.20462;
 const CM_TO_IN = 0.393701;
-
-function isUnitSystem(v: unknown): v is UnitSystem {
-  return v === 'metric' || v === 'imperial';
-}
-
-/**
- * Absent an explicit choice, default from the device's own region setting
- * rather than guessing off app language — a language doesn't imply a
- * region (a Hebrew speaker can be in the US, an English speaker in the
- * UK), while `measurementSystem` is the platform's own answer to exactly
- * this question. `us` is the only value that means imperial for our
- * purposes — `uk`/`metric`/unset all read as metric.
- */
-function deviceUnits(): UnitSystem {
-  return Localization.getLocales()[0]?.measurementSystem === 'us' ? 'imperial' : 'metric';
-}
-
-/**
- * Whether this device has ever gone through an explicit units choice —
- * same device-local, never-auto-persisted pattern as hasChosenLanguage.
- */
-export async function hasChosenUnits(): Promise<boolean> {
-  const stored = await AsyncStorage.getItem(STORAGE_KEY).catch(() => null);
-  return isUnitSystem(stored);
-}
 
 // Storage is always kilograms/centimeters regardless of what's displayed
 // (guidelines/units-setting.html's central rule) — these are pure
@@ -101,56 +73,22 @@ export function formatHeightForEntry(cm: number, units: UnitSystem): string {
 
 interface UnitsContextValue {
   units: UnitSystem;
-  /** Persists locally always, and to users.units when signed in. */
-  setUnits: (units: UnitSystem) => Promise<void>;
 }
 
 const UnitsContext = createContext<UnitsContextValue | null>(null);
 
 /**
- * App-level units state (guidelines/units-setting.html). Same priority
- * on first load as language: an explicit choice already made on this
- * device (AsyncStorage) > a signed-in user's saved preference
- * (users.units) > the device's own region setting > metric.
+ * Units follow the app's language — no manual picker (a prior version had
+ * one; removed since a per-user preference just duplicates what the
+ * language choice already implies). 'en' reads as imperial, 'he'/'ar' as
+ * metric — the same mapping the server side uses to phrase coach replies
+ * (profileToAgent in supabase/functions/_shared/mod.ts), so a chat message
+ * and the screen displaying it always agree on units.
  */
 export function UnitsProvider({ children }: { children: ReactNode }) {
-  const [units, setUnitsState] = useState<UnitSystem>('metric');
-
-  useEffect(() => {
-    (async () => {
-      const stored = await AsyncStorage.getItem(STORAGE_KEY).catch(() => null);
-      if (isUnitSystem(stored)) {
-        setUnitsState(stored);
-        return;
-      }
-      const { data } = await supabase.auth.getUser();
-      if (data.user) {
-        const { data: row } = await supabase
-          .from('users')
-          .select('units')
-          .eq('id', data.user.id)
-          .maybeSingle();
-        if (isUnitSystem(row?.units)) {
-          setUnitsState(row.units);
-          return;
-        }
-      }
-      setUnitsState(deviceUnits());
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function setUnits(next: UnitSystem) {
-    setUnitsState(next);
-    await AsyncStorage.setItem(STORAGE_KEY, next).catch(() => {});
-    const { data } = await supabase.auth.getUser();
-    const userId = data.user?.id;
-    if (!userId) return;
-    await supabase.from('users').update({ units: next }).eq('id', userId);
-  }
-
-  const value = useMemo(() => ({ units, setUnits }), [units]);
-
+  const { language } = useLanguage();
+  const units: UnitSystem = language === 'en' ? 'imperial' : 'metric';
+  const value = useMemo(() => ({ units }), [units]);
   return <UnitsContext.Provider value={value}>{children}</UnitsContext.Provider>;
 }
 

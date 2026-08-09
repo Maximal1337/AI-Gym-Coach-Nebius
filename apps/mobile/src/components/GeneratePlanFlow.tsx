@@ -9,7 +9,6 @@ import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
 import { SketchLoader } from './SketchLoader';
 import { Field } from './Field';
-import { UnitsToggle } from './UnitsToggle';
 import { useLanguage } from '../lib/language';
 import { useUnits, parseWeightToKg, parseHeightToCm, weightUnitLabel } from '../lib/units';
 import { useTheme, spacing, radius } from '../theme';
@@ -56,7 +55,7 @@ export function GeneratePlanFlow({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir, language } = useLanguage();
-  const { units, setUnits } = useUnits();
+  const { units } = useUnits();
 
   const [step, setStep] = useState<Step>('goal');
   const [primaryGoal, setPrimaryGoal] = useState<PrimaryGoal | null>(null);
@@ -271,16 +270,9 @@ export function GeneratePlanFlow({
         </Text>
         <Text style={{ color: theme.inkSoft, textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md }}>{t('aboutSub')}</Text>
 
-        {/* The first screen in the whole product with a weight/height
-            field on it — labelling fields already here, not adding a
-            question (guidelines/units-setting.html). */}
-        <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
-          {t('unitsLabel')}
-        </Text>
-        <View style={{ marginBottom: spacing.md }}>
-          <UnitsToggle units={units} onChange={setUnits} block />
-        </View>
-
+        {/* Units (kg/cm vs lb/ft) follow the app's language now — no picker
+            here anymore, just the fields themselves, labelled in whichever
+            unit that implies (guidelines/units-setting.html). */}
         <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 6 }}>
           {t('genderLabel')}
         </Text>
