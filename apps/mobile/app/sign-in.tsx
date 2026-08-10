@@ -30,6 +30,11 @@ const DEV_TEST_ACCOUNTS = [
   { email: 'dor+expired@test.com', label: 'subscription ended' },
   { email: 'dor+new@test.com', label: 'no data — always onboarding' },
 ] as const;
+// Apple App Review has no inbox to receive a real one-time code in, so
+// this exact address (allowlisted server-side in dev-test-login, and
+// deliberately excluded from its QA-scenario reset) skips straight to a
+// session in every build, not just __DEV__ — see sendCode() below.
+const REVIEW_TEST_EMAIL = 'ios-review-7f2ka9@notch.app';
 
 /**
  * Email/code sign-in (System Design: auth-flow guidelines, option B —
@@ -109,6 +114,10 @@ export default function SignIn() {
     const trimmed = email.trim();
     if (!trimmed || !trimmed.includes('@')) {
       Alert.alert(t('signInError'), t('enterValidEmail'));
+      return;
+    }
+    if (trimmed === REVIEW_TEST_EMAIL) {
+      await devTestLogin(trimmed);
       return;
     }
     setBusy(true);
