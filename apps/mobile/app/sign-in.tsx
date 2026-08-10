@@ -14,15 +14,22 @@ import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { Field } from '../src/components/Field';
 import { CodeInput } from '../src/components/CodeInput';
 import { Button } from '../src/components/Button';
-import { useLanguage } from '../src/lib/language';
+import { useLanguage, resetLanguageChoice } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
 const RESEND_COOLDOWN_SEC = 30;
 const CODE_LENGTH = 6;
-// One fixed test account, allowlisted server-side in dev-test-login itself
-// — the real safety boundary is there, not this __DEV__ gate. Lets testing
-// in Expo Go skip waiting on a real inbox before custom SMTP is wired up.
-const DEV_TEST_EMAIL = 'dor@test.com';
+// Three fixed test accounts, allowlisted server-side in dev-test-login
+// itself — the real safety boundary is there, not this __DEV__ gate. Each
+// one is reset to its named state on every login (see that function), not
+// just created once, so it stays reliable across repeated testing. Lets
+// testing in Expo Go skip waiting on a real inbox before custom SMTP is
+// wired up.
+const DEV_TEST_ACCOUNTS = [
+  { email: 'dor@test.com', label: 'active trial' },
+  { email: 'dor+expired@test.com', label: 'subscription ended' },
+  { email: 'dor+new@test.com', label: 'no data — always onboarding' },
+] as const;
 
 /**
  * Email/code sign-in (System Design: auth-flow guidelines, option B —
@@ -147,7 +154,7 @@ export default function SignIn() {
   // Dev-only: the edge function isn't behind the normal auth check (it
   // can't be — there's no session yet), so this is a plain unauthenticated
   // fetch rather than the usual callFn helper, which requires one.
-  async function devTestLogin() {
+  async function devTestLogin(testEmail: string) {
     setBusy(true);
     try {
       const res = await fetch(`${SUPABASE_URL}/functions/v1/dev-test-login`, {
@@ -157,12 +164,17 @@ export default function SignIn() {
           apikey: SUPABASE_ANON_KEY,
           authorization: `Bearer ${SUPABASE_ANON_KEY}`,
         },
-        body: JSON.stringify({ email: DEV_TEST_EMAIL }),
+        body: JSON.stringify({ email: testEmail }),
       });
       if (!res.ok) throw new Error(await res.text());
       const { accessToken, refreshToken } = await res.json();
       const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
       if (error) throw error;
+      // The "no data" account resets its server-side row on every login
+      // (dev-test-login), but the language choice is device-local, not
+      // server data — without this, onboarding-language never reshows
+      // once this device has picked a language even once.
+      if (testEmail === 'dor+new@test.com') await resetLanguageChoice();
       afterAuth();
     } catch {
       Alert.alert(t('signInError'));
@@ -232,14 +244,15 @@ export default function SignIn() {
           />
           <Button block disabled={busy} onPress={sendCode}>{t('continue')}</Button>
 
-          {__DEV__ && (
+          {__DEV__ && DEV_TEST_ACCOUNTS.map(({ email: testEmail, label }) => (
             <Button
-              variant="dashed" block disabled={busy} onPress={devTestLogin}
+              key={testEmail}
+              variant="dashed" block disabled={busy} onPress={() => devTestLogin(testEmail)}
               style={{ marginTop: spacing.md }}
             >
-              Dev: sign in as {DEV_TEST_EMAIL}
+              Dev: {label}
             </Button>
-          )}
+          ))}
         </>
       ) : (
         <>

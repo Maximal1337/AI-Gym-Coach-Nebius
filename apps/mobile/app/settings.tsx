@@ -145,6 +145,17 @@ export default function Settings() {
       label={deleting ? t('deletingAccount') : t('signingOut')}
     />
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, paddingBottom: TAB_BAR_CLEARANCE }}>
+      {/* headerShown is false app-wide — pushed routes get no native back
+          button, only the swipe/hardware gesture, which isn't a visible
+          affordance (same reasoning as plan-build.tsx's back chevron). */}
+      <Pressable
+        onPress={() => router.back()}
+        hitSlop={12}
+        style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start', marginBottom: spacing.sm }}
+      >
+        <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={24} color={theme.inkSoft} />
+      </Pressable>
+
       <Text style={{
         color: theme.ink, fontSize: 20, fontWeight: '800',
         textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: spacing.md,

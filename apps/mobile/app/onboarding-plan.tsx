@@ -7,26 +7,40 @@ import { GeneratePlanFlow } from '../src/components/GeneratePlanFlow';
 import { PhotographPlanFlow } from '../src/components/PhotographPlanFlow';
 import { Screen } from '../src/components/Screen';
 import { ChoiceCard } from '../src/components/ChoiceCard';
+import { BottomSheet } from '../src/components/BottomSheet';
 import { Badge } from '../src/components/Badge';
 import { Button } from '../src/components/Button';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { supabase } from '../src/lib/supabase';
+import { ApiError } from '../src/lib/api';
+import { existingOpenSessionId, openStudioSession } from '../src/lib/studioApi';
+import { fetchAccessStatus } from '../src/lib/subscription';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing } from '../src/theme';
 
 type Choice = 'generate' | 'photo' | 'paste' | 'upload' | null;
+/** Same five methods as the post-onboarding "Add a new workout" sheet
+ * (app/(tabs)/index.tsx) — kept as a separate type from Choice since
+ * 'build' never renders inline here the way generate/photo/paste/upload
+ * do (gym's manual build pushes a route; studio's opens a live session). */
+type AddMethod = 'generate' | 'photo' | 'paste' | 'upload' | 'build';
 
 /**
  * First-run entry point (System Design §21): a brand-new user has nothing
  * to paste yet, so "generate for me" is the primary path — paste/manual
  * are secondary, for someone who already has a real program to bring.
+ * Kind (gym vs. studio) is asked right after the method, same two-step
+ * shape as the post-onboarding add-workout flow — onboarding was gym-only
+ * until studio's kind-chooser existed, this brings it to parity.
  */
 export default function OnboardingPlan() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
   const [choice, setChoice] = useState<Choice>(null);
+  const [pendingMethod, setPendingMethod] = useState<AddMethod | null>(null);
   const [skipping, setSkipping] = useState(false);
+  const [studioBusy, setStudioBusy] = useState(false);
 
   if (choice === 'generate') {
     return (
@@ -79,9 +93,62 @@ export default function OnboardingPlan() {
     }
   }
 
+  // A blank studio board opens a LIVE session directly (no separate
+  // plan-creation step the way gym's manual build has) — studio-session.tsx
+  // reads the `onboarding` param to land on '/' when it closes instead of
+  // router.back()ing into this screen.
+  async function buildOwnStudio() {
+    setStudioBusy(true);
+    try {
+      const res = await openStudioSession({ blank: true });
+      router.replace({ pathname: '/studio-session', params: { sessionId: res.sessionId, onboarding: '1' } });
+    } catch (e) {
+      const existing = await existingOpenSessionId(e);
+      if (existing) {
+        router.replace({ pathname: '/studio-session', params: { sessionId: existing, onboarding: '1' } });
+      } else if (e instanceof ApiError && e.code === 'subscription_required') {
+        router.push('/subscribe');
+      } else {
+        Alert.alert(t('coachUnavailable'));
+      }
+    } finally {
+      setStudioBusy(false);
+    }
+  }
+
+  // Gym's methods stay exactly as they were (inline `choice` rendering,
+  // or a pushed route for manual build) — only studio's routing and the
+  // entitlement pre-check are new. A brand-new onboarding account is
+  // always within its fresh trial, so this check is defense in depth
+  // (matching every other AI entry point in the app) rather than
+  // something expected to actually fire here.
+  async function resolveMethod(method: AddMethod, kind: 'gym' | 'studio') {
+    setPendingMethod(null);
+
+    if (!(kind === 'gym' && method === 'build')) {
+      const access = await fetchAccessStatus();
+      if (!access.entitled) {
+        router.push('/subscribe');
+        return;
+      }
+    }
+
+    if (kind === 'gym') {
+      if (method === 'build') router.push({ pathname: '/plan-build', params: { mode: 'onboarding' } });
+      else setChoice(method as Exclude<AddMethod, 'build'>);
+      return;
+    }
+
+    if (method === 'build') { void buildOwnStudio(); return; }
+    if (method === 'generate') router.push({ pathname: '/studio-generate', params: { onboarding: '1' } });
+    else if (method === 'photo') router.push({ pathname: '/studio-photo', params: { onboarding: '1' } });
+    else if (method === 'paste') router.push({ pathname: '/studio-paste', params: { onboarding: '1' } });
+    else router.push({ pathname: '/studio-paste', params: { onboarding: '1', initialMode: 'upload' } });
+  }
+
   return (
     <Screen>
-      <LoadingOverlay visible={skipping} object="plate" label={t('loading')} />
+      <LoadingOverlay visible={skipping || studioBusy} object="plate" label={t('loading')} />
       <View style={{ flex: 1 }}>
         {/* Reached via replace() from consent, also replace()'d away — no
             screen behind this one to go back to. Signing out is the one
@@ -112,30 +179,30 @@ export default function OnboardingPlan() {
             label={t('generatePlanCta')}
             description={t('goalSub')}
             badge={<Badge>AI</Badge>}
-            onPress={() => setChoice('generate')}
+            onPress={() => setPendingMethod('generate')}
           />
           <ChoiceCard
             icon="camera-outline"
             label={t('choosePhoto')}
             description={t('choosePhotoDesc')}
-            onPress={() => setChoice('photo')}
+            onPress={() => setPendingMethod('photo')}
           />
           <ChoiceCard
             icon="clipboard-outline"
             label={t('choosePaste')}
             description={t('planSub')}
-            onPress={() => setChoice('paste')}
+            onPress={() => setPendingMethod('paste')}
           />
           <ChoiceCard
             icon="document-attach-outline"
             label={t('chooseUpload')}
-            onPress={() => setChoice('upload')}
+            onPress={() => setPendingMethod('upload')}
           />
           <ChoiceCard
             icon="construct-outline"
             label={t('chooseManual')}
             description={t('manualPlanSub')}
-            onPress={() => router.push({ pathname: '/plan-build', params: { mode: 'onboarding' } })}
+            onPress={() => setPendingMethod('build')}
           />
           <Text style={{
             color: theme.inkSoft, fontSize: 10.5, lineHeight: 15,
@@ -149,6 +216,21 @@ export default function OnboardingPlan() {
           <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
         </View>
       </View>
+
+      <BottomSheet visible={pendingMethod !== null} title={t('chooseKindTitle')} onClose={() => setPendingMethod(null)}>
+        <View style={{ gap: spacing.sm }}>
+          <ChoiceCard
+            icon="barbell-outline"
+            label={t('kindGym')}
+            onPress={() => pendingMethod && resolveMethod(pendingMethod, 'gym')}
+          />
+          <ChoiceCard
+            icon="flame-outline"
+            label={t('kindStudio')}
+            onPress={() => pendingMethod && resolveMethod(pendingMethod, 'studio')}
+          />
+        </View>
+      </BottomSheet>
     </Screen>
   );
 }

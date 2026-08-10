@@ -7,10 +7,18 @@ import { StudioSessionScreen } from '../src/components/StudioSessionScreen';
  * just came from a fresh parse, "do one again," or is being resumed from
  * the Studio tab's "Continue" card. */
 export default function StudioSessionRoute() {
-  const { sessionId } = useLocalSearchParams<{ sessionId: string }>();
+  const { sessionId, onboarding } = useLocalSearchParams<{ sessionId: string; onboarding?: string }>();
+  // Reached from onboarding-plan.tsx (studio-generate/photo/paste, or the
+  // blank "build it yourself" path): there's no gym-plan-style screen
+  // behind this one to go back to — same as GeneratePlanFlow/
+  // PhotographPlanFlow/PlanPasteFlow's onDone, closing here means
+  // onboarding is complete, land in the main app.
   return (
     <Screen>
-      <StudioSessionScreen sessionId={sessionId} onClose={() => router.back()} />
+      <StudioSessionScreen
+        sessionId={sessionId}
+        onClose={() => (onboarding ? router.replace('/') : router.back())}
+      />
     </Screen>
   );
 }

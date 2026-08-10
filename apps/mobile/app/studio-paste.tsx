@@ -50,7 +50,7 @@ export default function StudioPasteScreen() {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
-  const { initialMode } = useLocalSearchParams<{ initialMode?: string }>();
+  const { initialMode, onboarding } = useLocalSearchParams<{ initialMode?: string; onboarding?: string }>();
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [showUploadLauncher] = useState(initialMode === 'upload');
@@ -60,10 +60,10 @@ export default function StudioPasteScreen() {
     setBusy(true);
     try {
       const res = await openStudioSession({ source });
-      router.replace({ pathname: '/studio-session', params: { sessionId: res.sessionId } });
+      router.replace({ pathname: '/studio-session', params: { sessionId: res.sessionId, onboarding } });
     } catch (e) {
       const existing = await existingOpenSessionId(e);
-      if (existing) { router.replace({ pathname: '/studio-session', params: { sessionId: existing } }); return; }
+      if (existing) { router.replace({ pathname: '/studio-session', params: { sessionId: existing, onboarding } }); return; }
       if (e instanceof ApiError && e.code === 'subscription_required') {
         Alert.alert(t('trialExpired'));
         router.push('/subscribe');

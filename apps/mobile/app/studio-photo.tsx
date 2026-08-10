@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Image, Linking, Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -42,6 +42,7 @@ export default function StudioPhotoScreen() {
   const { t } = useTranslation();
   const { dir } = useLanguage();
   const insets = useSafeAreaInsets();
+  const { onboarding } = useLocalSearchParams<{ onboarding?: string }>();
   const [permission, requestPermission] = useCameraPermissions();
   const cameraRef = useRef<CameraView>(null);
 
@@ -111,10 +112,10 @@ export default function StudioPhotoScreen() {
     setStep('parsing');
     try {
       const res = await openStudioSession({ source: { imagesBase64: shots.map((s) => s.base64) } });
-      router.replace({ pathname: '/studio-session', params: { sessionId: res.sessionId } });
+      router.replace({ pathname: '/studio-session', params: { sessionId: res.sessionId, onboarding } });
     } catch (e) {
       const existing = await existingOpenSessionId(e);
-      if (existing) { router.replace({ pathname: '/studio-session', params: { sessionId: existing } }); return; }
+      if (existing) { router.replace({ pathname: '/studio-session', params: { sessionId: existing, onboarding } }); return; }
       if (e instanceof ApiError && e.code === 'subscription_required') {
         Alert.alert(t('trialExpired'));
         router.push('/subscribe');

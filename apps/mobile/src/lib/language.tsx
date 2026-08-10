@@ -33,6 +33,15 @@ export async function hasChosenLanguage(): Promise<boolean> {
   return isAppLanguage(stored);
 }
 
+/** Dev-only: undoes setLanguage's persistence so the next launch hits
+ * onboarding-language again, same as a real first install. Needed
+ * because this flag is device-local (see hasChosenLanguage's own
+ * comment) — signing into a fresh dev-test account alone can't surface
+ * the language step again, only clearing this can. */
+export async function resetLanguageChoice(): Promise<void> {
+  await AsyncStorage.removeItem(STORAGE_KEY).catch(() => {});
+}
+
 interface LanguageContextValue {
   language: AppLanguage;
   dir: Direction;
