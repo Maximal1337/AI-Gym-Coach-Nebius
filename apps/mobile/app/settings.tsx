@@ -11,7 +11,7 @@ import { useLanguage } from '../src/lib/language';
 import { useLanguagePicker } from '../src/lib/useLanguagePicker';
 import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../src/lib/units';
 import { TERMS_URL, PRIVACY_URL } from '../src/lib/webUrl';
-import { fetchUsageSnapshot } from '../src/lib/usage';
+import { fetchAccessStatus, type AccessStatus } from '../src/lib/subscription';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../src/theme';
 
 const SUBSCRIPTION_UI_ENABLED = true;
@@ -23,7 +23,7 @@ export default function Settings() {
   const { open: openLanguagePicker } = useLanguagePicker();
   const { units } = useUnits();
   const [coach, setCoach] = useState<{ coach_name: string; tone_preset: string } | null>(null);
-  const [usage, setUsage] = useState({ used: 0, total: 0 });
+  const [access, setAccess] = useState<AccessStatus | null>(null);
   // null = not loaded yet / no row at all — the section only renders once
   // this is a real row (System Design §21: appears only if the user
   // actually typed something in "קצת עליך", never as an empty prompt).
@@ -36,13 +36,13 @@ export default function Settings() {
   useFocusEffect(
     useCallback(() => {
       (async () => {
-        const [{ data: profile }, snapshot, { data: fitness }] = await Promise.all([
+        const [{ data: profile }, accessStatus, { data: fitness }] = await Promise.all([
           supabase.from('coach_profiles').select('coach_name, tone_preset').maybeSingle(),
-          fetchUsageSnapshot(),
+          fetchAccessStatus(),
           supabase.from('fitness_profiles').select('gender, age, weight_kg, height_cm').maybeSingle(),
         ]);
         setCoach(profile);
-        setUsage(snapshot);
+        setAccess(accessStatus);
         setFitnessProfile(fitness ?? null);
       })();
     }, []),
@@ -80,7 +80,24 @@ export default function Settings() {
     ]);
   }
 
-  const { used, total } = usage;
+  function subscriptionValue(): string {
+    if (!access) return '—';
+    const localeDate = (iso: string) => new Date(iso).toLocaleDateString(language);
+    if (access.status === 'active') {
+      return access.subscriptionExpiresAt
+        ? t('subscriptionRenewsOn', { date: localeDate(access.subscriptionExpiresAt) })
+        : t('subscriptionActive');
+    }
+    if (access.status === 'canceled' && access.entitled) {
+      return access.subscriptionExpiresAt
+        ? t('subscriptionActiveUntil', { date: localeDate(access.subscriptionExpiresAt) })
+        : t('subscriptionActive');
+    }
+    if (access.status === 'trialing' && access.entitled) {
+      return t('trialDaysRemainingShort', { count: access.daysLeftInTrial });
+    }
+    return t('subscriptionExpiredShort');
+  }
 
   const row = (
     label: string, value?: string, onPress?: () => void, destructive = false,
@@ -91,16 +108,23 @@ export default function Settings() {
       disabled={!onPress}
       style={{
         flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'space-between',
-        padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule,
+        alignItems: 'center', padding: spacing.md, borderBottomWidth: 1, borderBottomColor: theme.rule,
       }}
     >
-      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8 }}>
+      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, flexShrink: 0 }}>
         {icon && <Ionicons name={icon} size={17} color={destructive ? theme.critical : theme.inkSoft} />}
         <Text style={{ color: destructive ? theme.critical : theme.ink, fontWeight: destructive ? '700' : '400' }}>
           {label}
         </Text>
       </View>
-      {value && <Text style={{ color: theme.inkSoft }}>{value}</Text>}
+      {value && (
+        <Text
+          style={{ color: theme.inkSoft, flexShrink: 1, marginStart: spacing.sm, textAlign: dir === 'rtl' ? 'left' : 'right' }}
+          numberOfLines={1}
+        >
+          {value}
+        </Text>
+      )}
     </Pressable>
   );
 
@@ -156,9 +180,7 @@ export default function Settings() {
 
       {sectionTitle(t('account'))}
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-        {SUBSCRIPTION_UI_ENABLED && row(t('subscription'), undefined, () => router.push('/subscribe'), false, 'star-outline')}
-        {row(t('usageThisMonth'), t('workoutsApprox', { used, total }))}
-        {row(t('renewsOn'))}
+        {SUBSCRIPTION_UI_ENABLED && row(t('subscription'), subscriptionValue(), () => router.push('/subscribe'), false, 'star-outline')}
       </View>
 
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>

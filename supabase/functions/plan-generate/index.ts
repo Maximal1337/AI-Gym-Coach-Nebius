@@ -1,4 +1,15 @@
-import { admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage, withSentry } from "../_shared/mod.ts";
+import {
+  admin,
+  allowRate,
+  budgetRemaining,
+  callAgent,
+  corsHeaders,
+  getUser,
+  json,
+  recordUsage,
+  subscriptionAccess,
+  withSentry,
+} from "../_shared/mod.ts";
 
 const GOALS = ["strength", "hypertrophy", "general_fitness", "fat_loss"];
 const LEVELS = ["beginner", "intermediate", "advanced"];
@@ -32,6 +43,11 @@ Deno.serve(withSentry(async (req) => {
   // spamming it is not.
   if (!(await allowRate(db, user.id, "plan-generate", 5, 300))) {
     return json(429, { error: "rate_limited" });
+  }
+
+  const access = await subscriptionAccess(db, user.id);
+  if (!access.ok) {
+    return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });
   }
 
   const budget = await budgetRemaining(db, user.id);

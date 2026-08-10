@@ -1,6 +1,6 @@
 import { palette } from "@gymcoach/shared";
 
-/** GYM-36: placeholder until Phase 2 (Apple IAP via RevenueCat). */
+/** GYM-36: placeholder pointing at the real flow — subscriptions are managed on-device via Apple IAP/RevenueCat (see apps/mobile/app/subscribe.tsx), not on the web. */
 export default function Billing() {
   const t = palette.light;
   return (
@@ -14,8 +14,9 @@ export default function Billing() {
     >
       <h1 style={{ fontWeight: 800, letterSpacing: "-0.02em" }}>Billing</h1>
       <p style={{ color: t.inkSoft, maxWidth: "44ch", textAlign: "center" }}>
-        Notch Fitness is currently free while in early access. Subscriptions
-        will be handled through the App Store when they launch.
+        Notch's first month is free. Subscriptions are managed entirely
+        through the App Store — open the app and go to Settings &gt;
+        Subscription to view or change your plan.
       </p>
     </main>
   );

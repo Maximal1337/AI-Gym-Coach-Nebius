@@ -7,6 +7,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ApiError } from '../src/lib/api';
 import { existingOpenSessionId, openStudioSession } from '../src/lib/studioApi';
 import { useLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
@@ -114,7 +115,12 @@ export default function StudioPhotoScreen() {
     } catch (e) {
       const existing = await existingOpenSessionId(e);
       if (existing) { router.replace({ pathname: '/studio-session', params: { sessionId: existing } }); return; }
-      Alert.alert(t('photoParseFailed'));
+      if (e instanceof ApiError && e.code === 'subscription_required') {
+        Alert.alert(t('trialExpired'));
+        router.push('/subscribe');
+      } else {
+        Alert.alert(t('photoParseFailed'));
+      }
       setStep('review');
     }
   }

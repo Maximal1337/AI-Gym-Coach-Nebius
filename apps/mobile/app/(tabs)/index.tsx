@@ -1,10 +1,10 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { supabase } from '../../src/lib/supabase';
-import { callFn } from '../../src/lib/api';
+import { callFn, ApiError } from '../../src/lib/api';
 import { Screen } from '../../src/components/Screen';
 import { NavBar } from '../../src/components/NavBar';
 import { CoachMark } from '../../src/components/CoachMark';
@@ -16,6 +16,7 @@ import { AddWorkoutSheet, type AddWorkoutMethod } from '../../src/components/Add
 import { WorkoutCard, type WorkoutCardData } from '../../src/components/WorkoutCard';
 import { Badge } from '../../src/components/Badge';
 import { existingOpenSessionId, listStudioSessions, openStudioSession } from '../../src/lib/studioApi';
+import { fetchAccessStatus } from '../../src/lib/subscription';
 import { useLanguage } from '../../src/lib/language';
 import { useTheme, spacing, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -89,8 +90,15 @@ export default function Plans() {
   const [addOpen, setAddOpen] = useState(false);
   const [pendingMethod, setPendingMethod] = useState<AddMethod | null>(null);
 
+  // Refocusing this tab (switching tabs, coming back from a pushed screen)
+  // re-runs load() every time so it never shows stale data — but that must
+  // not mean re-blanking an already-populated list to a spinner on every
+  // single visit; only the true first load (nothing on screen yet) should
+  // look like "loading", everything after is a silent background refresh.
+  const hasLoadedOnce = useRef(false);
+
   const load = useCallback(() => {
-    setLoading(true);
+    if (!hasLoadedOnce.current) setLoading(true);
     Promise.all([
       supabase
         .from('training_plans')
@@ -136,7 +144,10 @@ export default function Plans() {
         })));
       })
       .catch(() => {})
-      .finally(() => setLoading(false));
+      .finally(() => {
+        hasLoadedOnce.current = true;
+        setLoading(false);
+      });
   }, [t]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
@@ -178,7 +189,12 @@ export default function Plans() {
     }
   }
 
+  // Repeating a past workout still opens a brand-new live session (a
+  // fresh copy of the old tree) — exactly the case that was slipping
+  // through before: gated the same as any other studio-session "open".
   async function doOneAgainStudio(sessionId: string) {
+    const access = await fetchAccessStatus();
+    if (!access.entitled) { router.push('/subscribe'); return; }
     setBusy(true);
     try {
       const res = await openStudioSession({ sourceSessionId: sessionId });
@@ -186,12 +202,17 @@ export default function Plans() {
     } catch (e) {
       const existing = await existingOpenSessionId(e);
       if (existing) openStudioCard(existing);
+      else if (e instanceof ApiError && e.code === 'subscription_required') router.push('/subscribe');
       else Alert.alert(t('coachUnavailable'));
     } finally {
       setBusy(false);
     }
   }
 
+  // Gated the same as every other studio-session "open" call (server-side
+  // regardless, and pre-checked by resolveMethod's caller before this
+  // even runs) — a blank board is still a brand-new live session, not a
+  // plan definition the way gym's manual build is.
   async function buildOwnStudio() {
     setBusy(true);
     try {
@@ -205,6 +226,10 @@ export default function Plans() {
         setAddOpen(false);
         setPendingMethod(null);
         navigateAfterSheetCloses(() => openStudioCard(existing));
+      } else if (e instanceof ApiError && e.code === 'subscription_required') {
+        setAddOpen(false);
+        setPendingMethod(null);
+        navigateAfterSheetCloses(() => router.push('/subscribe'));
       } else {
         Alert.alert(t('coachUnavailable'));
       }
@@ -221,10 +246,32 @@ export default function Plans() {
     navigateAfterSheetCloses(() => setPendingMethod(method));
   }
 
-  function resolveMethod(method: AddMethod, kind: 'gym' | 'studio') {
+  // Gym's 'build' (ManualPlanForm) only ever creates a plan — actually
+  // training against it still requires session-start, which is gated on
+  // its own, so this step can stay free. Studio has no such second step:
+  // 'build' opens a live session directly (studio-session's "open",
+  // blank branch), which is why it's NOT exempted here even though it's
+  // just as manual/AI-free as the gym case — see buildOwnStudio's own
+  // comment. Every other method calls an LLM one way or another
+  // (generate/photo/paste/upload all end up at plan-import or
+  // studio-session's parse/generate). Checking here, right when "gym" or
+  // "studio" is picked, means a locked-out user sees the paywall
+  // immediately instead of after choosing a specific build method (or,
+  // worse, after filling out the whole AI-generate form).
+  async function resolveMethod(method: AddMethod, kind: 'gym' | 'studio') {
     setPendingMethod(null);
     setAddOpen(false);
+
+    if (!(kind === 'gym' && method === 'build')) {
+      const access = await fetchAccessStatus();
+      if (!access.entitled) {
+        navigateAfterSheetCloses(() => router.push('/subscribe'));
+        return;
+      }
+    }
+
     if (kind === 'studio' && method === 'build') { void buildOwnStudio(); return; }
+
     navigateAfterSheetCloses(() => {
       if (kind === 'gym') {
         if (method === 'generate') router.push({ pathname: '/plan-generate', params: { mode: 'add' } });

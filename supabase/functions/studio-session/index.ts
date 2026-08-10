@@ -1,5 +1,5 @@
 import {
-  admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage, withSentry,
+  admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage, subscriptionAccess, withSentry,
 } from "../_shared/mod.ts";
 
 /**
@@ -548,6 +548,10 @@ async function runStudioGeneration(
   if (!(await allowRate(db, userId, "studio-generate", 5, 300))) {
     return { error: "rate_limited", status: 429 };
   }
+  const access = await subscriptionAccess(db, userId);
+  if (!access.ok) {
+    return { error: "subscription_required", status: 402 };
+  }
   const budget = await budgetRemaining(db, userId);
   if (!budget.ok) {
     return { error: "monthly_budget_exhausted", status: 402 };
@@ -590,6 +594,16 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "open") {
+    // Unlike the gym side (where creating a plan and starting a session
+    // are separate steps — plan-import's commit is free, session-start is
+    // the actual gate), Studio has no separate start step: "open" IS the
+    // session-start equivalent regardless of how the tree originates
+    // (blank/manual, copied from a past session, AI-generated, or
+    // parsed from a photo/paste). Gating every branch here, not just the
+    // AI-cost ones, is what makes that symmetric with the gym side.
+    const openAccess = await subscriptionAccess(db, user.id);
+    if (!openAccess.ok) return json(402, { error: "subscription_required" });
+
     let tree: Tree;
     let sourceSessionId: string | null = null;
     // The original source, kept only for the "reparse" action — null for
@@ -685,6 +699,12 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "update" || body.action === "save") {
+    // Defense in depth for a session that was legitimately opened before
+    // the trial ended but not yet saved — "open" being gated already
+    // covers the normal case, this covers the stale-in-progress one.
+    const editAccess = await subscriptionAccess(db, user.id);
+    if (!editAccess.ok) return json(402, { error: "subscription_required" });
+
     if (typeof body.sessionId !== "string") return json(400, { error: "invalid_input" });
     const { data: owned } = await db
       .from("studio_sessions")
@@ -778,6 +798,9 @@ Deno.serve(withSentry(async (req) => {
       if ("error" in gen) return json(gen.status, { error: gen.error });
       newTree = gen.tree;
     } else {
+      const access = await subscriptionAccess(db, user.id);
+      if (!access.ok) return json(402, { error: "subscription_required" });
+
       const res = await callAgent({ ...payload, correctionNote: correctionText }, "/parse-studio");
       if (!res.ok) {
         return json(res.status === 422 ? 422 : 503, {

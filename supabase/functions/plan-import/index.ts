@@ -1,4 +1,4 @@
-import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
+import { admin, allowRate, callAgent, corsHeaders, getUser, json, subscriptionAccess, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-26: paste-and-parse plan onboarding. Also covers adding/editing
@@ -48,6 +48,15 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "parse") {
+    // A real LLM call (unlike commit/seed-starting-weights/archive below,
+    // which are pure DB writes) — gated the same as every other AI entry
+    // point, whether this is first-time onboarding (new accounts are
+    // always within their trial) or adding a workout type later.
+    const access = await subscriptionAccess(db, user.id);
+    if (!access.ok) {
+      return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });
+    }
+
     // Pasted text, an uploaded PDF/docx (client caps the raw file at 8MB
     // before ever uploading it; base64 inflates that by ~33%), or one or
     // more photographed pages (guidelines/photograph-plan.html — client

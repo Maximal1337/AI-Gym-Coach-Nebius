@@ -81,10 +81,15 @@ export default function Terms() {
 
         <h2>Subscriptions</h2>
         <p>
-          Notch is currently free to use. If we introduce a paid
-          subscription in the future, its price, billing terms, and
-          cancellation policy will be shown to you before you're charged,
-          and this section will be updated accordingly.
+          Your first month of Notch is free — no payment method required.
+          After that, continued access to AI-coached workouts requires a
+          paid subscription (billed monthly or annually), purchased and
+          managed through the App Store. Payment is charged to your Apple
+          ID, and subscriptions renew automatically unless canceled at
+          least 24 hours before the end of the current period. You can
+          manage or cancel anytime in your device Settings. Your logged
+          workout history and manually-tracked sets always remain
+          accessible, whether or not you're subscribed.
         </p>
 
         <h2>Third-party services</h2>

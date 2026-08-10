@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '../lib/api';
+import { fetchAccessStatus } from '../lib/subscription';
 import {
   existingOpenSessionId, openStudioSession, STUDIO_EQUIPMENT_OPTIONS,
   type GenerateStudioIntake, type StudioEquipment,
@@ -57,8 +58,22 @@ export function StudioGenerateFlow({
   const [focus, setFocus] = useState<Focus | null>(null);
   const [injuryNotes, setInjuryNotes] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const [budgetExhausted, setBudgetExhausted] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
+
+  // Front-load the entitlement check, same reasoning as GeneratePlanFlow's
+  // 'add' case: show the paywall immediately instead of after 5 questions.
+  // Studio has no onboarding-mode exception — it's never a mandatory
+  // first-run flow the way the gym plan intake can be.
+  useEffect(() => {
+    fetchAccessStatus().then((s) => {
+      if (!s.entitled) {
+        setErrorMessage(t('trialExpired'));
+        setBlocked(true);
+        setStep('error');
+      }
+    });
+  }, [t]);
 
   function toggleEquipment(opt: StudioEquipment) {
     setEquipment((cur) => (cur.includes(opt) ? cur.filter((e) => e !== opt) : [...cur, opt]));
@@ -93,9 +108,10 @@ export function StudioGenerateFlow({
     } catch (e) {
       const existing = await existingOpenSessionId(e);
       if (existing) { onDone(existing); return; }
-      const exhausted = e instanceof ApiError && e.code === 'monthly_budget_exhausted';
-      setErrorMessage(exhausted ? t('budgetExhausted') : t('generateStudioFailed'));
-      setBudgetExhausted(exhausted);
+      const trialExpired = e instanceof ApiError && e.code === 'subscription_required';
+      const budgetExhausted = e instanceof ApiError && e.code === 'monthly_budget_exhausted';
+      setErrorMessage(trialExpired ? t('trialExpired') : budgetExhausted ? t('budgetExhausted') : t('generateStudioFailed'));
+      setBlocked(trialExpired || budgetExhausted);
       setStep('error');
     } finally {
       clearInterval(id);
@@ -343,10 +359,10 @@ export function StudioGenerateFlow({
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
       <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{errorMessage}</Text>
       <Pressable
-        onPress={budgetExhausted ? () => router.push('/subscribe') : generate}
+        onPress={blocked ? () => router.push('/subscribe') : generate}
         style={{ backgroundColor: theme.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: radius.pill }}
       >
-        <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{budgetExhausted ? t('subscription') : t('tryAgain')}</Text>
+        <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{blocked ? t('subscription') : t('tryAgain')}</Text>
       </Pressable>
       <Pressable onPress={onCancel}>
         <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text>

@@ -97,20 +97,19 @@ export function currentPeriod(): string {
 }
 
 /**
- * GYM-21: monthly budget check — done once per session start.
- * Units are CENTS: the default of 3.6¢/user/month, sized for ~6 free
- * workouts. The ~0.6¢/session figure this cap is sized against holds up
- * against real usage: recorded cost (usage_ledger, July 2026) came in at
- * ≈0.07¢ per exercise turn, almost exactly the ~0.06¢/call this was
- * originally estimated at. Deliberately advisory-precision either way:
- * concurrent starts within one rate-limit window can overshoot by a few
- * sessions, which at these prices is a fraction of a cent.
+ * GYM-21: monthly cost-abuse cap — done once per session start. Per the
+ * "Subscription Pricing & Monetization Strategy" doc's amendment (a
+ * first-month-free trial replaces workout-count rationing as the actual
+ * free/paid gate — see subscriptionAccess() below), this is no longer the
+ * primary paywall trigger, so it's sized generously (default 50¢/user/
+ * month, ~80 workouts at the ~0.6¢/session real-usage figure) purely as a
+ * circuit breaker against runaway/scripted usage, not a marketing lever.
  */
 export async function budgetRemaining(
   db: SupabaseClient,
   userId: string,
 ): Promise<{ ok: boolean; spentCents: number; budgetCents: number }> {
-  const budgetCents = Number(Deno.env.get("USAGE_MONTHLY_BUDGET_CENTS") ?? "3.6");
+  const budgetCents = Number(Deno.env.get("USAGE_MONTHLY_BUDGET_CENTS") ?? "50");
   const { data } = await db
     .from("usage_ledger")
     .select("cost_cents")
@@ -119,6 +118,39 @@ export async function budgetRemaining(
     .maybeSingle();
   const spentCents = Number(data?.cost_cents ?? 0);
   return { ok: spentCents < budgetCents, spentCents, budgetCents };
+}
+
+/**
+ * Free/paid gate (Subscription Pricing & Monetization Strategy doc,
+ * amended to a first-month-free trial): a user is entitled to AI coaching
+ * while their trial clock hasn't run out, OR while RevenueCat reports an
+ * active/canceled-but-not-yet-expired subscription. 'canceled' still
+ * counts — Apple keeps the subscription live through the end of the paid
+ * period after a user turns off auto-renew, and revenuecat-webhook always
+ * sets subscription_expires_at alongside it, so that's what actually gates
+ * access, not the label itself.
+ */
+export async function subscriptionAccess(
+  db: SupabaseClient,
+  userId: string,
+): Promise<{ ok: boolean; status: string; trialEndsAt: string | null }> {
+  const { data } = await db
+    .from("users")
+    .select("subscription_status, trial_ends_at, subscription_expires_at")
+    .eq("id", userId)
+    .maybeSingle();
+  if (!data) return { ok: false, status: "expired", trialEndsAt: null };
+
+  const now = Date.now();
+  const trialActive = !!data.trial_ends_at && new Date(data.trial_ends_at as string).getTime() > now;
+  const paidActive = (data.subscription_status === "active" || data.subscription_status === "canceled") &&
+    (!data.subscription_expires_at || new Date(data.subscription_expires_at as string).getTime() > now);
+
+  return {
+    ok: trialActive || paidActive,
+    status: data.subscription_status as string,
+    trialEndsAt: data.trial_ends_at as string | null,
+  };
 }
 
 export async function recordUsage(

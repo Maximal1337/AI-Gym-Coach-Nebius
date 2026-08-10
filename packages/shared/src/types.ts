@@ -1,5 +1,7 @@
 /** Domain types mirroring the Postgres schema (supabase/migrations). */
 
+export type SubscriptionStatus = "trialing" | "active" | "canceled" | "expired";
+
 export interface User {
   id: string;
   appleSub: string | null;
@@ -7,6 +9,12 @@ export interface User {
   termsAcceptedAt: string | null;
   termsVersion: string | null;
   createdAt: string;
+  /** First-month-free trial deadline; entitled while now() is before this OR subscriptionStatus grants access. */
+  trialEndsAt: string;
+  subscriptionStatus: SubscriptionStatus;
+  /** Set by revenuecat-webhook; still entitled through this date even when status is 'canceled'. */
+  subscriptionExpiresAt: string | null;
+  revenuecatCustomerId: string | null;
 }
 
 export type PlanStatus = "active" | "archived";
@@ -83,7 +91,7 @@ export interface CoachNote {
   createdAt: string;
 }
 
-/** One row per user per calendar month — the real mechanism behind "12 workouts". */
+/** One row per user per calendar month — now an abuse-cap only, not the free/paid gate (see SubscriptionStatus/trialEndsAt on User). */
 export interface UsageLedgerEntry {
   userId: string;
   period: string; // "YYYY-MM"

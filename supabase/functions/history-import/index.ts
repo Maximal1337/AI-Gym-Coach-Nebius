@@ -1,4 +1,4 @@
-import { admin, allowRate, callAgent, corsHeaders, getUser, json, withSentry } from "../_shared/mod.ts";
+import { admin, allowRate, callAgent, corsHeaders, getUser, json, subscriptionAccess, withSentry } from "../_shared/mod.ts";
 
 /**
  * GYM-48: import a pasted workout summary as historical set_logs.
@@ -74,6 +74,10 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "parse") {
+    const access = await subscriptionAccess(db, user.id);
+    if (!access.ok) {
+      return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });
+    }
     if (typeof body.text !== "string" || body.text.length < 10 || body.text.length > 20000) {
       return json(400, { error: "invalid_input" });
     }
@@ -103,6 +107,15 @@ Deno.serve(withSentry(async (req) => {
   }
 
   if (body.action === "commit") {
+    // Defense in depth, same reasoning as studio-session's update/save
+    // gate: the normal UI path can only reach commit after parse (already
+    // gated), but a client holding a preview from before the trial ended
+    // shouldn't still be able to write it.
+    const access = await subscriptionAccess(db, user.id);
+    if (!access.ok) {
+      return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });
+    }
+
     const sessions = body.sessions as Array<{
       date: string | null;
       planName?: string | null;

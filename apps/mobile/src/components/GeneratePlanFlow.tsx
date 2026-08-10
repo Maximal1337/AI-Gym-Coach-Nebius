@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { ApiError, callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { fetchAccessStatus } from '../lib/subscription';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
 import { SketchLoader } from './SketchLoader';
@@ -78,7 +79,7 @@ export function GeneratePlanFlow({
   const [startingWeightsActive, setStartingWeightsActive] = useState(false);
   const [linterChecks, setLinterChecks] = useState<LinterCheck[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
-  const [budgetExhausted, setBudgetExhausted] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [lineIdx, setLineIdx] = useState(0);
 
   useEffect(() => {
@@ -86,6 +87,22 @@ export function GeneratePlanFlow({
     const id = setInterval(() => setLineIdx((i) => (i + 1) % GENERATING_LINES.length), 1800);
     return () => clearInterval(id);
   }, [step]);
+
+  // Front-load the entitlement check: 'add' means an existing account
+  // reaching this from Settings/Plans, where the trial may already be
+  // over — show the paywall immediately instead of after 5 onboarding
+  // questions. 'onboarding' is always a brand-new account (always within
+  // its fresh trial by construction), so it's never worth the round trip.
+  useEffect(() => {
+    if (mode !== 'add') return;
+    fetchAccessStatus().then((s) => {
+      if (!s.entitled) {
+        setErrorMessage(t('trialExpired'));
+        setBlocked(true);
+        setStep('error');
+      }
+    });
+  }, [mode, t]);
 
   // Saved as soon as the user moves past this step (System Design §21) —
   // goal/experience/days are already chosen by now, so the row is valid
@@ -127,9 +144,10 @@ export function GeneratePlanFlow({
       setLinterChecks(res.linterChecks);
       setStep('preview');
     } catch (e) {
-      const exhausted = e instanceof ApiError && e.code === 'monthly_budget_exhausted';
-      setErrorMessage(exhausted ? t('budgetExhausted') : t('generateFailed'));
-      setBudgetExhausted(exhausted);
+      const trialExpired = e instanceof ApiError && e.code === 'subscription_required';
+      const budgetExhausted = e instanceof ApiError && e.code === 'monthly_budget_exhausted';
+      setErrorMessage(trialExpired ? t('trialExpired') : budgetExhausted ? t('budgetExhausted') : t('generateFailed'));
+      setBlocked(trialExpired || budgetExhausted);
       setStep('error');
     }
   }
@@ -392,10 +410,10 @@ export function GeneratePlanFlow({
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
         <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{errorMessage}</Text>
         <Pressable
-          onPress={budgetExhausted ? () => router.push('/subscribe') : generate}
+          onPress={blocked ? () => router.push('/subscribe') : generate}
           style={{ backgroundColor: theme.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: radius.pill }}
         >
-          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{budgetExhausted ? t('subscription') : t('tryAgain')}</Text>
+          <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{blocked ? t('subscription') : t('tryAgain')}</Text>
         </Pressable>
         <Pressable onPress={onCancel}>
           <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text>

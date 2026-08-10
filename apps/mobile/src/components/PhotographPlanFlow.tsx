@@ -6,7 +6,8 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { callFn } from '../lib/api';
+import { router } from 'expo-router';
+import { ApiError, callFn } from '../lib/api';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
@@ -151,8 +152,13 @@ export function PhotographPlanFlow({
       });
       setPreview(res.plans);
       setStep('preview');
-    } catch {
-      Alert.alert(t('photoParseFailed'));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'subscription_required') {
+        Alert.alert(t('trialExpired'));
+        router.push('/subscribe');
+      } else {
+        Alert.alert(t('photoParseFailed'));
+      }
       setStep('review');
     } finally {
       setBusy(false);

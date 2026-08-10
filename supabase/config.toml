@@ -404,6 +404,14 @@ s3_access_key = "env(S3_ACCESS_KEY)"
 # Configures AWS_SECRET_ACCESS_KEY for S3 bucket
 s3_secret_key = "env(S3_SECRET_KEY)"
 
+# RevenueCat calls this webhook directly with its own shared-secret
+# Authorization header, not a Supabase user JWT — verify_jwt must stay off
+# both here and on deploy (`supabase functions deploy revenuecat-webhook
+# --no-verify-jwt`), or every real webhook call 401s before the function's
+# own secret check ever runs.
+[functions.revenuecat-webhook]
+verify_jwt = false
+
 # pg-delta is the schema diff engine for db diff / db pull / db remote commit.
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]

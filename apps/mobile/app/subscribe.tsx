@@ -1,20 +1,22 @@
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
+import type { PurchasesPackage } from 'react-native-purchases';
 import { Screen } from '../src/components/Screen';
 import { useLanguage, type Direction } from '../src/lib/language';
-import { fetchUsageSnapshot } from '../src/lib/usage';
+import { fetchAccessStatus, getCurrentOffering, purchase, purchasesConfigured, restore } from '../src/lib/subscription';
 import { useTheme, spacing, radius } from '../src/theme';
 
 /**
- * Placeholder pricing/plan config until RevenueCat + Apple IAP land
- * (System Design §15/§16 — "Monetize", not started). Numbers match the
- * recommendation in the "Subscription Pricing & Monetization Strategy"
- * Linear doc: annual priced at ~50% of (12 × monthly), matching the
- * Fitbod/Freeletics/Runna/MacroFactor comparable set. Swap for real
- * StoreKit product prices (localized by App Store Connect) once wired.
+ * Fallback display prices — used until a real RevenueCat offering loads
+ * (purchasesConfigured is false, we're offline, or Apple/RevenueCat
+ * hasn't returned yet). Match the recommendation in the "Subscription
+ * Pricing & Monetization Strategy" Linear doc: annual priced at ~50% of
+ * (12 × monthly), matching the Fitbod/Freeletics/Runna/MacroFactor
+ * comparable set. Once an offering loads, its packages' own
+ * product.priceString (real, localized StoreKit prices) is used instead.
  */
 const MONTHLY_PRICE = '$9.99';
 const ANNUAL_PRICE = '$59.99';
@@ -29,24 +31,68 @@ export default function Subscribe() {
   const { t } = useTranslation();
   const { dir } = useLanguage();
   const [plan, setPlan] = useState<PlanId>('annual');
-  const [remaining, setRemaining] = useState(0);
-  const [total, setTotal] = useState(0);
+  const [daysLeftInTrial, setDaysLeftInTrial] = useState(0);
+  const [trialActive, setTrialActive] = useState(true);
+  const [monthlyPkg, setMonthlyPkg] = useState<PurchasesPackage | null>(null);
+  const [annualPkg, setAnnualPkg] = useState<PurchasesPackage | null>(null);
+  const [purchasing, setPurchasing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
-      fetchUsageSnapshot().then((s) => {
-        setRemaining(s.remaining);
-        setTotal(s.total);
+      fetchAccessStatus().then((s) => {
+        setDaysLeftInTrial(s.daysLeftInTrial);
+        setTrialActive(s.status === 'trialing' && s.entitled);
       });
+      if (purchasesConfigured) {
+        getCurrentOffering().then((offering) => {
+          setMonthlyPkg(offering?.availablePackages.find((p) => p.packageType === 'MONTHLY') ?? null);
+          setAnnualPkg(offering?.availablePackages.find((p) => p.packageType === 'ANNUAL') ?? null);
+        }).catch(() => {});
+      }
     }, []),
   );
 
   const row = dir === 'rtl' ? 'row-reverse' : 'row';
   const align = dir === 'rtl' ? 'right' : 'left';
 
-  function notLiveYet() {
-    Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
+  async function handleContinue() {
+    const pkg = plan === 'annual' ? annualPkg : monthlyPkg;
+    if (!purchasesConfigured || !pkg) {
+      Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
+      return;
+    }
+    setPurchasing(true);
+    try {
+      const entitled = await purchase(pkg);
+      if (entitled) router.back();
+    } catch (e) {
+      if (!(e as { userCancelled?: boolean })?.userCancelled) {
+        Alert.alert(t('coachUnavailable'));
+      }
+    } finally {
+      setPurchasing(false);
+    }
   }
+
+  async function handleRestore() {
+    if (!purchasesConfigured) {
+      Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
+      return;
+    }
+    setPurchasing(true);
+    try {
+      const entitled = await restore();
+      if (entitled) router.back();
+      else Alert.alert(t('restorePurchases'), t('restoreNoneFound'));
+    } catch {
+      Alert.alert(t('coachUnavailable'));
+    } finally {
+      setPurchasing(false);
+    }
+  }
+
+  const monthlyPrice = monthlyPkg?.product.priceString ?? MONTHLY_PRICE;
+  const annualPrice = annualPkg?.product.priceString ?? ANNUAL_PRICE;
 
   const features: { icon: keyof typeof Ionicons.glyphMap; label: string }[] = [
     { icon: 'infinite-outline', label: t('featureUnlimited') },
@@ -105,15 +151,17 @@ export default function Subscribe() {
           ))}
         </View>
 
-        {remaining > 0 && (
+        {trialActive && (
           <View style={{ marginBottom: spacing.lg }}>
             <Text style={{ color: theme.inkSoft, fontSize: 12.5, fontWeight: '600', textAlign: align }}>
-              {t('freeWorkoutsRemaining', { count: remaining })}
+              {daysLeftInTrial > 0
+                ? t('trialDaysRemaining', { count: daysLeftInTrial })
+                : t('trialEndsToday')}
             </Text>
             <View style={{ height: 4, borderRadius: 2, backgroundColor: theme.rule, overflow: 'hidden', marginTop: 6 }}>
               <View
                 style={{
-                  width: `${Math.max((remaining / total) * 100, 4)}%`, height: '100%',
+                  width: `${Math.max((daysLeftInTrial / 30) * 100, 4)}%`, height: '100%',
                   backgroundColor: theme.accent, borderRadius: 2,
                 }}
               />
@@ -128,7 +176,7 @@ export default function Subscribe() {
             selected={plan === 'annual'}
             onPress={() => setPlan('annual')}
             title={t('planAnnual')}
-            price={ANNUAL_PRICE}
+            price={annualPrice}
             sub={t('planAnnualSub', { monthly: ANNUAL_MONTHLY_EQUIVALENT })}
             badge={t('planBestValue', { pct: ANNUAL_SAVINGS_PCT })}
           />
@@ -138,23 +186,31 @@ export default function Subscribe() {
             selected={plan === 'monthly'}
             onPress={() => setPlan('monthly')}
             title={t('planMonthly')}
-            price={MONTHLY_PRICE}
+            price={monthlyPrice}
             sub={t('planMonthlySub')}
           />
         </View>
 
         <Pressable
-          onPress={notLiveYet}
-          style={{ backgroundColor: theme.accent, paddingVertical: 16, borderRadius: radius.pill, alignItems: 'center' }}
+          onPress={handleContinue}
+          disabled={purchasing}
+          style={{
+            backgroundColor: theme.accent, paddingVertical: 16, borderRadius: radius.pill,
+            alignItems: 'center', opacity: purchasing ? 0.7 : 1,
+          }}
         >
-          <Text style={{ color: theme.onAccent, fontSize: 16, fontWeight: '800' }}>
-            {plan === 'annual'
-              ? t('continueWithPrice', { price: `${ANNUAL_PRICE}/${t('yr')}` })
-              : t('continueWithPrice', { price: `${MONTHLY_PRICE}/${t('mo')}` })}
-          </Text>
+          {purchasing ? (
+            <ActivityIndicator color={theme.onAccent} />
+          ) : (
+            <Text style={{ color: theme.onAccent, fontSize: 16, fontWeight: '800' }}>
+              {plan === 'annual'
+                ? t('continueWithPrice', { price: `${annualPrice}/${t('yr')}` })
+                : t('continueWithPrice', { price: `${monthlyPrice}/${t('mo')}` })}
+            </Text>
+          )}
         </Pressable>
 
-        <Pressable onPress={notLiveYet} style={{ alignItems: 'center', marginTop: spacing.md }}>
+        <Pressable onPress={handleRestore} disabled={purchasing} style={{ alignItems: 'center', marginTop: spacing.md }}>
           <Text style={{ color: theme.accent, fontSize: 13, fontWeight: '700' }}>{t('restorePurchases')}</Text>
         </Pressable>
 

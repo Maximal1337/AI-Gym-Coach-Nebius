@@ -24,7 +24,7 @@ import { IconButton } from '../../src/components/IconButton';
 import { CoachMark } from '../../src/components/CoachMark';
 import { useLanguage } from '../../src/lib/language';
 import { useUnits, formatWeightKg, weightUnitLabel, type UnitSystem } from '../../src/lib/units';
-import { fetchUsageSnapshot } from '../../src/lib/usage';
+import { fetchAccessStatus, type AccessStatus } from '../../src/lib/subscription';
 import { useUnread } from '../../src/lib/unread';
 import { track } from '../../src/lib/analytics';
 import { listStudioSessions } from '../../src/lib/studioApi';
@@ -96,13 +96,16 @@ export default function Chat() {
   const [busy, setBusy] = useState(false);
   const [showConfetti, setShowConfetti] = useState(false);
   const [pendingAction, setPendingAction] = useState<SuggestedAction | null>(null);
-  // Proactive low-balance signal (Subscription Pricing & Monetization
-  // Strategy doc, §4.2): tell the user before they hit the hard paywall,
-  // not only after — same budgetRemaining()-equivalent data the settings/
-  // subscribe screens already read, just surfaced earlier. Dismissed is
-  // per-app-open only (not persisted) — a light nudge, not a nag.
-  const [remainingWorkouts, setRemainingWorkouts] = useState<number | null>(null);
-  const [lowBalanceDismissed, setLowBalanceDismissed] = useState(false);
+  // Proactive trial-ending signal (Subscription Pricing & Monetization
+  // Strategy doc, §4.2, amended to a first-month-free trial): tell the
+  // user before the hard paywall hits, not only after — same
+  // subscriptionAccess()-equivalent data the settings/subscribe screens
+  // already read, just surfaced earlier. Once the trial has actually run
+  // out with no active subscription, the banner becomes non-dismissible —
+  // that's the "on hold" state: new sessions/plans are already blocked
+  // server-side, this just makes the reason visible instead of a dead end.
+  const [accessStatus, setAccessStatus] = useState<AccessStatus | null>(null);
+  const [trialBannerDismissed, setTrialBannerDismissed] = useState(false);
   // The composer's bottom padding needs to clear the floating tab bar
   // when it's showing, but that same padding becomes a dead gap above
   // the keyboard once KeyboardAvoidingView has already shifted everything
@@ -142,7 +145,7 @@ export default function Chat() {
     useCallback(() => {
       supabase.from('training_plans').select('id, name').eq('status', 'active')
         .then(({ data }) => setPlans(data ?? []));
-      fetchUsageSnapshot().then((s) => setRemainingWorkouts(s.remaining));
+      fetchAccessStatus().then(setAccessStatus);
       // Train now holds both plan kinds (studio-implementation-brief.md
       // §1.1 — "chat for gym, form for studio, decided by the plan"): an
       // open studio session surfaces as a banner here rather than needing
@@ -187,7 +190,10 @@ export default function Chat() {
   }
 
   function coachError(e: unknown, relatedClientMessageId?: string) {
-    if (e instanceof ApiError && e.code === 'monthly_budget_exhausted') {
+    if (e instanceof ApiError && e.code === 'subscription_required') {
+      push('system', t('trialExpired'));
+      router.push('/subscribe');
+    } else if (e instanceof ApiError && e.code === 'monthly_budget_exhausted') {
       push('system', t('budgetExhausted'));
       router.push('/subscribe');
     } else if (e instanceof ApiError && e.code === 'session_expired') push('system', t('sessionExpired'));
@@ -288,6 +294,15 @@ export default function Chat() {
   // the bar in place, tappable again.
   async function confirmSets(exerciseId: string, sets: Array<{ weightKg: number; reps: number }>) {
     if (!sessionId || busy) return;
+    // Client-side short-circuit, ahead of the network call: accessStatus is
+    // already fetched (see the focus effect above), so a locked-out user
+    // gets the paywall reply instantly instead of waiting on a round trip
+    // to coach-turn just to learn what this state already knows.
+    if (accessStatus && !accessStatus.entitled) {
+      push('system', t('trialExpired'));
+      router.push('/subscribe');
+      return;
+    }
     const clientMessageId = generateMessageId();
     push('me', formatConfirmedSets(sets, units), clientMessageId);
     setBusy(true);
@@ -500,6 +515,15 @@ export default function Chat() {
   async function send() {
     const text = draft.trim();
     if (!text || !sessionId || !currentExerciseId || busy) return;
+    // Same short-circuit as confirmSets() above — never let a locked-out
+    // send reach coach-turn at all. Draft is left in place (same as the
+    // real-ApiError path below restoring it) so the user's message isn't
+    // lost, just not sent until they subscribe.
+    if (accessStatus && !accessStatus.entitled) {
+      push('system', t('trialExpired'));
+      router.push('/subscribe');
+      return;
+    }
     setDraft('');
     const clientMessageId = generateMessageId();
     push('me', text, clientMessageId);
@@ -669,7 +693,7 @@ export default function Chat() {
         </Pressable>
       )}
 
-      {remainingWorkouts != null && remainingWorkouts > 0 && remainingWorkouts <= 2 && !lowBalanceDismissed && (
+      {accessStatus && !accessStatus.entitled && (
         <Pressable
           onPress={() => router.push('/subscribe')}
           style={{
@@ -679,9 +703,27 @@ export default function Chat() {
           }}
         >
           <Text style={{ flex: 1, color: theme.ink, fontSize: 12.5, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
-            {t('freeWorkoutsRemaining', { count: remainingWorkouts })}
+            {t('trialExpired')}
           </Text>
-          <Pressable hitSlop={8} onPress={(e) => { e.stopPropagation(); setLowBalanceDismissed(true); }}>
+          <Ionicons name={dir === 'rtl' ? 'chevron-back' : 'chevron-forward'} size={16} color={theme.inkSoft} />
+        </Pressable>
+      )}
+
+      {accessStatus?.status === 'trialing' && accessStatus.entitled && accessStatus.daysLeftInTrial <= 3 && !trialBannerDismissed && (
+        <Pressable
+          onPress={() => router.push('/subscribe')}
+          style={{
+            flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
+            backgroundColor: theme.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
+            borderBottomWidth: 1, borderBottomColor: theme.rule,
+          }}
+        >
+          <Text style={{ flex: 1, color: theme.ink, fontSize: 12.5, fontWeight: '600', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
+            {accessStatus.daysLeftInTrial > 0
+              ? t('trialDaysRemaining', { count: accessStatus.daysLeftInTrial })
+              : t('trialEndsToday')}
+          </Text>
+          <Pressable hitSlop={8} onPress={(e) => { e.stopPropagation(); setTrialBannerDismissed(true); }}>
             <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700' }}>{t('dismiss')}</Text>
           </Pressable>
         </Pressable>

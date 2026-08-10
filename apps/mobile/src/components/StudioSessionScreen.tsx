@@ -3,7 +3,9 @@ import {
   ActivityIndicator, Alert, LayoutAnimation, Platform, Pressable, ScrollView, Text, TextInput, UIManager, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import { ApiError } from '../lib/api';
 import { useLanguage } from '../lib/language';
 import { useTheme, spacing, radius } from '../theme';
 import {
@@ -454,8 +456,13 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         note: note.trim() || null,
       });
       onClose();
-    } catch {
-      Alert.alert(t('coachUnavailable'));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'subscription_required') {
+        Alert.alert(t('trialExpired'));
+        router.push('/subscribe');
+      } else {
+        Alert.alert(t('coachUnavailable'));
+      }
     } finally {
       setSaving(false);
     }
@@ -501,8 +508,13 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         apply();
       }
     } catch (e) {
-      const code = (e as { code?: string })?.code;
-      Alert.alert(code === 'no_source_to_reparse' ? t('reparseNoSource') : t('coachUnavailable'));
+      if (e instanceof ApiError && e.code === 'subscription_required') {
+        Alert.alert(t('trialExpired'));
+        router.push('/subscribe');
+      } else {
+        const code = (e as { code?: string })?.code;
+        Alert.alert(code === 'no_source_to_reparse' ? t('reparseNoSource') : t('coachUnavailable'));
+      }
     } finally {
       setReparsing(false);
     }

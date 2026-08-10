@@ -6,14 +6,16 @@ import {
   getUser,
   json,
   runExerciseTurn,
+  subscriptionAccess,
   withSentry,
 } from "../_shared/mod.ts";
 
 /**
  * GYM-16: POST /session/start  { planId }
  *
- * Budget is checked HERE and only here — a session already running is
- * never cut off mid-set (System Design §7).
+ * Entitlement (trial/subscription) and budget are checked HERE and only
+ * here — a session already running is never cut off mid-set (System
+ * Design §7).
  *
  * Idempotent against retries: an open session on the same plan is reused,
  * so a client that got a 503 mid-start doesn't strand orphan sessions.
@@ -28,6 +30,11 @@ Deno.serve(withSentry(async (req) => {
   const db = admin();
   if (!(await allowRate(db, user.id, "session-start", 5, 60))) {
     return json(429, { error: "rate_limited" });
+  }
+
+  const access = await subscriptionAccess(db, user.id);
+  if (!access.ok) {
+    return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });
   }
 
   const budget = await budgetRemaining(db, user.id);

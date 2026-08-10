@@ -6,6 +6,7 @@ import {
   getUser,
   json,
   runConversationExerciseTurn,
+  subscriptionAccess,
   withSentry,
 } from "../_shared/mod.ts";
 
@@ -18,10 +19,13 @@ const SESSION_MAX_AGE_MS = 6 * 3600_000;
  * the agent interprets it and — if it decided the exercise is done —
  * this endpoint has already logged the sets and moved to the next one.
  *
- * No budget check by design (a running session always finishes) — but the
- * session must be genuinely running: turns on sessions older than 6h are
- * rejected, so a parked "in_progress" session can't become an unmetered
- * LLM faucet.
+ * No budget check by design (a running session always finishes) — but
+ * entitlement IS checked here, on every turn, not just at session-start.
+ * Unlike the cost-abuse budget, subscription is the actual paywall: a
+ * session left open across a trial's expiry must not become a way to
+ * keep chatting with the coach for free indefinitely. The session's own
+ * 6h max-age still applies underneath this, so a parked "in_progress"
+ * session can't become an unmetered LLM faucet either way.
  */
 Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -33,6 +37,11 @@ Deno.serve(withSentry(async (req) => {
   const db = admin();
   if (!(await allowRate(db, user.id, "coach-turn", 20, 60))) {
     return json(429, { error: "rate_limited" });
+  }
+
+  const access = await subscriptionAccess(db, user.id);
+  if (!access.ok) {
+    return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });
   }
 
   let sessionId: string, exerciseId: string;

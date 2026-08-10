@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Alert, Keyboard, Pressable, Text, TextInput } from 'react-native';
 import { useTranslation } from 'react-i18next';
+import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import { File } from 'expo-file-system';
-import { callFn } from '../lib/api';
+import { callFn, ApiError } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
 import { PlanPreview, type ParsedPlan } from './PlanPreview';
@@ -78,6 +79,16 @@ export function PlanPasteFlow({
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
+
+  function handleParseError(e: unknown) {
+    if (e instanceof ApiError && e.code === 'subscription_required') {
+      Alert.alert(t('trialExpired'));
+      router.push('/subscribe');
+    } else {
+      Alert.alert(t('parseFailed'));
+    }
+  }
+
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
@@ -151,8 +162,8 @@ export function PlanPasteFlow({
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', text });
       setPreview(res.plans);
       setPreviewSource('paste');
-    } catch {
-      Alert.alert(t('parseFailed'));
+    } catch (e) {
+      handleParseError(e);
     } finally {
       setBusy(false);
     }
@@ -204,8 +215,8 @@ export function PlanPasteFlow({
       const res = await callFn<{ plans: ParsedPlan[] }>('plan-import', { action: 'parse', ...payload });
       setPreview(res.plans);
       setPreviewSource('upload');
-    } catch {
-      Alert.alert(t('parseFailed'));
+    } catch (e) {
+      handleParseError(e);
     } finally {
       setBusy(false);
       setPicking(false);

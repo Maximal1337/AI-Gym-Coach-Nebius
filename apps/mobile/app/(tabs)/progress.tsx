@@ -2,11 +2,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, ScrollView, Text, TextInput, View,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { supabase } from '../../src/lib/supabase';
-import { callFn } from '../../src/lib/api';
+import { callFn, ApiError } from '../../src/lib/api';
 import { DismissKeyboardView } from '../../src/components/DismissKeyboardView';
 import { LineChart } from '../../src/components/LineChart';
 import { Screen } from '../../src/components/Screen';
@@ -237,8 +237,13 @@ export default function Progress() {
     try {
       const res = await callFn<{ sessions: ParsedImportSession[] }>('history-import', { action: 'parse', text: importText });
       setImportPreview(res);
-    } catch {
-      Alert.alert(t('parseFailed'));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'subscription_required') {
+        Alert.alert(t('trialExpired'));
+        router.push('/subscribe');
+      } else {
+        Alert.alert(t('parseFailed'));
+      }
     } finally {
       setBusy(false);
     }
@@ -256,8 +261,13 @@ export default function Progress() {
       setImportPreview(null);
       setImportText('');
       if (selectedPlanId) setSeries(await fetchExerciseSeries(selectedPlanId));
-    } catch {
-      Alert.alert(t('coachUnavailable'));
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'subscription_required') {
+        Alert.alert(t('trialExpired'));
+        router.push('/subscribe');
+      } else {
+        Alert.alert(t('coachUnavailable'));
+      }
     } finally {
       setBusy(false);
     }

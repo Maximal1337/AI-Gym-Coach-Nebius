@@ -4,6 +4,7 @@ import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 import { hasChosenLanguage } from '../src/lib/language';
 import { registerPush } from '../src/lib/push';
+import { initPurchases } from '../src/lib/subscription';
 import { Screen } from '../src/components/Screen';
 import { useTheme } from '../src/theme';
 
@@ -57,6 +58,7 @@ export default function Entry() {
       // permission is only ever actually prompted once by iOS regardless
       // of how many times this runs, and it must never block navigation.
       void registerPush(user.id);
+      initPurchases(user.id);
       router.replace('/(tabs)');
     })().finally(() => !cancelled && setChecking(false));
     return () => {
