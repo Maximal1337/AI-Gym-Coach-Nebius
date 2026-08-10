@@ -39,11 +39,15 @@ export const generateStudioInputSchema = z.object({
   // be generated IN this language. Defaults to 'en' only for callers that
   // predate this field; the client always sends its actual current one.
   language: appLanguageSchema.default("en"),
-  // Set only on a re-generation ("Did I get something wrong?" — see
+  // Both set only on a re-generation ("Did I get something wrong?" — see
   // studio-session's reparse branch for a `generate`-sourced session).
-  // There's no original board to re-send here, so this rides along as an
-  // extra constraint on a fresh generation instead.
+  // previousResult is what the last generation actually produced (the
+  // trainee may have hand-edited it since) — without it a correction is a
+  // blind full re-roll against the same constraints, which can silently
+  // change rows the trainee never flagged instead of just fixing the one
+  // thing they asked for.
   correctionNote: z.string().max(500).nullable().default(null),
+  previousResult: parsedStudioWorkoutSchema.nullish(),
 });
 export type GenerateStudioInput = z.infer<typeof generateStudioInputSchema>;
 
@@ -118,10 +122,21 @@ function buildHumanPrompt(input: GenerateStudioInput): string {
     `Target language for every name and text field: ${LANGUAGE_NAMES[input.language]}.`,
   ];
   if (input.correctionNote?.trim()) {
-    lines.push(
-      "",
-      `A trainee already reviewed a previous workout generated for these exact same constraints and said this about what they'd like changed: "${input.correctionNote.trim()}". Design a new workout that takes that feedback into account.`,
-    );
+    if (input.previousResult) {
+      lines.push(
+        "",
+        `This is a correction pass, not a fresh design. Here is exactly what was generated for these same constraints last time (the trainee may have hand-edited some rows in the app since) — JSON: ${
+          JSON.stringify(input.previousResult)
+        }`,
+        `The trainee reviewed that result and said: "${input.correctionNote.trim()}"`,
+        `Apply ONLY that change. Return the full workout with every other block, exercise, value, unit, and format exactly as shown in the JSON above — do not re-roll or "improve" anything the note doesn't mention.`,
+      );
+    } else {
+      lines.push(
+        "",
+        `A trainee already reviewed a previous workout generated for these exact same constraints and said this about what they'd like changed: "${input.correctionNote.trim()}". Design a new workout that takes that feedback into account.`,
+      );
+    }
   }
   return lines.join("\n");
 }

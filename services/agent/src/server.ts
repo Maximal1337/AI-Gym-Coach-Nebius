@@ -27,7 +27,7 @@ import {
   parsePlanInputSchema,
 } from "./schema.js";
 import { parsePlanText, parseSummaryText } from "./parse.js";
-import { parseStudioWorkout } from "./parseStudio.js";
+import { parsedStudioWorkoutSchema, parseStudioWorkout } from "./parseStudio.js";
 import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
 import { generateStudioInputSchema, generateStudioWorkout } from "./generateStudio.js";
 
@@ -248,7 +248,13 @@ const server = createServer(async (req, res) => {
       const correctionNote = typeof rawJson.correctionNote === "string" && rawJson.correctionNote.length <= 500
         ? rawJson.correctionNote
         : undefined;
-      const result = await parseStudioWorkout(parsed.data, correctionNote);
+      // The previous read's own JSON, sent alongside a correction so the
+      // model fixes rather than blindly re-derives — see parseStudio.ts's
+      // withCorrection doc comment. Same reasoning as correctionNote for
+      // why this isn't part of parsePlanInputSchema.
+      const previousResultParsed = parsedStudioWorkoutSchema.nullish().safeParse(rawJson.previousResult);
+      const previousResult = previousResultParsed.success ? previousResultParsed.data : undefined;
+      const result = await parseStudioWorkout(parsed.data, correctionNote, previousResult);
       if (!result) {
         json(503, { error: "llm_not_configured" });
         return;

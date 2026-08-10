@@ -203,21 +203,35 @@ const STUDIO_PARSE_SYSTEM_PROMPT =
 /** Appended as extra instruction when this is a re-parse ("Did I get
  * something wrong?") rather than a first read — the trainee's own words
  * about what the FIRST read got wrong, sent back alongside the SAME
- * original source so the model re-reads the whole board rather than
- * patching a field. Trusted over the model's own prior read wherever they
- * conflict, since a trainee correcting a structural misread (a ladder taken
- * as one set, a per-side value taken as two tiers) knows their own board. */
-function withCorrection(text: string, correctionNote?: string | null): string {
+ * original source AND that first read's own JSON result — a correction is a
+ * SMALL, targeted fix, not a blind re-parse: without the previous result the
+ * model has to re-derive the entire board from zero, which risks silently
+ * changing rows the trainee never flagged (and may have already hand-edited
+ * in the app) instead of just fixing the one thing they pointed at. */
+function withCorrection(
+  text: string,
+  correctionNote?: string | null,
+  previousResult?: ParsedStudioWorkout | null,
+): string {
   if (!correctionNote || !correctionNote.trim()) return text;
+  if (previousResult) {
+    return `${text}\n\n---\nThis is a correction pass, not a fresh parse. Here is exactly what was extracted from this same board last time (the trainee may have hand-edited some rows in the app since this was read) — JSON: ${
+      JSON.stringify(previousResult)
+    }\n\nThe trainee reviewed that result and said: "${correctionNote.trim()}"\n\nRe-check the board only to resolve what their note describes, then return the FULL workout with ONLY that change applied — every other block, exercise, value, unit, and format must come back exactly as shown in the JSON above. Do not re-derive or "improve" anything the note doesn't mention, even if a fresh read might phrase it slightly differently.`;
+  }
   return `${text}\n\n---\nA trainee already reviewed a previous read of this exact board and said this about what it got wrong: "${correctionNote.trim()}". Re-read the board from scratch with that correction in mind, and trust it over your own first impression wherever the two conflict.`;
 }
 
-async function parseStudioFromText(text: string, correctionNote?: string | null): Promise<string | null> {
+async function parseStudioFromText(
+  text: string,
+  correctionNote?: string | null,
+  previousResult?: ParsedStudioWorkout | null,
+): Promise<string | null> {
   const model = parseModel();
   if (!model) return null;
   const res = await model.invoke([
     ["system", STUDIO_PARSE_SYSTEM_PROMPT],
-    ["human", withCorrection(text, correctionNote)],
+    ["human", withCorrection(text, correctionNote, previousResult)],
   ]);
   return typeof res.content === "string" ? res.content : JSON.stringify(res.content);
 }
@@ -225,7 +239,12 @@ async function parseStudioFromText(text: string, correctionNote?: string | null)
 /** Same raw-fetch approach as parse.ts's parsePlanPdf/parsePlanImages — see
  * that file's comment on why ChatOpenRouter's own file/image content-block
  * conversion is bypassed for these two input shapes. */
-async function parseStudioPdf(pdfBase64: string, filename: string, correctionNote?: string | null): Promise<string | null> {
+async function parseStudioPdf(
+  pdfBase64: string,
+  filename: string,
+  correctionNote?: string | null,
+  previousResult?: ParsedStudioWorkout | null,
+): Promise<string | null> {
   if (!process.env.OPENROUTER_API_KEY) return null;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
@@ -244,7 +263,7 @@ async function parseStudioPdf(pdfBase64: string, filename: string, correctionNot
         {
           role: "user",
           content: [
-            { type: "text", text: withCorrection("Extract the studio workout board from this file.", correctionNote) },
+            { type: "text", text: withCorrection("Extract the studio workout board from this file.", correctionNote, previousResult) },
             { type: "file", file: { filename, file_data: `data:application/pdf;base64,${pdfBase64}` } },
           ],
         },
@@ -258,7 +277,11 @@ async function parseStudioPdf(pdfBase64: string, filename: string, correctionNot
 
 /** One call across all photos, not one per photo, so a board split across
  * two shots (e.g. a wide whiteboard) still lands in one workout. */
-async function parseStudioImages(imagesBase64: string[], correctionNote?: string | null): Promise<string | null> {
+async function parseStudioImages(
+  imagesBase64: string[],
+  correctionNote?: string | null,
+  previousResult?: ParsedStudioWorkout | null,
+): Promise<string | null> {
   if (!process.env.OPENROUTER_API_KEY) return null;
   const instruction = imagesBase64.length > 1
     ? `Extract the studio workout board from these ${imagesBase64.length} photos — they're photos of the same board (e.g. split across a wide whiteboard), so combine them into one coherent workout rather than treating each photo separately.`
@@ -280,7 +303,7 @@ async function parseStudioImages(imagesBase64: string[], correctionNote?: string
         {
           role: "user",
           content: [
-            { type: "text", text: withCorrection(instruction, correctionNote) },
+            { type: "text", text: withCorrection(instruction, correctionNote, previousResult) },
             ...imagesBase64.map((b64) => ({
               type: "image_url",
               image_url: { url: `data:image/jpeg;base64,${b64}` },
@@ -296,26 +319,28 @@ async function parseStudioImages(imagesBase64: string[], correctionNote?: string
 }
 
 /** `correctionNote`, when given, re-parses the SAME source with the
- * trainee's own words about what the last read got wrong appended — used
- * by studio-session's "reparse" action ("Did I get something wrong?"). A
- * plain re-parse (first read) simply omits it. */
+ * trainee's own words about what the last read got wrong appended, anchored
+ * to `previousResult` (that last read's own JSON) so the model corrects
+ * rather than re-derives — used by studio-session's "reparse" action ("Did
+ * I get something wrong?"). A plain re-parse (first read) omits both. */
 export async function parseStudioWorkout(
   source: PlanSource,
   correctionNote?: string | null,
+  previousResult?: ParsedStudioWorkout | null,
 ): Promise<ParsedStudioWorkout | null> {
   if (!process.env.OPENROUTER_API_KEY) return null;
 
   let raw: string | null;
   if ("text" in source) {
-    raw = await parseStudioFromText(source.text, correctionNote);
+    raw = await parseStudioFromText(source.text, correctionNote, previousResult);
   } else if ("pdfBase64" in source) {
-    raw = await parseStudioPdf(source.pdfBase64, source.filename, correctionNote);
+    raw = await parseStudioPdf(source.pdfBase64, source.filename, correctionNote, previousResult);
   } else if ("imagesBase64" in source) {
-    raw = await parseStudioImages(source.imagesBase64, correctionNote);
+    raw = await parseStudioImages(source.imagesBase64, correctionNote, previousResult);
   } else {
     const extracted = await textFromDocx(source.docxBase64);
     if (!extracted.trim()) return null;
-    raw = await parseStudioFromText(extracted, correctionNote);
+    raw = await parseStudioFromText(extracted, correctionNote, previousResult);
   }
   if (!raw) return null;
   return normalizeFormats(normalizeMetrics(parsedStudioWorkoutSchema.parse(extractJson(raw))));

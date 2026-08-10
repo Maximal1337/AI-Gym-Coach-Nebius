@@ -844,7 +844,11 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
             app's mistake ("did I get something wrong"), not the trainee's
             task, so reporting a bad parse feels like helping rather than
             doing the app's job. */}
-        <Button variant="secondary" size="md" block onPress={() => setReparseOpen(true)} style={{ marginTop: spacing.md }}>
+        <Button
+          variant="secondary" size="md" block onPress={() => setReparseOpen(true)}
+          icon={<Ionicons name="sparkles-outline" size={16} color={theme.accent} />}
+          style={{ marginTop: spacing.md }}
+        >
           {t('reparseCta')}
         </Button>
       </ScrollView>

@@ -344,51 +344,34 @@ async function insertBlocksAndExercises(
   return null;
 }
 
-function metricShape(m: TreeMetric): string {
-  return `${m.unit}|${m.perSide}|${m.ladder ? `ladder${m.ladder.length}` : m.tiers ? `tiers${m.tiers.length}` : "plain"}`;
-}
-function exerciseShape(e: TreeExercise): string {
-  return e.metrics.map(metricShape).join(",");
-}
-
-/** "Did I get something wrong?" re-parse: matches exercises across the
- * current (possibly hand-edited) tree and a fresh re-parse by name. Where
- * an old exercise's shape (unit/perSide/ladder-or-tiers) still matches the
- * new parse's, the OLD one wins — preserving any value the trainee already
- * typed. Where the shape changed, the NEW one wins — that's the correction
- * actually doing its job (a ladder that was mis-read as one set, say).
- * Old exercises with no name match anywhere in the new tree are reported
- * as removed rather than silently dropped, so the client can warn before
- * this gets persisted via the normal "update" action. */
+/** "Did I get something wrong?" re-parse: the model is anchored to the
+ * current (possibly hand-edited) tree via `previousResult` and explicitly
+ * told to return it unchanged except for what the trainee's correction
+ * describes (see parseStudio.ts's withCorrection) — so `newTree` is trusted
+ * directly, including whatever value it corrected. Shape-matching the old
+ * and new exercise to decide a winner would undo the correction itself
+ * whenever it's a plain value fix ("Pistol Squat is 7/7", say) — unit,
+ * perSide, and ladder/tiers-length all stay identical either side of that
+ * kind of fix, so a shape comparison can't tell "corrected" from
+ * "untouched" and would silently keep the old, wrong value. The only thing
+ * still checked here is which old exercises disappeared entirely (by name)
+ * from the new tree, so the client can warn before this gets persisted via
+ * the normal "update" action. */
 function mergePreservingEdits(oldTree: Tree, newTree: Tree): { merged: Tree; removed: string[] } {
-  const oldByName = new Map<string, TreeExercise>();
-  for (const block of oldTree.blocks) {
+  const newNames = new Set<string>();
+  for (const block of newTree.blocks) {
     for (const exercise of block.exercises) {
-      oldByName.set(exercise.name.trim().toLowerCase(), exercise);
+      newNames.add(exercise.name.trim().toLowerCase());
     }
   }
-  const matched = new Set<string>();
-
-  const merged: Tree = {
-    name: newTree.name,
-    scoreType: newTree.scoreType,
-    blocks: newTree.blocks.map((block) => ({
-      ...block,
-      exercises: block.exercises.map((exercise) => {
-        const key = exercise.name.trim().toLowerCase();
-        const old = oldByName.get(key);
-        if (!old) return exercise;
-        matched.add(key);
-        return exerciseShape(old) === exerciseShape(exercise) ? old : exercise;
-      }),
-    })),
-  };
-
   const removed: string[] = [];
-  for (const [key, exercise] of oldByName) {
-    if (!matched.has(key)) removed.push(exercise.name);
+  for (const block of oldTree.blocks) {
+    for (const exercise of block.exercises) {
+      const key = exercise.name.trim().toLowerCase();
+      if (!newNames.has(key)) removed.push(exercise.name);
+    }
   }
-  return { merged, removed };
+  return { merged: newTree, removed };
 }
 
 async function insertTree(
@@ -791,9 +774,17 @@ Deno.serve(withSentry(async (req) => {
     if (!oldTree) return json(404, { error: "session_not_found" });
 
     const payload = owned.source_payload as Record<string, unknown>;
+    // Anchors the correction to what was actually extracted/generated last
+    // time (including any hand edits made in the app since) — otherwise the
+    // model has to blindly re-derive the whole workout for what's meant to
+    // be a small, targeted fix. See parseStudio.ts's withCorrection.
     let newTree: Tree;
     if (payload.generate && typeof payload.generate === "object") {
-      const intake = { ...(payload.generate as Record<string, unknown>), correctionNote: correctionText };
+      const intake = {
+        ...(payload.generate as Record<string, unknown>),
+        correctionNote: correctionText,
+        previousResult: oldTree,
+      };
       const gen = await runStudioGeneration(db, user.id, intake);
       if ("error" in gen) return json(gen.status, { error: gen.error });
       newTree = gen.tree;
@@ -801,7 +792,10 @@ Deno.serve(withSentry(async (req) => {
       const access = await subscriptionAccess(db, user.id);
       if (!access.ok) return json(402, { error: "subscription_required" });
 
-      const res = await callAgent({ ...payload, correctionNote: correctionText }, "/parse-studio");
+      const res = await callAgent(
+        { ...payload, correctionNote: correctionText, previousResult: oldTree },
+        "/parse-studio",
+      );
       if (!res.ok) {
         return json(res.status === 422 ? 422 : 503, {
           error: res.status === 422 ? "unparseable" : "parser_unavailable",
