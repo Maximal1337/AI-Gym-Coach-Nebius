@@ -324,16 +324,49 @@ instant Apple approves it, possibly at 3am your time.
 
 ## Not on this PDF, but still blocks submission
 
-- **App Privacy questionnaire** — separate ASC page. Based on the code:
-  email, workout data (sets/reps/weight), coach persona/plan text,
-  photos (confirmed: `studio-photo.tsx` sends photos as base64 to your
-  backend for AI parsing — declare as collected even though not
-  persisted), user ID, and crash data (`@sentry/react-native`, check
-  your Sentry project's PII/replay settings before declaring exactly
-  what it captures).
-- **Age Rating questionnaire** — separate ASC page. Based on what the
-  app actually does, answers are almost all "None" (no violence,
-  gambling, mature content; no medical/treatment advice, just fitness
-  coaching) → should land at **4+**.
-- **Privacy Policy URL** (App Privacy page, not Support/Marketing URL):
-  `https://web-dorhaimbob-webs-projects.vercel.app/privacy` (verified live)
+### App Privacy questionnaire (separate ASC page — App Information → App Privacy)
+
+GYM-41. Go through "Get Started" → for each data type below, answer
+whether it's collected, and if so whether it's linked to identity and
+what it's used for. **"Used for tracking" is No for every single one** —
+this app has no cross-app/cross-site ad tracking (no ad SDK, no IDFA
+usage anywhere in the code).
+
+| Data type | Collected? | Linked to identity? | Purpose |
+|---|---|---|---|
+| Email Address | Yes | Yes | App Functionality |
+| User ID | Yes | Yes | App Functionality |
+| Fitness | Yes (sets/reps/weight/plans — the whole product) | Yes | App Functionality |
+| Physical Address, Name, Phone | No | — | — |
+| Health | **No** — declare weight/height/age under Fitness instead, not Health; nothing in the app is medical diagnosis/treatment | — | — |
+| Photos or Videos | Yes — photographed plans/whiteboards sent to the backend for AI parsing (`studio-photo.tsx`, `plan-photo.tsx`) — declare even though not persisted long-term, "collected" per Apple's definition means processed at all | Yes | App Functionality |
+| Other User Content | Yes — pasted plan text, coach persona/tone, notes | Yes | App Functionality |
+| Purchase History | Yes (RevenueCat/subscription status, once live) | Yes | App Functionality |
+| Crash Data | Yes (Sentry) | **No** — `sendDefaultPii: false` is explicitly set in both `app/_layout.tsx` and the edge functions' Sentry init, and no `Sentry.setUser()` call exists anywhere in the code | App Functionality (Diagnostics) |
+| Performance Data | **No** — `tracesSampleRate: 0` everywhere, performance tracing is off | — | — |
+| Product Interaction | Yes (PostHog — `workout_started` etc., see `analytics.ts`) | **No** — no autocapture, no session replay, no `identify()` call anywhere; PostHog gets an anonymous device ID only | Analytics |
+| Precise/Coarse Location | No | — | — |
+| Contacts | No | — | — |
+| Browsing/Search History | No | — | — |
+| Payment Info / Credit Info | No — handled entirely by Apple's StoreKit/App Store; the app and its servers never see card details | — | — |
+| Sensitive Info (race, religion, orientation, etc.) | No | — | — |
+
+Injury/limitation notes (onboarding "anything you should avoid") are
+fitness-context data about the user's own training, not medical
+diagnosis — covered under **Fitness**, not a separate Sensitive Info
+declaration.
+
+### Age Rating questionnaire (separate ASC page)
+
+Based on what the app actually does, answers are almost all "None" (no
+violence, gambling, mature/suggestive content; no unrestricted web
+access; no user-generated content shared publicly between users — plan
+text stays private to the account). No medical/treatment advice, just
+fitness coaching → should land at **4+**.
+
+### Privacy Policy URL (App Privacy page, not Support/Marketing URL)
+
+```
+https://web-dorhaimbob-webs-projects.vercel.app/privacy
+```
+Verified live.
