@@ -7,7 +7,8 @@ import { ApiError, callFn } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { fetchAccessStatus } from '../lib/subscription';
 import { DismissKeyboardView } from './DismissKeyboardView';
-import { PlanPreview, type ParsedPlan } from './PlanPreview';
+import { PlanPreview, StartingWeightsCelebration, type ParsedPlan } from './PlanPreview';
+import type { StartingWeightsPlan } from './StartingWeightsStep';
 import { SketchLoader } from './SketchLoader';
 import { Field } from './Field';
 import { useLanguage } from '../lib/language';
@@ -72,11 +73,12 @@ export function GeneratePlanFlow({
   const [injuryNotes, setInjuryNotes] = useState('');
 
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
-  // See DismissKeyboardView's `active` prop doc — the starting-weights
-  // step's ScrollView doesn't reliably scroll nested under this screen's
-  // TouchableWithoutFeedback, so that wrapper drops out once PlanPreview
-  // signals it's showing that step.
-  const [startingWeightsActive, setStartingWeightsActive] = useState(false);
+  // Rendered as a sibling to the preview step's own DismissKeyboardView,
+  // not inside it — see StartingWeightsCelebration's doc comment
+  // (PlanPreview.tsx) for why owning this here (rather than letting
+  // DismissKeyboardView's `active` prop toggle around an
+  // internally-rendered step) is required.
+  const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
   const [linterChecks, setLinterChecks] = useState<LinterCheck[]>([]);
   const [errorMessage, setErrorMessage] = useState('');
   const [blocked, setBlocked] = useState(false);
@@ -424,9 +426,16 @@ export function GeneratePlanFlow({
 
   // step === 'preview'
   if (!preview) return null;
+  if (startingWeightsPlans) {
+    return (
+      <View style={{ flex: 1, padding: spacing.lg }}>
+        <StartingWeightsCelebration plans={startingWeightsPlans} onDone={onDone} />
+      </View>
+    );
+  }
   const uncovered = linterChecks.filter((c) => !c.covered);
   return (
-    <DismissKeyboardView style={{ padding: spacing.lg }} active={!startingWeightsActive}>
+    <DismissKeyboardView style={{ padding: spacing.lg }}>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left', marginBottom: 4 }}>
         {t('generatedTitle')}
       </Text>
@@ -439,7 +448,7 @@ export function GeneratePlanFlow({
         mode={mode === 'onboarding' ? 'onboarding' : 'add'}
         onDone={onDone}
         showTryAgain={false}
-        onEnterStartingWeights={() => setStartingWeightsActive(true)}
+        onEnterStartingWeights={setStartingWeightsPlans}
         extraNote={
           <View style={{ marginBottom: spacing.sm }}>
             {uncovered.map((c) => (

@@ -152,6 +152,42 @@ function EditExerciseSheet({
  * change, not a UI one). Shipping without it now; the layout degrades
  * cleanly, per the design's own guidance.
  */
+
+/**
+ * The starting-weights step plus its completion celebration — pulled out
+ * so a caller that wraps PlanPreview in DismissKeyboardView (see its
+ * `active` prop doc) can render this as a sibling OUTSIDE that wrapper
+ * once committed, instead of letting PlanPreview render it internally.
+ * The latter doesn't work: flipping DismissKeyboardView's `active` prop
+ * changes its returned root element type (KeyboardAvoidingView vs plain
+ * View), which forces React to discard and remount everything below it —
+ * including PlanPreview itself — in the very same commit that just set
+ * the state driving this step, silently reverting to the preview screen
+ * and requiring a second "Save" tap (which then double-commits the plan
+ * via plan-import). Owning this state one level up, outside the
+ * remounted subtree, avoids the whole problem.
+ */
+export function StartingWeightsCelebration({
+  plans, onDone,
+}: {
+  plans: StartingWeightsPlan[];
+  onDone: () => void;
+}) {
+  const [showConfetti, setShowConfetti] = useState(false);
+  return (
+    <>
+      <StartingWeightsStep
+        plans={plans}
+        onDone={() => {
+          setShowConfetti(true);
+          setTimeout(onDone, 1500);
+        }}
+      />
+      <ConfettiBurst active={showConfetti} />
+    </>
+  );
+}
+
 export function PlanPreview({
   preview, setPreview, mode, editPlanId, onDone, showTryAgain = true, onTryAgain, tryAgainLabel, extraNote,
   onEnterStartingWeights,
@@ -168,8 +204,13 @@ export function PlanPreview({
   tryAgainLabel?: string;
   /** Rendered directly above the approve button (e.g. the AI-generated disclaimer, linter warnings). */
   extraNote?: ReactNode;
-  /** Fires once, right when the starting-weights step is about to show — lets a caller that wraps this component in DismissKeyboardView switch it to `active={false}` for that step (see DismissKeyboardView's own doc comment for why). */
-  onEnterStartingWeights?: () => void;
+  /**
+   * Called with the committed plans instead of PlanPreview rendering the
+   * starting-weights step itself — see StartingWeightsCelebration's doc
+   * comment for why a caller wrapping this in DismissKeyboardView must
+   * take over rendering it outside that wrapper.
+   */
+  onEnterStartingWeights?: (plans: StartingWeightsPlan[]) => void;
 }) {
   const theme = useTheme();
   const { t } = useTranslation();
@@ -177,17 +218,6 @@ export function PlanPreview({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<{ planIdx: number; exIdx: number } | null>(null);
   const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
-  const [showConfetti, setShowConfetti] = useState(false);
-
-  // Every "add a plan" route (generate/paste/upload/photo/manual) converges
-  // here, so this is the one place a celebration can cover all of them at
-  // once instead of being duplicated per-route (GeneratePlanFlow used to
-  // have its own copy of this). Editing an existing plan isn't "finishing
-  // adding" anything, so it skips this the same way it skips starting-weights.
-  function celebrateAndFinish() {
-    setShowConfetti(true);
-    setTimeout(onDone, 1500);
-  }
 
   function updatePlanName(planIdx: number, name: string) {
     setPreview((prev) => prev && prev.map((p, i) => (i === planIdx ? { ...p, name } : p)));
@@ -238,9 +268,10 @@ export function PlanPreview({
       // starting-weights step (guidelines/starting-weights.html).
       if (mode === 'edit') {
         onDone();
+      } else if (onEnterStartingWeights) {
+        onEnterStartingWeights(res.plans);
       } else {
         setStartingWeightsPlans(res.plans);
-        onEnterStartingWeights?.();
       }
     } catch {
       Alert.alert(t('coachUnavailable'));
@@ -250,12 +281,7 @@ export function PlanPreview({
   }
 
   if (startingWeightsPlans) {
-    return (
-      <>
-        <StartingWeightsStep plans={startingWeightsPlans} onDone={celebrateAndFinish} />
-        <ConfettiBurst active={showConfetti} />
-      </>
-    );
+    return <StartingWeightsCelebration plans={startingWeightsPlans} onDone={onDone} />;
   }
 
   const editingExercise = editing ? preview[editing.planIdx]?.exercises[editing.exIdx] ?? null : null;

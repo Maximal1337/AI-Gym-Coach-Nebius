@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Keyboard, Pressable, Text, TextInput } from 'react-native';
+import { ActivityIndicator, Alert, Keyboard, Pressable, Text, TextInput, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { router } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
@@ -7,7 +7,8 @@ import { File } from 'expo-file-system';
 import { callFn, ApiError } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { DismissKeyboardView } from './DismissKeyboardView';
-import { PlanPreview, type ParsedPlan } from './PlanPreview';
+import { PlanPreview, StartingWeightsCelebration, type ParsedPlan } from './PlanPreview';
+import type { StartingWeightsPlan } from './StartingWeightsStep';
 import { SketchLoader } from './SketchLoader';
 import { LoadingOverlay } from './LoadingOverlay';
 import { useLanguage } from '../lib/language';
@@ -92,11 +93,11 @@ export function PlanPasteFlow({
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [preview, setPreview] = useState<ParsedPlan[] | null>(null);
-  // See DismissKeyboardView's `active` prop doc — the starting-weights
-  // step's ScrollView doesn't reliably scroll nested under this screen's
-  // TouchableWithoutFeedback, so that wrapper drops out once PlanPreview
-  // signals it's showing that step.
-  const [startingWeightsActive, setStartingWeightsActive] = useState(false);
+  // Rendered as a sibling to this screen's own DismissKeyboardView, not
+  // inside it — see StartingWeightsCelebration's doc comment (PlanPreview.tsx)
+  // for why owning this here (rather than letting DismissKeyboardView's
+  // `active` prop toggle around an internally-rendered step) is required.
+  const [startingWeightsPlans, setStartingWeightsPlans] = useState<StartingWeightsPlan[] | null>(null);
   const [loadingExisting, setLoadingExisting] = useState(mode === 'edit');
   // Shows the "Choose a file" launcher screen instead of the paste
   // textbox for initialMode === 'upload'.
@@ -225,8 +226,16 @@ export function PlanPasteFlow({
 
   const stepLabel = mode === 'onboarding' ? t('planStep') : mode === 'edit' ? t('editPlanStep') : t('addPlanStep');
 
+  if (startingWeightsPlans) {
+    return (
+      <View style={{ flex: 1, padding: spacing.lg }}>
+        <StartingWeightsCelebration plans={startingWeightsPlans} onDone={onDone} />
+      </View>
+    );
+  }
+
   return (
-    <DismissKeyboardView style={{ padding: spacing.lg }} active={!startingWeightsActive}>
+    <DismissKeyboardView style={{ padding: spacing.lg }}>
       <LoadingOverlay visible={busy && !picking} object="plate" label={t('parsing')} />
       {onCancel && !preview && (
         <Pressable onPress={onCancel} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
@@ -317,7 +326,7 @@ export function PlanPasteFlow({
           editPlanId={editPlanId}
           onDone={onDone}
           onTryAgain={handleTryAgain}
-          onEnterStartingWeights={() => setStartingWeightsActive(true)}
+          onEnterStartingWeights={setStartingWeightsPlans}
         />
       )}
     </DismissKeyboardView>
