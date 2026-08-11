@@ -131,10 +131,17 @@ How it works
 • Eight languages, including genuine right-to-left layouts for Hebrew and Arabic — the whole interface mirrors, not just the text
 
 Never train alone again.
+
+Terms of Use (EULA): https://web-dorhaimbob-webs-projects.vercel.app/terms
+Privacy Policy: https://web-dorhaimbob-webs-projects.vercel.app/privacy
 ```
 No pricing, no "AI-powered" lead, no trainer/medical substitute claim,
 sentence case throughout. Closing line reuses your own screenshot
 caption for consistency across the listing.
+
+⚠️ The Terms/Privacy lines were added after Apple rejected build 31's
+submission for missing a functional Terms of Use link in metadata
+(subscriptions require one). Keep them in the Description going forward.
 
 ⚠️ "Eight languages" assumes `pt`/`fr`/`it` land before submission —
 only `en`/`he`/`ar`/`de`/`es` exist in `apps/mobile/src/locales/` right
