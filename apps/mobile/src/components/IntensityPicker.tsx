@@ -1,6 +1,7 @@
 import { Pressable, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, spacing, radius } from '../theme';
+import { track } from '../lib/analytics';
 
 export const INTENSITY_LEVELS = [
   { v: 1, glyph: '\u{1F60C}', key: 'intensity1' },
@@ -34,7 +35,7 @@ export function IntensityPicker({
         return (
           <Pressable
             key={l.v}
-            onPress={() => onChange(l.v)}
+            onPress={() => { track('intensity_selected', { value: l.v }); onChange(l.v); }}
             accessibilityRole="button"
             accessibilityLabel={t(l.key)}
             accessibilityState={{ selected: on }}

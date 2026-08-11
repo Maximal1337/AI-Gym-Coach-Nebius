@@ -7,6 +7,7 @@ import { supabase } from '../src/lib/supabase';
 import { Screen } from '../src/components/Screen';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { useLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { TERMS_URL } from '../src/lib/webUrl';
 import { useTheme, spacing, radius } from '../src/theme';
 
@@ -42,7 +43,7 @@ export default function Consent() {
     <View style={{ flex: 1, padding: spacing.lg }}>
       {/* No screen before this one to go back to (this is a mandatory,
           replace()-only gate) — the one honest way out is signing out. */}
-      <Pressable onPress={signOut} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start', marginBottom: spacing.sm }}>
+      <Pressable onPress={() => { track('consent_signout_tapped'); signOut(); }} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start', marginBottom: spacing.sm }}>
         <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('signOut')}</Text>
       </Pressable>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
@@ -55,11 +56,11 @@ export default function Consent() {
           </Text>
         ))}
       </ScrollView>
-      <Pressable onPress={() => Linking.openURL(TERMS_URL)} style={{ marginTop: spacing.sm, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+      <Pressable onPress={() => { track('consent_read_terms_tapped'); Linking.openURL(TERMS_URL); }} style={{ marginTop: spacing.sm, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
         <Text style={{ color: theme.accent, fontSize: 12.5, fontWeight: '700' }}>{t('readFullTerms')}</Text>
       </Pressable>
       <Pressable
-        onPress={() => setChecked(!checked)}
+        onPress={() => { track('consent_checkbox_toggled', { checked: !checked }); setChecked(!checked); }}
         style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: spacing.sm, marginVertical: spacing.md, alignItems: 'flex-start' }}
       >
         <View style={{
@@ -74,7 +75,7 @@ export default function Consent() {
       </Pressable>
       <Pressable
         disabled={!checked || busy}
-        onPress={accept}
+        onPress={() => { track('consent_accept_tapped'); accept(); }}
         style={{
           backgroundColor: checked ? theme.accent : theme.rule,
           padding: 14, borderRadius: radius.pill, alignItems: 'center',

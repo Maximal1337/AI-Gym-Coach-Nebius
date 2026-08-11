@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { callFn } from '../lib/api';
 import { useLanguage } from '../lib/language';
 import { useUnits, parseWeightToKg, weightUnitLabel } from '../lib/units';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
 import { Badge } from './Badge';
@@ -129,6 +130,7 @@ export function StartingWeightsStep({
   }
 
   async function submit() {
+    track('starting_weights_continue_tapped', { filledCount });
     const entries = exercises
       .map((e) => {
         const row = rows[e.id];
@@ -206,7 +208,7 @@ export function StartingWeightsStep({
         <Button block disabled={busy} onPress={submit}>
           {t('startingContinue')}
         </Button>
-        <Button variant="quiet" block disabled={busy} onPress={onDone}>
+        <Button variant="quiet" block disabled={busy} onPress={() => { track('starting_weights_skip_tapped'); onDone(); }}>
           {t('startingSkip')}
         </Button>
       </View>

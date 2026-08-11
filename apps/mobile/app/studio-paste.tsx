@@ -10,6 +10,7 @@ import { DismissKeyboardView } from '../src/components/DismissKeyboardView';
 import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { Screen } from '../src/components/Screen';
 import { useLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius } from '../src/theme';
 
 const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
@@ -104,7 +105,7 @@ export default function StudioPasteScreen() {
     <Screen>
     <DismissKeyboardView style={{ padding: spacing.lg }}>
       <LoadingOverlay visible={busy && !picking} object="plate" label={t('parsing')} />
-      <Pressable onPress={() => router.back()} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+      <Pressable onPress={() => { track('studio_paste_cancel_tapped'); router.back(); }} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
         <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
       </Pressable>
       <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', marginBottom: spacing.sm, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
@@ -119,7 +120,7 @@ export default function StudioPasteScreen() {
             {t('uploadChooseSub')}
           </Text>
           <Pressable
-            onPress={() => void pickAndParseFile()}
+            onPress={() => { track('studio_paste_upload_choose_tapped'); void pickAndParseFile(); }}
             style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
           >
             <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('uploadChooseCta')}</Text>
@@ -141,7 +142,7 @@ export default function StudioPasteScreen() {
           />
           <Pressable
             disabled={busy || text.length < 10}
-            onPress={() => { Keyboard.dismiss(); void openWith({ text }); }}
+            onPress={() => { track('studio_paste_parse_tapped'); Keyboard.dismiss(); void openWith({ text }); }}
             style={{
               backgroundColor: text.length >= 10 ? theme.accent : theme.rule,
               padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md,

@@ -15,6 +15,7 @@ import { Field } from '../src/components/Field';
 import { CodeInput } from '../src/components/CodeInput';
 import { Button } from '../src/components/Button';
 import { useLanguage, resetLanguageChoice } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius } from '../src/theme';
 
 const RESEND_COOLDOWN_SEC = 30;
@@ -228,7 +229,7 @@ export default function SignIn() {
 
           {appleAvailable && (
             <Pressable
-              onPress={signInApple}
+              onPress={() => { track('signin_apple_tapped'); signInApple(); }}
               style={{ backgroundColor: theme.ink, padding: 14, borderRadius: radius.pill, alignItems: 'center' }}
             >
               <Text style={{ color: theme.bg, fontWeight: '700' }}>{t('signInWithApple')}</Text>
@@ -251,7 +252,7 @@ export default function SignIn() {
             onSubmitEditing={sendCode}
             style={{ marginBottom: spacing.md }}
           />
-          <Button block disabled={busy} onPress={sendCode}>{t('continue')}</Button>
+          <Button block disabled={busy} onPress={() => { track('signin_email_continue_tapped'); sendCode(); }}>{t('continue')}</Button>
 
           {__DEV__ && DEV_TEST_ACCOUNTS.map(({ email: testEmail, label }) => (
             <Button
@@ -290,12 +291,12 @@ export default function SignIn() {
 
           <Button
             variant="ghost" block disabled={busy || cooldown > 0}
-            onPress={sendCode}
+            onPress={() => { track('signin_resend_code_tapped'); sendCode(); }}
             style={{ marginTop: spacing.sm }}
           >
             {cooldown > 0 ? t('resendCodeIn', { seconds: cooldown }) : t('resendCode')}
           </Button>
-          <Button variant="quiet" block disabled={busy} onPress={useDifferentEmail}>
+          <Button variant="quiet" block disabled={busy} onPress={() => { track('signin_use_different_email_tapped'); useDifferentEmail(); }}>
             {t('useDifferentEmail')}
           </Button>
         </>
@@ -312,7 +313,7 @@ export default function SignIn() {
       padding: spacing.md,
     }}>
       {step === 'code' ? (
-        <Pressable onPress={useDifferentEmail} hitSlop={10}>
+        <Pressable onPress={() => { track('signin_use_different_email_tapped'); useDifferentEmail(); }} hitSlop={10}>
           <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={24} color={theme.inkSoft} />
         </Pressable>
       ) : <View />}

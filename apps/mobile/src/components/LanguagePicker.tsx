@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
 import { useLanguagePicker } from '../lib/useLanguagePicker';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 /**
@@ -20,7 +21,7 @@ export function LanguagePicker({ size = 20 }: { size?: number }) {
 
   return (
     <Pressable
-      onPress={open}
+      onPress={() => { track('language_picker_tapped'); open(); }}
       hitSlop={12}
       style={{
         flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: 8,

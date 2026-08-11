@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ManualPlanForm } from '../src/components/ManualPlanForm';
 import { Screen } from '../src/components/Screen';
 import { useLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing } from '../src/theme';
 
 export default function PlanBuild() {
@@ -17,7 +18,7 @@ export default function PlanBuild() {
           no native back button, only the swipe/hardware gesture, which
           isn't a visible affordance. Every screen needs an obvious one. */}
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+        <Pressable onPress={() => { track('plan_build_back_tapped'); router.back(); }} hitSlop={12} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
           <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={24} color={theme.inkSoft} />
         </Pressable>
       </View>

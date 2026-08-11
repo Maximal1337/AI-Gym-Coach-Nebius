@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
 import { ApiError, callFn } from '../lib/api';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
 import { Screen } from './Screen';
@@ -94,6 +95,7 @@ export function PhotographPlanFlow({
 
   async function shoot() {
     if (!cameraRef.current || capturing) return;
+    track('photo_shutter_tapped');
     setCapturing(true);
     try {
       const picture = await cameraRef.current.takePictureAsync({ quality: 0.5 });
@@ -113,6 +115,7 @@ export function PhotographPlanFlow({
   }
 
   async function pickFromGallery() {
+    track('photo_gallery_tapped');
     const isRetake = retakeIndex !== null;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
@@ -138,11 +141,13 @@ export function PhotographPlanFlow({
   }
 
   function retake(index: number) {
+    track('photo_retake_tapped');
     setRetakeIndex(index);
     setStep('camera');
   }
 
   async function parse() {
+    track('photo_parse_tapped');
     setStep('parsing');
     setBusy(true);
     try {
@@ -220,7 +225,7 @@ export function PhotographPlanFlow({
           flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
           paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm,
         }}>
-          <Pressable onPress={() => setStep('camera')} hitSlop={10}>
+          <Pressable onPress={() => { track('photo_review_back_tapped'); setStep('camera'); }} hitSlop={10}>
             <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={22} color={theme.inkSoft} />
           </Pressable>
           <View style={{ flex: 1 }}>
@@ -266,7 +271,7 @@ export function PhotographPlanFlow({
             ))}
             {shots.length < MAX_PAGES && (
               <Pressable
-                onPress={() => { setRetakeIndex(null); setStep('camera'); }}
+                onPress={() => { track('photo_add_page_tapped'); setRetakeIndex(null); setStep('camera'); }}
                 style={{
                   width: 100, height: 134, borderRadius: radius.field, borderWidth: 1, borderStyle: 'dashed',
                   borderColor: theme.rule, alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -290,7 +295,7 @@ export function PhotographPlanFlow({
 
         <View style={{ padding: spacing.lg, gap: spacing.sm }}>
           <Button block disabled={shots.length === 0} onPress={parse}>{t('parsePlan')}</Button>
-          <Button variant="quiet" block onPress={() => setStep('type-instead')}>{t('typeItInstead')}</Button>
+          <Button variant="quiet" block onPress={() => { track('photo_type_instead_tapped'); setStep('type-instead'); }}>{t('typeItInstead')}</Button>
         </View>
       </View>
 
@@ -349,8 +354,8 @@ export function PhotographPlanFlow({
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
           <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{t('cameraPermissionDenied')}</Text>
-          <Button onPress={() => Linking.openSettings()}>{t('openSettings')}</Button>
-          <Pressable onPress={onCancel}><Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text></Pressable>
+          <Button onPress={() => { track('photo_open_settings_tapped'); Linking.openSettings(); }}>{t('openSettings')}</Button>
+          <Pressable onPress={() => { track('photo_permission_cancel_tapped'); onCancel(); }}><Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text></Pressable>
         </View>
       </Screen>
     );
@@ -383,7 +388,7 @@ export function PhotographPlanFlow({
           flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
           paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.md,
         }}>
-          <Pressable onPress={onCancel} hitSlop={10}>
+          <Pressable onPress={() => { track('photo_camera_cancel_tapped'); onCancel(); }} hitSlop={10}>
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>
           <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', flex: 1, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
@@ -455,7 +460,7 @@ export function PhotographPlanFlow({
           </Pressable>
 
           {shots.length > 0 && retakeIndex === null ? (
-            <Button size="md" onPress={() => setStep('review')} style={{ alignSelf: 'center' }}>{t('cameraDone')}</Button>
+            <Button size="md" onPress={() => { track('photo_camera_done_tapped'); setStep('review'); }} style={{ alignSelf: 'center' }}>{t('cameraDone')}</Button>
           ) : (
             <View style={{ width: 52 }} />
           )}

@@ -12,6 +12,7 @@ import { useLanguagePicker } from '../src/lib/useLanguagePicker';
 import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../src/lib/units';
 import { TERMS_URL, PRIVACY_URL } from '../src/lib/webUrl';
 import { fetchAccessStatus, type AccessStatus } from '../src/lib/subscription';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../src/theme';
 
 const SUBSCRIPTION_UI_ENABLED = true;
@@ -49,6 +50,7 @@ export default function Settings() {
   );
 
   async function signOut() {
+    track('settings_signout_tapped');
     setSigningOut(true);
     try {
       await supabase.auth.signOut();
@@ -59,12 +61,14 @@ export default function Settings() {
   }
 
   function confirmDelete() {
+    track('settings_delete_account_tapped');
     Alert.alert(t('deleteConfirmTitle'), t('deleteConfirmBody'), [
       { text: t('cancel'), style: 'cancel' },
       {
         text: t('delete'),
         style: 'destructive',
         onPress: async () => {
+          track('settings_delete_account_confirmed');
           setDeleting(true);
           try {
             await callFn('account-delete', {});
@@ -149,7 +153,7 @@ export default function Settings() {
           button, only the swipe/hardware gesture, which isn't a visible
           affordance (same reasoning as plan-build.tsx's back chevron). */}
       <Pressable
-        onPress={() => router.back()}
+        onPress={() => { track('settings_back_tapped'); router.back(); }}
         hitSlop={12}
         style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start', marginBottom: spacing.sm }}
       >
@@ -165,25 +169,25 @@ export default function Settings() {
 
       {sectionTitle(t('myCoach'))}
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-        {row(t('coachName'), coach?.coach_name ?? '—', () => router.push('/edit-persona'))}
-        {row(t('tone'), coach ? t(`tone_${coach.tone_preset}`) : '—', () => router.push('/edit-persona'))}
+        {row(t('coachName'), coach?.coach_name ?? '—', () => { track('settings_edit_persona_tapped', { field: 'coach_name' }); router.push('/edit-persona'); })}
+        {row(t('tone'), coach ? t(`tone_${coach.tone_preset}`) : '—', () => { track('settings_edit_persona_tapped', { field: 'tone' }); router.push('/edit-persona'); })}
       </View>
 
       {fitnessProfile && (
         <>
           {sectionTitle(t('profileSection'))}
           <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-            {row(t('genderLabel'), fitnessProfile.gender ? t(`gender_${fitnessProfile.gender}`) : '—', () => router.push('/edit-fitness-profile'))}
-            {row(t('ageLabel'), fitnessProfile.age != null ? String(fitnessProfile.age) : '—', () => router.push('/edit-fitness-profile'))}
+            {row(t('genderLabel'), fitnessProfile.gender ? t(`gender_${fitnessProfile.gender}`) : '—', () => { track('settings_edit_fitness_profile_tapped', { field: 'gender' }); router.push('/edit-fitness-profile'); })}
+            {row(t('ageLabel'), fitnessProfile.age != null ? String(fitnessProfile.age) : '—', () => { track('settings_edit_fitness_profile_tapped', { field: 'age' }); router.push('/edit-fitness-profile'); })}
             {row(
               t('weightLabel'),
               fitnessProfile.weight_kg != null ? `${formatWeightKg(fitnessProfile.weight_kg, units)} ${weightUnitLabel(units)}` : '—',
-              () => router.push('/edit-fitness-profile'),
+              () => { track('settings_edit_fitness_profile_tapped', { field: 'weight' }); router.push('/edit-fitness-profile'); },
             )}
             {row(
               t('heightLabel'),
               fitnessProfile.height_cm != null ? formatHeightCm(fitnessProfile.height_cm, units) : '—',
-              () => router.push('/edit-fitness-profile'),
+              () => { track('settings_edit_fitness_profile_tapped', { field: 'height' }); router.push('/edit-fitness-profile'); },
             )}
           </View>
         </>
@@ -191,7 +195,7 @@ export default function Settings() {
 
       {sectionTitle(t('account'))}
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-        {SUBSCRIPTION_UI_ENABLED && row(t('subscription'), subscriptionValue(), () => router.push('/subscribe'), false, 'star-outline')}
+        {SUBSCRIPTION_UI_ENABLED && row(t('subscription'), subscriptionValue(), () => { track('settings_subscription_tapped'); router.push('/subscribe'); }, false, 'star-outline')}
       </View>
 
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
@@ -200,13 +204,13 @@ export default function Settings() {
       </View>
 
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, marginBottom: spacing.md, overflow: 'hidden' }}>
-        {row(t('language'), t(`lang_${language}`), openLanguagePicker, false, 'globe-outline')}
+        {row(t('language'), t(`lang_${language}`), () => { track('settings_language_tapped'); openLanguagePicker(); }, false, 'globe-outline')}
       </View>
 
       {sectionTitle(t('legalSection'))}
       <View style={{ backgroundColor: theme.surface, borderRadius: radius.card, overflow: 'hidden' }}>
-        {row(t('termsOfUse'), undefined, () => Linking.openURL(TERMS_URL))}
-        {row(t('privacyPolicy'), undefined, () => Linking.openURL(PRIVACY_URL))}
+        {row(t('termsOfUse'), undefined, () => { track('settings_terms_tapped'); Linking.openURL(TERMS_URL); })}
+        {row(t('privacyPolicy'), undefined, () => { track('settings_privacy_tapped'); Linking.openURL(PRIVACY_URL); })}
       </View>
     </ScrollView>
     </Screen>

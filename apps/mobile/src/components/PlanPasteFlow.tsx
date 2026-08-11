@@ -12,6 +12,7 @@ import type { StartingWeightsPlan } from './StartingWeightsStep';
 import { SketchLoader } from './SketchLoader';
 import { LoadingOverlay } from './LoadingOverlay';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 // Base64 inflates a file by ~33%; the server independently caps the
@@ -238,7 +239,7 @@ export function PlanPasteFlow({
     <DismissKeyboardView style={{ padding: spacing.lg }}>
       <LoadingOverlay visible={busy && !picking} object="plate" label={t('parsing')} />
       {onCancel && !preview && (
-        <Pressable onPress={onCancel} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+        <Pressable onPress={() => { track('plan_paste_cancel_tapped'); onCancel(); }} style={{ marginBottom: spacing.md, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
         </Pressable>
       )}
@@ -277,7 +278,7 @@ export function PlanPasteFlow({
               animation, which silently swallowed the picker presentation
               on a repeat attempt (GYM: "second time doesn't work"). */}
           <Pressable
-            onPress={() => void pickAndParseFile()}
+            onPress={() => { track('plan_paste_upload_choose_tapped'); void pickAndParseFile(); }}
             style={{
               backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md,
             }}
@@ -305,6 +306,7 @@ export function PlanPasteFlow({
           <Pressable
             disabled={busy || text.length < 10}
             onPress={() => {
+              track('plan_paste_parse_tapped');
               Keyboard.dismiss();
               parse();
             }}

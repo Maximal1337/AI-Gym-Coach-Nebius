@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { registerPush } from '../lib/push';
 import { useLanguage } from '../lib/language';
 import { deviceUnits } from '../lib/units';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 const TONES = ['motivational_energetic', 'calm_precise', 'tough_love', 'friendly_casual'] as const;
@@ -62,6 +63,7 @@ export function PersonaForm({
 
   async function save() {
     if (!coachName.trim()) return;
+    track('persona_save_tapped', { mode });
     setBusy(true);
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
@@ -117,7 +119,7 @@ export function PersonaForm({
       <Text style={label('acc')}>{t('accountability')}</Text>
       <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md }}>
         {ACCS.map((v) => (
-          <Chip key={v} label={t(`acc_${v}`)} active={acc === v} onPress={() => setAcc(v)} />
+          <Chip key={v} label={t(`acc_${v}`)} active={acc === v} onPress={() => { track('persona_accountability_selected', { value: v }); setAcc(v); }} />
         ))}
       </View>
 

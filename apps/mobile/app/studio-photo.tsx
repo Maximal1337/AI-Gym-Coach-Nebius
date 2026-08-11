@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ApiError } from '../src/lib/api';
 import { existingOpenSessionId, openStudioSession } from '../src/lib/studioApi';
 import { useLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius } from '../src/theme';
 import { Button } from '../src/components/Button';
 import { Screen } from '../src/components/Screen';
@@ -67,6 +68,7 @@ export default function StudioPhotoScreen() {
 
   async function shoot() {
     if (!cameraRef.current || capturing) return;
+    track('studio_photo_shutter_tapped');
     setCapturing(true);
     try {
       const picture = await cameraRef.current.takePictureAsync({ quality: 0.5 });
@@ -83,6 +85,7 @@ export default function StudioPhotoScreen() {
   }
 
   async function pickFromGallery() {
+    track('studio_photo_gallery_tapped');
     const isRetake = retakeIndex !== null;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'], quality: 0.7,
@@ -104,11 +107,13 @@ export default function StudioPhotoScreen() {
   }
 
   function retake(index: number) {
+    track('studio_photo_retake_tapped');
     setRetakeIndex(index);
     setStep('camera');
   }
 
   async function parse() {
+    track('studio_photo_parse_tapped');
     setStep('parsing');
     try {
       const res = await openStudioSession({ source: { imagesBase64: shots.map((s) => s.base64) } });
@@ -144,7 +149,7 @@ export default function StudioPhotoScreen() {
             flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
             paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm,
           }}>
-            <Pressable onPress={() => setStep('camera')} hitSlop={10}>
+            <Pressable onPress={() => { track('studio_photo_review_back_tapped'); setStep('camera'); }} hitSlop={10}>
               <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={22} color={theme.inkSoft} />
             </Pressable>
             <Text style={{ flex: 1, color: theme.ink, fontSize: 18, fontWeight: '800', textAlign: dir === 'rtl' ? 'right' : 'left' }}>
@@ -173,7 +178,7 @@ export default function StudioPhotoScreen() {
               ))}
               {shots.length < MAX_SHOTS && (
                 <Pressable
-                  onPress={() => { setRetakeIndex(null); setStep('camera'); }}
+                  onPress={() => { track('studio_photo_add_page_tapped'); setRetakeIndex(null); setStep('camera'); }}
                   style={{
                     width: 100, height: 134, borderRadius: radius.field, borderWidth: 1, borderStyle: 'dashed',
                     borderColor: theme.rule, alignItems: 'center', justifyContent: 'center', gap: 6,
@@ -224,8 +229,8 @@ export default function StudioPhotoScreen() {
       <Screen>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
           <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{t('cameraPermissionDenied')}</Text>
-          <Button onPress={() => Linking.openSettings()}>{t('openSettings')}</Button>
-          <Pressable onPress={() => router.back()}><Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text></Pressable>
+          <Button onPress={() => { track('studio_photo_open_settings_tapped'); Linking.openSettings(); }}>{t('openSettings')}</Button>
+          <Pressable onPress={() => { track('studio_photo_permission_cancel_tapped'); router.back(); }}><Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text></Pressable>
         </View>
       </Screen>
     );
@@ -252,7 +257,7 @@ export default function StudioPhotoScreen() {
           flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
           paddingTop: insets.top + spacing.sm, paddingHorizontal: spacing.md,
         }}>
-          <Pressable onPress={() => router.back()} hitSlop={10}>
+          <Pressable onPress={() => { track('studio_photo_camera_cancel_tapped'); router.back(); }} hitSlop={10}>
             <Ionicons name="close" size={26} color="#fff" />
           </Pressable>
           <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700', flex: 1, textAlign: dir === 'rtl' ? 'right' : 'left' }}>
@@ -305,7 +310,7 @@ export default function StudioPhotoScreen() {
           </Pressable>
 
           {shots.length > 0 && retakeIndex === null ? (
-            <Button size="md" onPress={() => setStep('review')} style={{ alignSelf: 'center' }}>{t('cameraDone')}</Button>
+            <Button size="md" onPress={() => { track('studio_photo_camera_done_tapped'); setStep('review'); }} style={{ alignSelf: 'center' }}>{t('cameraDone')}</Button>
           ) : (
             <View style={{ width: 52 }} />
           )}

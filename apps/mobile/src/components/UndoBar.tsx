@@ -2,6 +2,7 @@ import { Pressable, Text, View } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme, spacing, radius } from '../theme';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 
 /**
  * Ported from the Notch Design System's UndoBar
@@ -32,7 +33,7 @@ export function UndoBar({ message, bottom, onUndo }: { message: string; bottom: 
       >
         {message}
       </Text>
-      <Pressable onPress={onUndo} hitSlop={8}>
+      <Pressable onPress={() => { track('undo_tapped'); onUndo(); }} hitSlop={8}>
         <Text style={{ color: theme.accent, fontSize: 14, fontWeight: '800' }}>{t('undo')}</Text>
       </Pressable>
     </View>

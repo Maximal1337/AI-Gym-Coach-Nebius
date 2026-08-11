@@ -7,6 +7,7 @@ import { DismissKeyboardView } from './DismissKeyboardView';
 import { LoadingOverlay } from './LoadingOverlay';
 import { StartingWeightsStep, type StartingWeightsPlan } from './StartingWeightsStep';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 interface ManualExercise {
@@ -52,6 +53,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
   }
 
   async function save() {
+    track('manual_plan_save_tapped');
     if (!planName.trim()) {
       Alert.alert(t('manualPlanNoName'));
       return;
@@ -143,7 +145,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
                 placeholderTextColor={theme.inkSoft}
                 style={{ flex: 1, color: theme.ink, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left', padding: 0 }}
               />
-              <Pressable onPress={() => removeExercise(idx)} hitSlop={8}>
+              <Pressable onPress={() => { track('manual_plan_remove_exercise_tapped'); removeExercise(idx); }} hitSlop={8}>
                 <Text style={{ color: theme.critical, fontSize: 16 }}>✕</Text>
               </Pressable>
             </View>
@@ -197,7 +199,7 @@ export function ManualPlanForm({ onDone }: { onDone: () => void }) {
         ))}
 
         <Pressable
-          onPress={() => setExercises((rows) => [...rows, emptyExercise()])}
+          onPress={() => { track('manual_plan_add_exercise_tapped'); setExercises((rows) => [...rows, emptyExercise()]); }}
           style={{
             borderWidth: 1, borderColor: theme.accent, borderStyle: 'dashed', borderRadius: radius.card,
             padding: spacing.sm, alignItems: 'center', marginBottom: spacing.md,

@@ -7,6 +7,7 @@ import type { PurchasesPackage } from 'react-native-purchases';
 import { Screen } from '../src/components/Screen';
 import { useLanguage, type Direction } from '../src/lib/language';
 import { fetchAccessStatus, getCurrentOffering, purchase, purchasesConfigured, restore } from '../src/lib/subscription';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius } from '../src/theme';
 
 /**
@@ -56,6 +57,7 @@ export default function Subscribe() {
   const align = dir === 'rtl' ? 'right' : 'left';
 
   async function handleContinue() {
+    track('subscribe_continue_tapped', { plan });
     const pkg = plan === 'annual' ? annualPkg : monthlyPkg;
     if (!purchasesConfigured || !pkg) {
       Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
@@ -75,6 +77,7 @@ export default function Subscribe() {
   }
 
   async function handleRestore() {
+    track('subscribe_restore_tapped');
     if (!purchasesConfigured) {
       Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
       return;
@@ -105,7 +108,7 @@ export default function Subscribe() {
     <Screen>
       <ScrollView contentContainerStyle={{ padding: spacing.md, paddingBottom: spacing.xl }}>
         <View style={{ flexDirection: row, justifyContent: 'flex-end', marginBottom: spacing.xs }}>
-          <Pressable onPress={() => router.back()} hitSlop={12}>
+          <Pressable onPress={() => { track('subscribe_close_tapped'); router.back(); }} hitSlop={12}>
             <Ionicons name="close" size={26} color={theme.inkSoft} />
           </Pressable>
         </View>
@@ -174,7 +177,7 @@ export default function Subscribe() {
             theme={theme}
             dir={dir}
             selected={plan === 'annual'}
-            onPress={() => setPlan('annual')}
+            onPress={() => { track('subscribe_plan_selected', { plan: 'annual' }); setPlan('annual'); }}
             title={t('planAnnual')}
             price={annualPrice}
             sub={t('planAnnualSub', { monthly: ANNUAL_MONTHLY_EQUIVALENT })}
@@ -184,7 +187,7 @@ export default function Subscribe() {
             theme={theme}
             dir={dir}
             selected={plan === 'monthly'}
-            onPress={() => setPlan('monthly')}
+            onPress={() => { track('subscribe_plan_selected', { plan: 'monthly' }); setPlan('monthly'); }}
             title={t('planMonthly')}
             price={monthlyPrice}
             sub={t('planMonthlySub')}

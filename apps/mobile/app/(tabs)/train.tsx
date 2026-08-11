@@ -659,7 +659,7 @@ export default function Chat() {
             whatever's first here ends up furthest from the title block. */}
         <CoachMark />
         {inWorkout && (
-          <Pressable disabled={busy} onPress={confirmFinish}>
+          <Pressable disabled={busy} onPress={() => { track('train_finish_workout_tapped'); confirmFinish(); }}>
             <Text style={{ color: theme.critical, fontWeight: '600', fontSize: 13 }}>{t('finishWorkout')}</Text>
           </Pressable>
         )}
@@ -678,7 +678,7 @@ export default function Chat() {
 
       {!inWorkout && openStudioSession && (
         <Pressable
-          onPress={() => router.push({ pathname: '/studio-session', params: { sessionId: openStudioSession.id } })}
+          onPress={() => { track('train_continue_studio_tapped'); router.push({ pathname: '/studio-session', params: { sessionId: openStudioSession.id } }); }}
           style={{
             flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
             backgroundColor: theme.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
@@ -695,7 +695,7 @@ export default function Chat() {
 
       {accessStatus && !accessStatus.entitled && (
         <Pressable
-          onPress={() => router.push('/subscribe')}
+          onPress={() => { track('train_trial_banner_tapped', { state: 'expired' }); router.push('/subscribe'); }}
           style={{
             flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
             backgroundColor: theme.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
@@ -711,7 +711,7 @@ export default function Chat() {
 
       {accessStatus?.status === 'trialing' && accessStatus.entitled && accessStatus.daysLeftInTrial <= 3 && !trialBannerDismissed && (
         <Pressable
-          onPress={() => router.push('/subscribe')}
+          onPress={() => { track('train_trial_banner_tapped', { state: 'ending_soon' }); router.push('/subscribe'); }}
           style={{
             flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm,
             backgroundColor: theme.surface, paddingHorizontal: spacing.md, paddingVertical: spacing.sm,
@@ -723,7 +723,7 @@ export default function Chat() {
               ? t('trialDaysRemaining', { count: accessStatus.daysLeftInTrial })
               : t('trialEndsToday')}
           </Text>
-          <Pressable hitSlop={8} onPress={(e) => { e.stopPropagation(); setTrialBannerDismissed(true); }}>
+          <Pressable hitSlop={8} onPress={(e) => { e.stopPropagation(); track('train_trial_banner_dismissed'); setTrialBannerDismissed(true); }}>
             <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '700' }}>{t('dismiss')}</Text>
           </Pressable>
         </Pressable>
@@ -808,7 +808,7 @@ export default function Chat() {
                 {t('noPlanYetChat')}
               </Text>
               <Pressable
-                onPress={() => router.push('/(tabs)')}
+                onPress={() => { track('train_add_plan_tapped'); router.push('/(tabs)'); }}
                 style={{ backgroundColor: theme.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill, alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}
               >
                 <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('addPlanCta')}</Text>
@@ -824,7 +824,7 @@ export default function Chat() {
                   <Pressable
                     key={p.id}
                     disabled={busy}
-                    onPress={() => start(p)}
+                    onPress={() => { track('train_start_plan_tapped'); start(p); }}
                     style={{ backgroundColor: theme.accent, paddingVertical: 10, paddingHorizontal: 16, borderRadius: radius.pill }}
                   >
                     <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{p.name}</Text>
@@ -848,7 +848,7 @@ export default function Chat() {
               label={t('startRestTimer')}
               size={21}
               color={theme.accent}
-              onPress={() => restTimer.start(pendingAction?.restSec ?? null)}
+              onPress={() => { track('train_start_rest_timer_tapped'); restTimer.start(pendingAction?.restSec ?? null); }}
               style={{ width: 46, height: 46, backgroundColor: theme.surface, borderRadius: radius.pill }}
             />
             <TextInput
@@ -867,7 +867,7 @@ export default function Chat() {
             />
             <Pressable
               disabled={busy || !draft.trim()}
-              onPress={send}
+              onPress={() => { track('train_send_message_tapped'); send(); }}
               style={{
                 backgroundColor: draft.trim() ? theme.accent : theme.rule,
                 borderRadius: radius.pill, paddingHorizontal: 16, minHeight: 46, alignItems: 'center', justifyContent: 'center',

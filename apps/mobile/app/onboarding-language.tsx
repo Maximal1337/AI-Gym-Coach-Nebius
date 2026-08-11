@@ -7,6 +7,7 @@ import { Screen } from '../src/components/Screen';
 import { Button } from '../src/components/Button';
 import { Badge } from '../src/components/Badge';
 import { deviceLanguage, useLanguage, type AppLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius } from '../src/theme';
 
 const LANGUAGES: AppLanguage[] = ['en', 'he', 'ar', 'es', 'de', 'pt', 'fr', 'it'];
@@ -36,6 +37,7 @@ export default function OnboardingLanguage() {
   const detected = deviceLanguage();
 
   async function confirm() {
+    track('onboarding_language_confirmed', { language: selected });
     setBusy(true);
     await setLanguage(selected);
     router.replace('/');
@@ -58,7 +60,7 @@ export default function OnboardingLanguage() {
             return (
               <Pressable
                 key={lang}
-                onPress={() => setSelected(lang)}
+                onPress={() => { track('onboarding_language_selected', { language: lang }); setSelected(lang); }}
                 style={{
                   flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.md,
                   backgroundColor: isSelected ? 'rgba(98, 252, 152, 0.12)' : theme.surface,

@@ -13,6 +13,7 @@ import { SketchLoader } from './SketchLoader';
 import { Field } from './Field';
 import { useLanguage } from '../lib/language';
 import { useUnits, parseWeightToKg, parseHeightToCm, weightUnitLabel } from '../lib/units';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 type PrimaryGoal = 'strength' | 'hypertrophy' | 'general_fitness' | 'fat_loss';
@@ -166,7 +167,7 @@ export function GeneratePlanFlow({
     return (
       <View style={{ marginBottom: spacing.md }}>
         <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>
-          <Pressable onPress={goBack} hitSlop={10}>
+          <Pressable onPress={() => { track('generate_plan_back_tapped'); goBack(); }} hitSlop={10}>
             <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={20} color={theme.inkSoft} />
           </Pressable>
           <View style={{ flex: 1, height: 3, borderRadius: 3, backgroundColor: theme.rule, overflow: 'hidden' }}>
@@ -220,6 +221,7 @@ export function GeneratePlanFlow({
             selected={primaryGoal === g}
             label={t(`goal_${g}`)}
             onPress={() => {
+              track('generate_plan_goal_selected', { goal: g });
               setPrimaryGoal(g);
               setStep('experience');
             }}
@@ -242,6 +244,7 @@ export function GeneratePlanFlow({
             selected={experienceLevel === lvl}
             label={t(`level_${lvl}`)}
             onPress={() => {
+              track('generate_plan_experience_selected', { level: lvl });
               setExperienceLevel(lvl);
               setStep('days');
             }}
@@ -264,6 +267,7 @@ export function GeneratePlanFlow({
             <Pressable
               key={d}
               onPress={() => {
+                track('generate_plan_days_selected', { days: d });
                 setDaysPerWeek(d);
                 setStep('about');
               }}
@@ -300,7 +304,7 @@ export function GeneratePlanFlow({
           {(['male', 'female', 'other'] as Gender[]).map((g) => (
             <Pressable
               key={g}
-              onPress={() => setGender(gender === g ? null : g)}
+              onPress={() => { track('generate_plan_gender_selected', { gender: g }); setGender(gender === g ? null : g); }}
               style={{
                 flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: radius.field,
                 backgroundColor: theme.surface, borderWidth: 1.5,
@@ -340,12 +344,12 @@ export function GeneratePlanFlow({
         />
 
         <Pressable
-          onPress={saveAboutYouAndContinue}
+          onPress={() => { track('generate_plan_about_continue_tapped'); saveAboutYouAndContinue(); }}
           style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.sm }}
         >
           <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('continue')}</Text>
         </Pressable>
-        <Pressable onPress={saveAboutYouAndContinue} style={{ alignItems: 'center', marginTop: spacing.sm }}>
+        <Pressable onPress={() => { track('generate_plan_about_skip_tapped'); saveAboutYouAndContinue(); }} style={{ alignItems: 'center', marginTop: spacing.sm }}>
           <Text style={{
             color: theme.accent, fontWeight: '700', fontSize: 12.5,
             borderWidth: 1.5, borderColor: theme.accent, borderRadius: radius.pill,
@@ -379,13 +383,13 @@ export function GeneratePlanFlow({
           }}
         />
         <Pressable
-          onPress={generate}
+          onPress={() => { track('generate_plan_finish_tapped'); generate(); }}
           style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center' }}
         >
           <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('finishIntake')}</Text>
         </Pressable>
         {injuryNotes.trim().length > 0 && (
-          <Pressable onPress={() => { setInjuryNotes(''); generate(); }} style={{ alignItems: 'center', marginTop: spacing.sm }}>
+          <Pressable onPress={() => { track('generate_plan_injuries_skip_tapped'); setInjuryNotes(''); generate(); }} style={{ alignItems: 'center', marginTop: spacing.sm }}>
             <Text style={{
               color: theme.accent, fontWeight: '700', fontSize: 12.5,
               borderWidth: 1.5, borderColor: theme.accent, borderRadius: radius.pill,
@@ -412,12 +416,16 @@ export function GeneratePlanFlow({
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
         <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{errorMessage}</Text>
         <Pressable
-          onPress={blocked ? () => router.push('/subscribe') : generate}
+          onPress={() => {
+            track('generate_plan_error_retry_tapped', { blocked });
+            if (blocked) router.push('/subscribe');
+            else generate();
+          }}
           style={{ backgroundColor: theme.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: radius.pill }}
         >
           <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{blocked ? t('subscription') : t('tryAgain')}</Text>
         </Pressable>
-        <Pressable onPress={onCancel}>
+        <Pressable onPress={() => { track('generate_plan_error_cancel_tapped'); onCancel(); }}>
           <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text>
         </Pressable>
       </View>

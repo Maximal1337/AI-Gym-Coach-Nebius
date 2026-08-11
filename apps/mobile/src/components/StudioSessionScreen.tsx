@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { ApiError } from '../lib/api';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 import {
   addCustomUnit, discardStudioSession, getStudioSession, saveStudioSession, updateStudioSession,
@@ -233,10 +234,11 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   }
 
   function addLadderRound(bi: number, ei: number) {
-    animateNext();
     const exercise = tree?.blocks[bi]?.exercises[ei];
     const ladder = exercise?.metrics[0]?.ladder;
     if (!ladder) return;
+    track('studio_session_add_round_tapped');
+    animateNext();
     const next = [...ladder, ladder[ladder.length - 1]];
     patch((d) => ({
       ...d,
@@ -255,10 +257,11 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
    * unnamed, so deleting from the middle would renumber everything after
    * it. Floors at 1 (a ladder needs at least one round to mean anything). */
   function removeLadderRound(bi: number, ei: number) {
-    animateNext();
     const exercise = tree?.blocks[bi]?.exercises[ei];
     const ladder = exercise?.metrics[0]?.ladder;
     if (!ladder || ladder.length <= 1) return;
+    track('studio_session_remove_round_tapped');
+    animateNext();
     const next = ladder.slice(0, -1);
     patch((d) => ({
       ...d,
@@ -275,6 +278,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   }
 
   function addExercise(bi: number) {
+    track('studio_session_add_exercise_tapped');
     animateNext();
     patch((d) => ({
       ...d,
@@ -289,6 +293,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   function removeExercise(bi: number, ei: number) {
     const exercise = tree?.blocks[bi].exercises[ei];
     if (!exercise) return;
+    track('studio_session_remove_exercise_tapped');
     animateNext();
     patch((d) => ({
       ...d,
@@ -349,6 +354,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   }
 
   function addBlock() {
+    track('studio_session_add_block_tapped');
     animateNext();
     patch((d) => ({
       ...d,
@@ -360,6 +366,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   function removeBlock(bi: number) {
     const block = tree?.blocks[bi];
     if (!block) return;
+    track('studio_session_remove_block_tapped');
     animateNext();
     patch((d) => ({ ...d, blocks: d.blocks.filter((_, i) => i !== bi) }));
     setOpenBlockIndex(null);
@@ -430,6 +437,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
     const label = customUnitForm.label.trim();
     const step = parseFloat(customUnitForm.step);
     if (!label || !Number.isFinite(step) || step <= 0) return;
+    track('studio_session_custom_unit_created');
     const key = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').slice(0, 20) || 'custom';
     try {
       const { customUnit } = await addCustomUnit({ key, label, step, min: 0, max: step * 100 });
@@ -442,11 +450,13 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   }
 
   async function handleSaveTap() {
+    track('studio_session_save_tapped');
     setShowIntensitySheet(true);
   }
 
   async function finishSave() {
     if (!tree) return;
+    track('studio_session_finish_save_tapped', { hasIntensity: intensity != null });
     setSaving(true);
     try {
       await saveStudioSession(sessionId, {
@@ -482,6 +492,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
    * field-patching can't reach. */
   async function submitReparse() {
     if (reparseText.trim().length < 3) return;
+    track('studio_session_reparse_submitted');
     setReparsing(true);
     try {
       const res = await reparseStudioSession(sessionId, reparseText.trim());
@@ -521,11 +532,13 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
   }
 
   function confirmDiscard() {
+    track('studio_session_discard_tapped');
     Alert.alert(t('discardWorkoutTitle'), t('discardWorkoutBody'), [
       { text: t('cancel'), style: 'cancel' },
       {
         text: t('discardWorkoutCta'), style: 'destructive',
         onPress: async () => {
+          track('studio_session_discard_confirmed');
           setDiscarding(true);
           try {
             await discardStudioSession(sessionId);
@@ -574,7 +587,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         flexDirection: rowDir, alignItems: 'center', gap: spacing.sm,
         paddingHorizontal: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.sm,
       }}>
-        <Pressable onPress={onClose} hitSlop={10}>
+        <Pressable onPress={() => { track('studio_session_back_tapped'); onClose(); }} hitSlop={10}>
           <Ionicons name={isRTL ? 'chevron-forward' : 'chevron-back'} size={22} color={theme.inkSoft} />
         </Pressable>
         <View style={{ flex: 1 }}>
@@ -596,7 +609,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
           <View key={bi} style={{ marginBottom: spacing.md }}>
             {showBlockHeaders && (
               <Pressable
-                onPress={() => { animateNext(); setOpenBlockIndex(openBlockIndex === bi ? null : bi); }}
+                onPress={() => { track('studio_session_block_toggled'); animateNext(); setOpenBlockIndex(openBlockIndex === bi ? null : bi); }}
                 style={{
                   flexDirection: rowDir, alignItems: 'center', justifyContent: 'space-between',
                   gap: spacing.sm, minHeight: 40, paddingHorizontal: 2,
@@ -625,7 +638,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                 </Text>
                 <View style={{ flexDirection: rowDir, flexWrap: 'wrap', gap: 6, marginBottom: spacing.sm }}>
                   {FORMAT_TYPES.map((f) => (
-                    <Chip key={f.type} selected={block.formatType === f.type} onPress={() => patchBlockFormat(bi, f.type)}>
+                    <Chip key={f.type} selected={block.formatType === f.type} onPress={() => { track('studio_session_format_selected', { formatType: f.type ?? 'none' }); patchBlockFormat(bi, f.type); }}>
                       {t(`format_${f.type}_label`)}
                     </Chip>
                   ))}
@@ -661,7 +674,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                 return (
                   <View key={ei} style={{ borderBottomWidth: ei === block.exercises.length - 1 ? 0 : 1, borderBottomColor: theme.rule }}>
                     <Pressable
-                      onPress={() => { animateNext(); setOpenRowKey(open ? null : key); }}
+                      onPress={() => { track('studio_session_exercise_toggled'); animateNext(); setOpenRowKey(open ? null : key); }}
                       style={{ flexDirection: rowDir, alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingVertical: 10, paddingHorizontal: 12 }}
                     >
                       <View style={{ flex: 1, minWidth: 0 }}>
@@ -715,7 +728,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                         </View>
                         <View style={{ flexDirection: rowDir, alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                           <Pressable
-                            onPress={() => setUnitSheetFor({ bi, ei, metricIndex: 0 })} hitSlop={6}
+                            onPress={() => { track('studio_session_change_unit_tapped', { metricIndex: 0 }); setUnitSheetFor({ bi, ei, metricIndex: 0 }); }} hitSlop={6}
                             style={{ flexDirection: rowDir, alignItems: 'center', gap: 3 }}
                           >
                             <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
@@ -727,7 +740,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                               take over as the (sole) remaining one — an
                               exercise can't drop to zero metrics. */}
                           {extra && (
-                            <IconButton name="close" size={14} label={t('remove')} color={theme.inkSoft} onPress={() => removeMetric(bi, ei, 0)} />
+                            <IconButton name="close" size={14} label={t('remove')} color={theme.inkSoft} onPress={() => { track('studio_session_remove_metric_tapped', { metricIndex: 0 }); removeMetric(bi, ei, 0); }} />
                           )}
                         </View>
                         {primary.ladder ? (
@@ -777,7 +790,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                           <View style={{ marginTop: spacing.sm }}>
                             <View style={{ flexDirection: rowDir, alignItems: 'center', justifyContent: 'space-between', marginBottom: 2 }}>
                               <Pressable
-                                onPress={() => setUnitSheetFor({ bi, ei, metricIndex: 1 })} hitSlop={6}
+                                onPress={() => { track('studio_session_change_unit_tapped', { metricIndex: 1 }); setUnitSheetFor({ bi, ei, metricIndex: 1 }); }} hitSlop={6}
                                 style={{ flexDirection: rowDir, alignItems: 'center', gap: 3 }}
                               >
                                 <Text style={{ color: theme.inkSoft, fontSize: 11, fontWeight: '700', textTransform: 'uppercase' }}>
@@ -785,7 +798,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                                 </Text>
                                 <Ionicons name="chevron-down" size={10} color={theme.inkSoft} />
                               </Pressable>
-                              <IconButton name="close" size={14} label={t('remove')} color={theme.inkSoft} onPress={() => removeMetric(bi, ei, 1)} />
+                              <IconButton name="close" size={14} label={t('remove')} color={theme.inkSoft} onPress={() => { track('studio_session_remove_metric_tapped', { metricIndex: 1 }); removeMetric(bi, ei, 1); }} />
                             </View>
                             <UnitScroller
                               compact value={extra.value} unit={extra.unit} last={last[exercise.name]?.[1]?.value ?? null}
@@ -795,7 +808,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
                         )}
                         {!extra && (
                           <View style={{ marginTop: spacing.sm, paddingTop: 10, borderTopWidth: 1, borderTopColor: theme.rule }}>
-                            <Button variant="dashed" size="md" block onPress={() => setUnitSheetFor({ bi, ei, metricIndex: exercise.metrics.length })}
+                            <Button variant="dashed" size="md" block onPress={() => { track('studio_session_add_unit_tapped'); setUnitSheetFor({ bi, ei, metricIndex: exercise.metrics.length }); }}
                               icon={<Ionicons name="add" size={15} color={theme.inkSoft} />}>
                               {t('addUnitButton')}
                             </Button>
@@ -845,7 +858,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
             task, so reporting a bad parse feels like helping rather than
             doing the app's job. */}
         <Button
-          variant="secondary" size="md" block onPress={() => setReparseOpen(true)}
+          variant="secondary" size="md" block onPress={() => { track('studio_session_reparse_opened'); setReparseOpen(true); }}
           icon={<Ionicons name="sparkles-outline" size={16} color={theme.accent} />}
           style={{ marginTop: spacing.md }}
         >
@@ -889,17 +902,17 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         ) : (
           <View style={{ flexDirection: rowDir, flexWrap: 'wrap', gap: spacing.sm }}>
             {PRESET_UNIT_KEYS.map((u) => (
-              <Chip key={u} onPress={() => unitSheetFor && setMetricUnit(unitSheetFor.bi, unitSheetFor.ei, unitSheetFor.metricIndex, u)}>
+              <Chip key={u} onPress={() => { track('studio_session_unit_selected', { unit: u }); unitSheetFor && setMetricUnit(unitSheetFor.bi, unitSheetFor.ei, unitSheetFor.metricIndex, u); }}>
                 {unitLabel(u, customUnits, t)}
               </Chip>
             ))}
             {customUnits.map((c) => (
-              <Chip key={c.key} onPress={() => unitSheetFor && setMetricUnit(unitSheetFor.bi, unitSheetFor.ei, unitSheetFor.metricIndex, c.key)}>
+              <Chip key={c.key} onPress={() => { track('studio_session_unit_selected', { unit: c.key }); unitSheetFor && setMetricUnit(unitSheetFor.bi, unitSheetFor.ei, unitSheetFor.metricIndex, c.key); }}>
                 {c.label}
               </Chip>
             ))}
             <Pressable
-              onPress={() => setCustomUnitForm({ label: '', step: '1' })}
+              onPress={() => { track('studio_session_custom_unit_form_opened'); setCustomUnitForm({ label: '', step: '1' }); }}
               style={{
                 minHeight: 40, paddingHorizontal: 14, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center',
                 borderWidth: 1, borderStyle: 'dashed', borderColor: theme.rule,
@@ -917,7 +930,7 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         </Text>
         <IntensityPicker value={intensity} onChange={setIntensity} />
         {!noteOpen ? (
-          <Button variant="dashed" size="md" block onPress={() => setNoteOpen(true)} style={{ marginTop: spacing.md }}
+          <Button variant="dashed" size="md" block onPress={() => { track('studio_session_add_note_tapped'); setNoteOpen(true); }} style={{ marginTop: spacing.md }}
             icon={<Ionicons name="create-outline" size={15} color={theme.inkSoft} />}>
             {t('addANote')}
           </Button>

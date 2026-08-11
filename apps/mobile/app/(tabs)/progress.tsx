@@ -15,6 +15,7 @@ import { CoachMark } from '../../src/components/CoachMark';
 import { LoadingOverlay } from '../../src/components/LoadingOverlay';
 import { useLanguage } from '../../src/lib/language';
 import { useUnits, formatWeightKg, weightUnitLabel } from '../../src/lib/units';
+import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 const DATE_LOCALE: Record<string, string> = { he: 'he-IL', ar: 'ar', en: 'en-US' };
@@ -173,6 +174,7 @@ export default function Progress() {
       setExpandedId(null);
       return;
     }
+    track('progress_session_expanded');
     setExpandedId(sessionId);
     if (details[sessionId]) return;
     detailsRequest.current = sessionId;
@@ -233,6 +235,7 @@ export default function Progress() {
   }, [selectedPlanId]);
 
   async function importParse() {
+    track('progress_import_parse_tapped');
     setBusy(true);
     try {
       const res = await callFn<{ sessions: ParsedImportSession[] }>('history-import', { action: 'parse', text: importText });
@@ -251,6 +254,7 @@ export default function Progress() {
 
   async function importCommit() {
     if (!importPreview) return;
+    track('progress_import_commit_tapped');
     setBusy(true);
     try {
       const res = await callFn<{ imported: number }>('history-import', {
@@ -291,7 +295,7 @@ export default function Progress() {
         </View>
 
         <Pressable
-          onPress={() => setImportOpen(true)}
+          onPress={() => { track('progress_import_history_tapped'); setImportOpen(true); }}
           style={{ backgroundColor: theme.surface, borderRadius: radius.card, padding: spacing.md, marginBottom: spacing.md }}
         >
           <Text style={{ color: theme.accent, fontWeight: '700', textAlign: dir === 'rtl' ? 'right' : 'left' }}>{t('importHistory')}</Text>
@@ -307,7 +311,7 @@ export default function Progress() {
                 {t('exerciseProgress')}
               </Text>
               <Pressable
-                onPress={() => setRecentOpen(true)}
+                onPress={() => { track('progress_recent_workouts_tapped'); setRecentOpen(true); }}
                 style={{
                   paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill,
                   borderWidth: 1, borderColor: theme.rule,
@@ -319,7 +323,7 @@ export default function Progress() {
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: spacing.sm }}>
               <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', gap: 8 }}>
                 {plans.map((p) => (
-                  <PlanTab key={p.id} label={p.name} active={p.id === selectedPlanId} onPress={() => setSelectedPlanId(p.id)} />
+                  <PlanTab key={p.id} label={p.name} active={p.id === selectedPlanId} onPress={() => { track('progress_plan_tab_selected'); setSelectedPlanId(p.id); }} />
                 ))}
               </View>
             </ScrollView>
@@ -485,12 +489,12 @@ export default function Progress() {
                   {t('importCommit', { count: importPreview.sessions.length })}
                 </Text>
               </Pressable>
-              <Pressable disabled={busy} onPress={() => setImportPreview(null)} style={{ padding: spacing.md, alignItems: 'center' }}>
+              <Pressable disabled={busy} onPress={() => { track('progress_import_tryagain_tapped'); setImportPreview(null); }} style={{ padding: spacing.md, alignItems: 'center' }}>
                 <Text style={{ color: theme.accent, fontWeight: '600' }}>{t('tryAgain')}</Text>
               </Pressable>
             </>
           )}
-          <Pressable onPress={() => { setImportOpen(false); setImportPreview(null); }} style={{ padding: spacing.md, alignItems: 'center' }}>
+          <Pressable onPress={() => { track('progress_import_cancelled'); setImportOpen(false); setImportPreview(null); }} style={{ padding: spacing.md, alignItems: 'center' }}>
             <Text style={{ color: theme.inkSoft }}>{t('cancel')}</Text>
           </Pressable>
         </DismissKeyboardView>

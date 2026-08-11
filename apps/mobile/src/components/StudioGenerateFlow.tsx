@@ -13,6 +13,7 @@ import { DismissKeyboardView } from './DismissKeyboardView';
 import { SketchLoader } from './SketchLoader';
 import { Chip } from './Chip';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 type FitnessLevel = GenerateStudioIntake['fitnessLevel'];
@@ -82,6 +83,7 @@ export function StudioGenerateFlow({
   function addCustomEquipment() {
     const value = customEquipmentInput.trim();
     if (!value || customEquipment.length >= 5 || customEquipment.includes(value)) return;
+    track('studio_generate_custom_equipment_added');
     setCustomEquipment((cur) => [...cur, value]);
     setCustomEquipmentInput('');
   }
@@ -130,7 +132,7 @@ export function StudioGenerateFlow({
     return (
       <View style={{ marginBottom: spacing.md }}>
         <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.xs }}>
-          <Pressable onPress={goBack} hitSlop={10}>
+          <Pressable onPress={() => { track('studio_generate_back_tapped'); goBack(); }} hitSlop={10}>
             <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={20} color={theme.inkSoft} />
           </Pressable>
           <View style={{ flex: 1, height: 3, borderRadius: 3, backgroundColor: theme.rule, overflow: 'hidden' }}>
@@ -180,7 +182,7 @@ export function StudioGenerateFlow({
             key={lvl}
             selected={fitnessLevel === lvl}
             label={t(`level_${lvl}`)}
-            onPress={() => { setFitnessLevel(lvl); setStep('duration'); }}
+            onPress={() => { track('studio_generate_level_selected', { level: lvl }); setFitnessLevel(lvl); setStep('duration'); }}
           />
         ))}
       </DismissKeyboardView>
@@ -198,7 +200,7 @@ export function StudioGenerateFlow({
           {DURATIONS.map((d) => (
             <Pressable
               key={d}
-              onPress={() => { setDurationMin(d); setStep('equipment'); }}
+              onPress={() => { track('studio_generate_duration_selected', { minutes: d }); setDurationMin(d); setStep('equipment'); }}
               style={{
                 width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center',
                 backgroundColor: theme.surface, borderWidth: 1.5,
@@ -226,14 +228,14 @@ export function StudioGenerateFlow({
         </Text>
         <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md }}>
           {STUDIO_EQUIPMENT_OPTIONS.map((opt) => (
-            <Chip key={opt} selected={equipment.includes(opt)} onPress={() => toggleEquipment(opt)}>
+            <Chip key={opt} selected={equipment.includes(opt)} onPress={() => { track('studio_generate_equipment_toggled', { equipment: opt }); toggleEquipment(opt); }}>
               {t(`equipment_${opt}`)}
             </Chip>
           ))}
           {customEquipment.map((item) => (
             // A custom item's only interaction is removal — accessible label
             // spells that out since the "×" alone doesn't read aloud.
-            <Chip key={item} selected onPress={() => removeCustomEquipment(item)}>
+            <Chip key={item} selected onPress={() => { track('studio_generate_custom_equipment_removed'); removeCustomEquipment(item); }}>
               {`${item} ×`}
             </Chip>
           ))}
@@ -266,7 +268,7 @@ export function StudioGenerateFlow({
         )}
         <Pressable
           disabled={equipment.length === 0 && customEquipment.length === 0}
-          onPress={() => setStep('focus')}
+          onPress={() => { track('studio_generate_equipment_continue_tapped'); setStep('focus'); }}
           style={{
             backgroundColor: equipment.length === 0 && customEquipment.length === 0 ? theme.rule : theme.accent,
             padding: 14, borderRadius: radius.pill, alignItems: 'center',
@@ -292,7 +294,7 @@ export function StudioGenerateFlow({
             key={f}
             selected={focus === f}
             label={t(`focus_${f}`)}
-            onPress={() => { setFocus(f); setStep('injuries'); }}
+            onPress={() => { track('studio_generate_focus_selected', { focus: f }); setFocus(f); setStep('injuries'); }}
           />
         ))}
       </DismissKeyboardView>
@@ -322,13 +324,13 @@ export function StudioGenerateFlow({
           }}
         />
         <Pressable
-          onPress={generate}
+          onPress={() => { track('studio_generate_finish_tapped'); generate(); }}
           style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center' }}
         >
           <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('finishStudioIntake')}</Text>
         </Pressable>
         {injuryNotes.trim().length > 0 && (
-          <Pressable onPress={() => { setInjuryNotes(''); generate(); }} style={{ alignItems: 'center', marginTop: spacing.sm }}>
+          <Pressable onPress={() => { track('studio_generate_injuries_skip_tapped'); setInjuryNotes(''); generate(); }} style={{ alignItems: 'center', marginTop: spacing.sm }}>
             <Text style={{
               color: theme.accent, fontWeight: '700', fontSize: 12.5,
               borderWidth: 1.5, borderColor: theme.accent, borderRadius: radius.pill,
@@ -359,12 +361,16 @@ export function StudioGenerateFlow({
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.md }}>
       <Text style={{ color: theme.ink, textAlign: 'center', fontWeight: '600' }}>{errorMessage}</Text>
       <Pressable
-        onPress={blocked ? () => router.push('/subscribe') : generate}
+        onPress={() => {
+          track('studio_generate_error_retry_tapped', { blocked });
+          if (blocked) router.push('/subscribe');
+          else generate();
+        }}
         style={{ backgroundColor: theme.accent, paddingVertical: 12, paddingHorizontal: 24, borderRadius: radius.pill }}
       >
         <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{blocked ? t('subscription') : t('tryAgain')}</Text>
       </Pressable>
-      <Pressable onPress={onCancel}>
+      <Pressable onPress={() => { track('studio_generate_error_cancel_tapped'); onCancel(); }}>
         <Text style={{ color: theme.inkSoft, fontWeight: '600' }}>{t('cancel')}</Text>
       </Pressable>
     </View>

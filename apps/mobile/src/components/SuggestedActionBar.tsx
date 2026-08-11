@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useLanguage } from '../lib/language';
 import { useUnits, formatWeightKg, parseWeightToKg, weightUnitLabel } from '../lib/units';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 interface SetRow { weight: string; reps: string }
@@ -187,7 +188,7 @@ export function SuggestedActionBar({
 
         <Pressable
           disabled={disabled || !allValid}
-          onPress={() => allValid && onSubmitSets(parsedSets)}
+          onPress={() => { if (allValid) { track('suggested_action_submit_tapped'); onSubmitSets(parsedSets); } }}
           style={{
             width: 48,
             backgroundColor: allValid ? theme.accent : theme.rule,

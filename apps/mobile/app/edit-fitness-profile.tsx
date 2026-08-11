@@ -6,6 +6,7 @@ import { supabase } from '../src/lib/supabase';
 import { FitnessProfileForm, type FitnessProfileValues } from '../src/components/FitnessProfileForm';
 import { Screen } from '../src/components/Screen';
 import { useLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing } from '../src/theme';
 
 export default function EditFitnessProfile() {
@@ -28,7 +29,7 @@ export default function EditFitnessProfile() {
   return (
     <Screen>
       <View style={{ paddingHorizontal: spacing.lg, paddingTop: spacing.sm }}>
-        <Pressable onPress={() => router.back()} hitSlop={12} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
+        <Pressable onPress={() => { track('edit_fitness_profile_back_tapped'); router.back(); }} hitSlop={12} style={{ alignSelf: dir === 'rtl' ? 'flex-end' : 'flex-start' }}>
           <Ionicons name={dir === 'rtl' ? 'chevron-forward' : 'chevron-back'} size={24} color={theme.inkSoft} />
         </Pressable>
       </View>

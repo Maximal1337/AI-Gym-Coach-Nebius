@@ -7,6 +7,7 @@ import {
   useUnits, formatWeightKg, formatHeightForEntry, parseWeightToKg, parseHeightToCm, weightUnitLabel,
 } from '../lib/units';
 import { Field } from './Field';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
 type Gender = 'male' | 'female' | 'other';
@@ -47,6 +48,7 @@ export function FitnessProfileForm({
   const [busy, setBusy] = useState(false);
 
   async function save() {
+    track('fitness_profile_save_tapped');
     setBusy(true);
     const { data } = await supabase.auth.getUser();
     const userId = data.user?.id;
@@ -81,7 +83,7 @@ export function FitnessProfileForm({
         {(['male', 'female', 'other'] as Gender[]).map((g) => (
           <Pressable
             key={g}
-            onPress={() => setGender(gender === g ? null : g)}
+            onPress={() => { track('fitness_profile_gender_selected', { gender: g }); setGender(gender === g ? null : g); }}
             style={{
               flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: radius.field,
               backgroundColor: theme.surface, borderWidth: 1.5,

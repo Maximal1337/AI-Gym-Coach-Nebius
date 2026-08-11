@@ -18,6 +18,7 @@ import { Badge } from '../../src/components/Badge';
 import { existingOpenSessionId, listStudioSessions, openStudioSession } from '../../src/lib/studioApi';
 import { fetchAccessStatus } from '../../src/lib/subscription';
 import { useLanguage } from '../../src/lib/language';
+import { track } from '../../src/lib/analytics';
 import { useTheme, spacing, TAB_BAR_CLEARANCE } from '../../src/theme';
 
 interface PlanRow {
@@ -161,6 +162,7 @@ export default function Plans() {
   }
 
   function editGymPlan(planId: string, planName: string) {
+    track('plans_edit_plan_tapped');
     router.push({ pathname: '/plan-edit', params: { mode: 'edit', planId, planName } });
   }
 
@@ -168,6 +170,7 @@ export default function Plans() {
   // §1.1 — Train is where a plan actually runs), not plan-edit — editing
   // stays reachable via the long-press action sheet's own "Edit plan" row.
   function startGymPlan(planId: string, planName: string) {
+    track('plans_card_start_tapped', { kind: 'gym' });
     router.push({ pathname: '/(tabs)/train', params: { startPlanId: planId, startPlanName: planName } });
   }
 
@@ -176,6 +179,7 @@ export default function Plans() {
   }
 
   async function archive(planId: string) {
+    track('plans_archive_plan_tapped');
     setActionsFor(null);
     setBusyLabel(t('archiving'));
     setBusyId(planId);
@@ -193,6 +197,7 @@ export default function Plans() {
   // fresh copy of the old tree) — exactly the case that was slipping
   // through before: gated the same as any other studio-session "open".
   async function doOneAgainStudio(sessionId: string) {
+    track('plans_recent_card_tapped');
     const access = await fetchAccessStatus();
     if (!access.entitled) { router.push('/subscribe'); return; }
     setBusy(true);
@@ -242,6 +247,7 @@ export default function Plans() {
   // chooser one — two overlapping Modals otherwise leaves the second one
   // unresponsive (same race navigateAfterSheetCloses guards elsewhere).
   function openKindChooser(method: AddMethod) {
+    track('plans_add_method_selected', { method });
     setAddOpen(false);
     navigateAfterSheetCloses(() => setPendingMethod(method));
   }
@@ -259,6 +265,7 @@ export default function Plans() {
   // immediately instead of after choosing a specific build method (or,
   // worse, after filling out the whole AI-generate form).
   async function resolveMethod(method: AddMethod, kind: 'gym' | 'studio') {
+    track('plans_add_kind_selected', { method, kind });
     setPendingMethod(null);
     setAddOpen(false);
 
@@ -310,7 +317,7 @@ export default function Plans() {
         <Button
           variant="primary" size="md" block
           icon={<Ionicons name="add" size={16} color={theme.onAccent} />}
-          onPress={() => setAddOpen(true)}
+          onPress={() => { track('plans_add_workout_tapped'); setAddOpen(true); }}
           style={{ marginBottom: spacing.lg }}
         >
           {t('addNewWorkout')}
@@ -334,7 +341,7 @@ export default function Plans() {
                     <WorkoutCard
                       workout={p}
                       onPress={() => startGymPlan(p.id, p.name)}
-                      onLongPress={() => setActionsFor({ id: p.id, name: p.name })}
+                      onLongPress={() => { track('plans_card_actions_opened'); setActionsFor({ id: p.id, name: p.name }); }}
                     />
                   </View>
                 ))}

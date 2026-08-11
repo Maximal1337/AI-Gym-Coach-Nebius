@@ -3,6 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme';
+import { track } from '../lib/analytics';
 
 const SIZES = { sm: 32, md: 40 } as const;
 
@@ -19,7 +20,7 @@ export function CoachMark({ size = 'sm' }: { size?: keyof typeof SIZES }) {
   const dim = SIZES[size];
   return (
     <Pressable
-      onPress={() => router.push('/settings')}
+      onPress={() => { track('coach_mark_tapped'); router.push('/settings'); }}
       accessibilityRole="button"
       accessibilityLabel={t('settingsTitle')}
       hitSlop={8}

@@ -16,6 +16,7 @@ import { ApiError } from '../src/lib/api';
 import { existingOpenSessionId, openStudioSession } from '../src/lib/studioApi';
 import { fetchAccessStatus } from '../src/lib/subscription';
 import { useLanguage } from '../src/lib/language';
+import { track } from '../src/lib/analytics';
 import { useTheme, spacing } from '../src/theme';
 
 type Choice = 'generate' | 'photo' | 'paste' | 'upload' | null;
@@ -123,6 +124,7 @@ export default function OnboardingPlan() {
   // (matching every other AI entry point in the app) rather than
   // something expected to actually fire here.
   async function resolveMethod(method: AddMethod, kind: 'gym' | 'studio') {
+    track('onboarding_plan_kind_selected', { method, kind });
     setPendingMethod(null);
 
     if (!(kind === 'gym' && method === 'build')) {
@@ -157,7 +159,7 @@ export default function OnboardingPlan() {
             "exit" convention (and consent.tsx's own placement) rather
             than the trailing corner. */}
         <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', padding: spacing.sm }}>
-          <Button variant="quiet" size="sm" onPress={signOut}>{t('signOut')}</Button>
+          <Button variant="quiet" size="sm" onPress={() => { track('onboarding_plan_signout_tapped'); signOut(); }}>{t('signOut')}</Button>
         </View>
 
         <View style={{ paddingHorizontal: spacing.lg }}>
@@ -179,30 +181,30 @@ export default function OnboardingPlan() {
             label={t('generatePlanCta')}
             description={t('goalSub')}
             badge={<Badge>AI</Badge>}
-            onPress={() => setPendingMethod('generate')}
+            onPress={() => { track('onboarding_plan_method_selected', { method: 'generate' }); setPendingMethod('generate'); }}
           />
           <ChoiceCard
             icon="camera-outline"
             label={t('choosePhoto')}
             description={t('choosePhotoDesc')}
-            onPress={() => setPendingMethod('photo')}
+            onPress={() => { track('onboarding_plan_method_selected', { method: 'photo' }); setPendingMethod('photo'); }}
           />
           <ChoiceCard
             icon="clipboard-outline"
             label={t('choosePaste')}
             description={t('planSub')}
-            onPress={() => setPendingMethod('paste')}
+            onPress={() => { track('onboarding_plan_method_selected', { method: 'paste' }); setPendingMethod('paste'); }}
           />
           <ChoiceCard
             icon="document-attach-outline"
             label={t('chooseUpload')}
-            onPress={() => setPendingMethod('upload')}
+            onPress={() => { track('onboarding_plan_method_selected', { method: 'upload' }); setPendingMethod('upload'); }}
           />
           <ChoiceCard
             icon="construct-outline"
             label={t('chooseManual')}
             description={t('manualPlanSub')}
-            onPress={() => setPendingMethod('build')}
+            onPress={() => { track('onboarding_plan_method_selected', { method: 'build' }); setPendingMethod('build'); }}
           />
           <Text style={{
             color: theme.inkSoft, fontSize: 10.5, lineHeight: 15,
@@ -213,7 +215,7 @@ export default function OnboardingPlan() {
         </ScrollView>
 
         <View style={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-          <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
+          <Button variant="quiet" block disabled={skipping} onPress={() => { track('onboarding_plan_skip_tapped'); skip(); }}>{t('skipForNow')}</Button>
         </View>
       </View>
 

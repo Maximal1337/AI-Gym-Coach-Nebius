@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useRestTimer } from '../lib/restTimer';
 import { formatCountdown, isFinalStretch, ringProgress } from '../lib/restTimerLogic';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, radius, spacing, TAB_BAR_BOTTOM_MARGIN, TAB_BAR_CLEARANCE, TAB_BAR_HEIGHT } from '../theme';
 
 // Mirrors the Notch Design System's components/feedback/RestTimer.jsx as
@@ -124,7 +125,7 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
   if (variant === 'pill') {
     return (
       <Pressable
-        onPress={() => router.push('/(tabs)/train')}
+        onPress={() => { track('rest_timer_pill_tapped'); router.push('/(tabs)/train'); }}
         accessibilityRole="button"
         accessibilityLabel={`${done ? t('restDone') : `${t('restLabel')} ${countdown}`} — ${t('chatTitle')}`}
         style={{
@@ -192,7 +193,7 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
           {t('restDone')}
         </Text>
         <Pressable
-          onPress={dismiss}
+          onPress={() => { track('rest_timer_dismiss_tapped'); dismiss(); }}
           style={{
             backgroundColor: theme.onAccent, borderRadius: radius.pill, paddingHorizontal: spacing.md,
             minHeight: HIT_TARGET, alignItems: 'center', justifyContent: 'center',
@@ -214,7 +215,7 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
       >
         <View style={{ ...row, justifyContent: 'flex-end' }}>
           <Pressable
-            onPress={() => setExpanded(false)}
+            onPress={() => { track('rest_timer_collapsed'); setExpanded(false); }}
             hitSlop={8}
             accessibilityRole="button"
             accessibilityLabel={t('close')}
@@ -246,21 +247,21 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
         </View>
         <View style={{ ...row, gap: spacing.sm, marginBottom: spacing.sm }}>
           <View style={{ flex: 1 }}>
-            <TimerButton label={t('restSubtract')} variant="secondary" onPress={subtract} />
+            <TimerButton label={t('restSubtract')} variant="secondary" onPress={() => { track('rest_timer_subtract_tapped'); subtract(); }} />
           </View>
           <View style={{ flex: 1 }}>
             <TimerButton
               label={paused ? t('restResume') : t('restPause')}
               icon={<Ionicons name={paused ? 'play' : 'pause'} size={15} color={theme.ink} />}
               variant="secondary"
-              onPress={paused ? resume : pause}
+              onPress={() => { track(paused ? 'rest_timer_resume_tapped' : 'rest_timer_pause_tapped'); (paused ? resume : pause)(); }}
             />
           </View>
           <View style={{ flex: 1 }}>
-            <TimerButton label={t('restAdd')} variant="secondary" onPress={add} />
+            <TimerButton label={t('restAdd')} variant="secondary" onPress={() => { track('rest_timer_add_tapped'); add(); }} />
           </View>
         </View>
-        <TimerButton label={t('restSkip')} variant="quiet" block onPress={skip} />
+        <TimerButton label={t('restSkip')} variant="quiet" block onPress={() => { track('rest_timer_skip_tapped'); skip(); }} />
       </View>
     );
   }
@@ -288,7 +289,7 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
         ...(dir === 'rtl' ? { paddingLeft: spacing.sm, paddingRight: spacing.md } : { paddingLeft: spacing.md, paddingRight: spacing.sm }),
       }}>
         <Pressable
-          onPress={() => setExpanded(true)}
+          onPress={() => { track('rest_timer_expanded'); setExpanded(true); }}
           accessibilityRole="button"
           accessibilityLabel={`${t('restLabel')} ${countdown}`}
           style={{ ...row, alignItems: 'center', gap: spacing.sm, flex: 1, minWidth: 0 }}
@@ -312,10 +313,10 @@ export function RestTimer({ variant = 'docked' }: { variant?: 'docked' | 'pill' 
           </View>
         </Pressable>
         <View style={{ flexShrink: 0 }}>
-          <TimerButton label={t('restAdd')} variant="secondary" compact onPress={add} />
+          <TimerButton label={t('restAdd')} variant="secondary" compact onPress={() => { track('rest_timer_add_tapped'); add(); }} />
         </View>
         <View style={{ flexShrink: 0 }}>
-          <TimerButton label={t('restSkip')} variant="quiet" compact onPress={skip} />
+          <TimerButton label={t('restSkip')} variant="quiet" compact onPress={() => { track('rest_timer_skip_tapped'); skip(); }} />
         </View>
       </View>
     </View>

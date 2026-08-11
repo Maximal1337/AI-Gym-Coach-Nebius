@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../lib/api';
 import { useLanguage } from '../lib/language';
+import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 import { Button } from './Button';
 import { ConfettiBurst } from './ConfettiBurst';
@@ -119,8 +120,8 @@ function EditExerciseSheet({
               onChangeText={(v) => onChange({ warmup: v.length > 0 ? v : null })}
               style={{ marginBottom: spacing.lg }}
             />
-            <Button block onPress={onClose}>{t('save')}</Button>
-            <Button variant="destructive" block onPress={onRemove} style={{ marginTop: spacing.sm }}>
+            <Button block onPress={() => { track('plan_preview_exercise_save_tapped'); onClose(); }}>{t('save')}</Button>
+            <Button variant="destructive" block onPress={() => { track('plan_preview_remove_exercise_tapped'); onRemove(); }} style={{ marginTop: spacing.sm }}>
               {t('removeExercise')}
             </Button>
           </ScrollView>
@@ -318,7 +319,7 @@ export function PlanPreview({
               {plan.exercises.map((e, exIdx) => (
                 <Pressable
                   key={exIdx}
-                  onPress={() => { Keyboard.dismiss(); setEditing({ planIdx, exIdx }); }}
+                  onPress={() => { track('plan_preview_edit_exercise_tapped'); Keyboard.dismiss(); setEditing({ planIdx, exIdx }); }}
                   style={{
                     borderBottomWidth: exIdx === plan.exercises.length - 1 ? 0 : 1, borderBottomColor: theme.rule,
                     paddingVertical: 11,
@@ -352,7 +353,7 @@ export function PlanPreview({
               <Button
                 variant="dashed" size="md" block
                 icon={<Ionicons name="add" size={15} color={theme.inkSoft} />}
-                onPress={() => addExercise(planIdx)}
+                onPress={() => { track('plan_preview_add_exercise_tapped'); addExercise(planIdx); }}
               >
                 {t('addExercise')}
               </Button>
@@ -361,13 +362,13 @@ export function PlanPreview({
         ))}
       </ScrollView>
       {extraNote}
-      <Button block disabled={busy} onPress={commit} style={{ marginTop: spacing.sm }}>
+      <Button block disabled={busy} onPress={() => { track('plan_preview_approve_tapped'); commit(); }} style={{ marginTop: spacing.sm }}>
         {busy ? t('saving') : t('approveAndSave')}
       </Button>
       {showTryAgain && mode !== 'edit' && (
         <Button
           variant="quiet" block disabled={busy}
-          onPress={() => (onTryAgain ? onTryAgain() : setPreview(() => null))}
+          onPress={() => { track('plan_preview_tryagain_tapped'); onTryAgain ? onTryAgain() : setPreview(() => null); }}
         >
           {tryAgainLabel ?? t('tryAgain')}
         </Button>

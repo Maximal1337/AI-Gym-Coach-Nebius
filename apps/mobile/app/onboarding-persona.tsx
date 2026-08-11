@@ -58,7 +58,7 @@ export default function OnboardingPersona() {
         flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', justifyContent: 'flex-start',
         paddingHorizontal: spacing.lg, paddingTop: spacing.sm,
       }}>
-        <Pressable onPress={() => router.replace('/onboarding-plan')}>
+        <Pressable onPress={() => { track('onboarding_persona_cancel_tapped'); router.replace('/onboarding-plan'); }}>
           <Text style={{ color: theme.inkSoft, fontSize: 12, fontWeight: '600' }}>{t('cancel')}</Text>
         </Pressable>
       </View>
@@ -72,7 +72,7 @@ export default function OnboardingPersona() {
       {/* Bottom, matching onboarding-plan's own "Skip for now" placement,
           not a corner text link next to Cancel. */}
       <View style={{ padding: spacing.md, paddingBottom: spacing.xl }}>
-        <Button variant="quiet" block disabled={skipping} onPress={skip}>{t('skipForNow')}</Button>
+        <Button variant="quiet" block disabled={skipping} onPress={() => { track('onboarding_persona_skip_tapped'); skip(); }}>{t('skipForNow')}</Button>
       </View>
     </Screen>
   );
