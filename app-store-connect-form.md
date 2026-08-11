@@ -30,13 +30,28 @@ AI Gym Coach - Notch
 Workout Tracker - Notch
 ```
 
-**Subtitle** (30 char limit)
+⚠️ Note: this leads with "AI," which sits in tension with the voice
+rule "avoid AI-powered as a lead." Name is pure ASO indexing though,
+not narrative copy a reader experiences as "the coach talking," so
+that's a defensible exception — but it's a call worth making
+deliberately, not by default.
+
+**Subtitle** (30 char limit) — options, none repeating a Name word:
+
+| Option | Chars | Why |
+|---|---|---|
+| `Gym & Studio Training` | 22 | Leads with the differentiator no competitor owns — handling both. Avoids "Coach" entirely. |
+| `Snap a Plan, Talk It Through` | 28 | Leads with the two mechanics — photo capture + conversation — over category words. |
+| `Talk Through Every Set` | 23 | Purely the conversational hook, plainest option. |
+| `Gym & Studio, One Coach` | 24 | Same idea as option 1, but reuses "Coach" from Name — some index value lost to overlap. |
+
+Recommended:
 ```
-Log Sets & Track Progress
+Gym & Studio Training
 ```
-26 chars. Deliberately shares zero words with the Name above — Apple
-treats repeated words across Name+Subtitle as wasted space, since it's
-already indexed once.
+22 chars. It's the one differentiator competitors can't copy overnight,
+and it reads as fact rather than pitch — closer to the "plain,
+matter-of-fact" voice rule than the conversational-hook options.
 
 **Primary Category**
 ```
@@ -86,8 +101,10 @@ The only field editable anytime without a new review — good for
 seasonal/timely tweaks later.
 
 ```
-Your AI coach remembers every rep, set, and kg — and knows exactly when to push you further. Build a plan, start lifting, get real-time coaching on every set.
+A coach who talks you through every set — gym or studio. Photograph the board or your plan and it's ready before you've put your phone down. Remembers every rep.
 ```
+161 chars. No pricing, no "AI-powered" lead, no trainer/medical
+substitute claim.
 
 ---
 
@@ -97,22 +114,32 @@ Only the first ~2-3 lines show before "more" — same 3-5-second rule as
 screenshots applies to the opening line.
 
 ```
-Notch is the AI personal trainer that runs your workout with you — set by set, rep by rep.
+Notch is a coach you talk to.
 
-No more guessing your last weight or losing your progress in a notes app. Notch remembers every set you've ever done and tells you exactly when to add weight, reps, or rest — so every session pushes you a little further than the last.
+Bring a plan, or photograph one — a printed program, even a whiteboard — and Notch turns it into a real, structured workout. From there, every session is a conversation. Notch tells you what's next, you do it, and you check back in. Only got 6 reps instead of 8? Just say so — it adjusts and keeps going.
 
-HOW IT WORKS
-• Build your plan — write it yourself, generate one instantly with AI, or snap a photo of a printed program and Notch turns it into a real, trackable plan.
-• Train with a coach, not a stopwatch — Notch guides you through every exercise, set, and rest period in natural conversation, adjusting in real time to how you're actually performing.
-• Progressive overload, automatically — Notch tracks every rep and weight across sessions and nudges your loads up when you're ready.
-• Studio: AI-generated workouts — describe what you want (a 20-minute upper-body burnout, a 5-round circuit, a rep-ladder finisher) and Notch builds it, including per-side reps and rep ladders most trackers can't handle.
-• Track real progress — history, PRs, and trends in one place.
-• Make it yours — customize your coach's persona and tone.
+It remembers everything, so you don't have to. Every weight, every set, every session, ready before you walk in.
 
-Built for lifters who already train — Notch removes the friction of logging and planning so you can focus on the work.
+Built for gym and studio training
+Most apps handle one or the other. Notch handles both. Lifting sessions track weight and reps, the way you'd expect. Studio and functional classes get their own units — band colour, box height, metres, calories, reps per side, rep ladders across rounds — tracked the way your coach actually calls them out.
 
-Sign in with Apple or email. Your data is private and yours.
+How it works
+• Photograph a plan or a whiteboard — Notch reads it into a structured workout
+• Talk through every set, in plain language — confirm it, correct it, or just tell it what happened
+• Automatic progression, based on what you actually did last time
+• Full studio support — bands, boxes, distance, calories, rounds, per-side reps
+• Eight languages, including genuine right-to-left layouts for Hebrew and Arabic — the whole interface mirrors, not just the text
+
+Never train alone again.
 ```
+No pricing, no "AI-powered" lead, no trainer/medical substitute claim,
+sentence case throughout. Closing line reuses your own screenshot
+caption for consistency across the listing.
+
+⚠️ "Eight languages" assumes `pt`/`fr`/`it` land before submission —
+only `en`/`he`/`ar`/`de`/`es` exist in `apps/mobile/src/locales/` right
+now. Confirm those three ship, or trim the count and the language list
+in the last bullet before this goes live.
 
 ---
 
@@ -122,20 +149,40 @@ Comma-separated, no spaces (saves characters), nothing already in
 Name/Subtitle above — Apple's already indexed those words.
 
 ```
-tracker,trainer,personal,fitness,exercise,strength,lifting,rep,plan,hypertrophy,muscle,pr,routine
+tracker,trainer,personal,crossfit,wod,functional,circuit,strength,lifting,barbell,rep,hiit,pr,log
 ```
-97 chars.
+97 chars. Leans into the CrossFit/functional angle, which the big
+lifting-tracker apps (Strong, Hevy, JEFIT) mostly ignore — now that
+Studio training is a headline feature, not a footnote, that's real
+open ground.
 
 ⚠️ **This list depends on whatever you pick for Name/Subtitle above.**
-If you switch to one of the Name alternates (e.g. `AI Gym Coach -
-Notch`), re-add `workout` here and drop something to make room — the
-two fields are one keyword budget, not two.
+None of these words collide with any of the 4 subtitle options, so
+it's safe regardless of which you pick — but if you land on a
+different Name alternate, recheck for overlap before locking in.
 
 Also: add a localized keyword set for Hebrew (and Arabic, since both
 are supported locales per `apps/mobile/src/locales/`) — the guide's
 own data point is that secondary-language markets crack top-10 in
 ~6 months vs. ~1 year for the US, precisely because there's less
 competition validating the same terms.
+
+---
+
+## What's New (beta build)
+
+Not an ASC field on this PDF — lives in TestFlight's build notes. Kept
+generic since I don't have a specific changelog to attribute to a
+particular build; tell me which commits/features it should call out if
+you want it more specific.
+
+```
+Welcome to Notch, early access.
+
+You're one of the first people using this. It's not finished — some things will be rough, and that's exactly why you're here.
+
+Talk to your coach through a full session and see how it feels. If something's wrong, confusing, or just doesn't work, tell us — every bit of feedback shapes what we build next.
+```
 
 ---
 
