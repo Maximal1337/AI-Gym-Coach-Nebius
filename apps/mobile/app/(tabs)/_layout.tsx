@@ -35,7 +35,12 @@ function TabIcon({
           </View>
         )}
       </View>
-      <Text style={{ fontSize: 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft }}>
+      <Text
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+        style={{ fontSize: 10, fontWeight: '700', color: focused ? theme.accent : theme.inkSoft, maxWidth: 76 }}
+      >
         {label}
       </Text>
     </View>
