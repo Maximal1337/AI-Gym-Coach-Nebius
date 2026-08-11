@@ -9,6 +9,7 @@ import { LoadingOverlay } from '../src/components/LoadingOverlay';
 import { supabase } from '../src/lib/supabase';
 import { track } from '../src/lib/analytics';
 import { useLanguage } from '../src/lib/language';
+import { deviceUnits } from '../src/lib/units';
 import { useTheme, spacing } from '../src/theme';
 
 export default function OnboardingPersona() {
@@ -36,6 +37,7 @@ export default function OnboardingPersona() {
         tone_preset: 'friendly_casual',
         accountability_style: 'gentle',
         persona_freeform: null,
+        units: deviceUnits(),
       });
       track('onboarding_completed');
       router.replace('/');

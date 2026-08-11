@@ -305,10 +305,14 @@ export async function callAgent(
 
 /**
  * Camel-case a coach_profiles row into the agent's expected shape. `units`
- * is derived from the coach's own language, not a stored preference — 'en'
- * reads as imperial, 'he'/'ar' as metric, matching the client's identical
- * mapping (apps/mobile/src/lib/units.tsx) so a coach reply's phrasing
- * always agrees with what the screen displaying it shows.
+ * reads the stored `coach_profiles.units` column — NOT derived from
+ * language anymore (a prior version did `language === "en" ? imperial :
+ * metric`, which is wrong for English speakers outside the US: UK,
+ * Israel, India, etc. all use metric). The client sets this from the
+ * device's real measurement system at persona-creation time (see
+ * PersonaForm.tsx) and reads the same stored value back
+ * (apps/mobile/src/lib/units.tsx) so a coach reply's phrasing always
+ * agrees with what the screen displaying it shows.
  */
 export function profileToAgent(row: Record<string, unknown>) {
   return {
@@ -318,7 +322,7 @@ export function profileToAgent(row: Record<string, unknown>) {
     tonePreset: row.tone_preset,
     accountabilityStyle: row.accountability_style,
     personaFreeform: row.persona_freeform ?? null,
-    units: row.language === "en" ? "imperial" : "metric",
+    units: row.units === "imperial" ? "imperial" : "metric",
   };
 }
 

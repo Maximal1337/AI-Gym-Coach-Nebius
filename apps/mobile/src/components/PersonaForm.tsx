@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { supabase } from '../lib/supabase';
 import { registerPush } from '../lib/push';
 import { useLanguage } from '../lib/language';
+import { deviceUnits } from '../lib/units';
 import { useTheme, spacing, radius } from '../theme';
 
 const TONES = ['motivational_energetic', 'calm_precise', 'tough_love', 'friendly_casual'] as const;
@@ -72,6 +73,12 @@ export function PersonaForm({
       tone_preset: tone,
       accountability_style: acc,
       persona_freeform: freeform.trim() || null,
+      // From the device's actual measurement system, not the chosen
+      // language — an English-speaking user outside the US (Israel, UK,
+      // India, ...) still expects kg, not lbs. Re-sent on every edit too:
+      // harmless (same device, same value each time) since there's no
+      // manual override yet to accidentally clobber.
+      units: deviceUnits(),
     });
     setBusy(false);
     if (error) return Alert.alert(t('coachUnavailable'));

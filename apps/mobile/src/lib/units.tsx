@@ -1,7 +1,20 @@
-import { createContext, useContext, useMemo, type ReactNode } from 'react';
-import { useLanguage } from './language';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import * as Localization from 'expo-localization';
+import { supabase } from './supabase';
 
 export type UnitSystem = 'metric' | 'imperial';
+
+/** The device's own measurement system (iOS Settings > General > Language
+ * & Region > Measurement System) — independent of the app's chosen
+ * language, unlike the language itself. Only the US (and functionally
+ * Liberia/Myanmar, not worth special-casing) use imperial; everyone else,
+ * including English-speaking countries like the UK/Israel/India, is
+ * metric — deriving this from language instead of the device's real
+ * setting is what caused an English-speaking Israeli user to see lbs. */
+export function deviceUnits(): UnitSystem {
+  const system = Localization.getLocales()[0]?.measurementSystem;
+  return system === 'us' ? 'imperial' : 'metric';
+}
 
 const KG_TO_LB = 2.20462;
 const CM_TO_IN = 0.393701;
@@ -78,18 +91,32 @@ interface UnitsContextValue {
 const UnitsContext = createContext<UnitsContextValue | null>(null);
 
 /**
- * Units follow the app's language — no manual picker (a prior version had
- * one; removed since a per-user preference just duplicates what the
- * language choice already implies). 'en' reads as imperial, 'he'/'ar' as
- * metric — the same mapping the server side uses to phrase coach replies
- * (profileToAgent in supabase/functions/_shared/mod.ts), so a chat message
- * and the screen displaying it always agree on units.
+ * Reads the same `coach_profiles.units` column the server's
+ * profileToAgent() reads, so a chat message and the screen displaying it
+ * always agree — NOT derived from language (see deviceUnits()'s comment
+ * for why that was wrong). Falls back to the device's own measurement
+ * system for the brief window before this loads (or if there's no row
+ * yet, e.g. pre-onboarding) — PersonaForm.tsx is what actually persists
+ * the real value, at the same moment it creates/updates coach_profiles.
  */
 export function UnitsProvider({ children }: { children: ReactNode }) {
-  const { language } = useLanguage();
-  const units: UnitSystem = language === 'en' ? 'imperial' : 'metric';
-  const value = useMemo(() => ({ units }), [units]);
-  return <UnitsContext.Provider value={value}>{children}</UnitsContext.Provider>;
+  const [units, setUnits] = useState<UnitSystem>(deviceUnits());
+
+  useEffect(() => {
+    (async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      const userId = userData.user?.id;
+      if (!userId) return;
+      const { data } = await supabase
+        .from('coach_profiles')
+        .select('units')
+        .eq('user_id', userId)
+        .maybeSingle();
+      if (data?.units === 'imperial' || data?.units === 'metric') setUnits(data.units);
+    })();
+  }, []);
+
+  return <UnitsContext.Provider value={{ units }}>{children}</UnitsContext.Provider>;
 }
 
 export function useUnits(): UnitsContextValue {
