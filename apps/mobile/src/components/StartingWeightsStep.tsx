@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, ScrollView, Text, TextInput, View } from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { callFn } from '../lib/api';
@@ -156,7 +156,15 @@ export function StartingWeightsStep({
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    // No TouchableWithoutFeedback here (unlike DismissKeyboardView) — that's
+    // specifically what broke this screen's ScrollView when it used to be
+    // nested inside DismissKeyboardView (see PlanPreview.tsx's
+    // StartingWeightsCelebration doc comment for why it's rendered outside
+    // that wrapper now). KeyboardAvoidingView alone doesn't intercept touch,
+    // so it's safe to keep here — without it the numeric keypad just
+    // covered the last rows and the Continue/Skip buttons with no way to
+    // reach them short of dismissing the keyboard first.
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
       <LoadingOverlay visible={busy} object="plate" label={t('saving')} />
       <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
         <Text style={{ color: theme.ink, fontSize: 20, fontWeight: '800', letterSpacing: -0.3 }}>{t('startingTitle')}</Text>
@@ -202,6 +210,6 @@ export function StartingWeightsStep({
           {t('startingSkip')}
         </Button>
       </View>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
