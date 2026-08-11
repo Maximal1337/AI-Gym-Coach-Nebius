@@ -16,12 +16,17 @@ note on which to reach for first depending on how the bug was reported.
 
 ## Get a real auth token
 
-`supabase/functions/dev-test-login` is a dev-only instant-sign-in endpoint
-for exactly one hardcoded test account (`dor@test.com` at the time of
-writing — confirm the current `ALLOWED_EMAIL` in that file, don't assume).
-It's the same account the in-app dev sign-in button uses in Expo Go, so
-**data you see through it is very likely the user's own live test data, not
-throwaway fixtures** — see the caution below.
+`supabase/functions/dev-test-login` is a dev-only instant-sign-in endpoint.
+It now covers a small set of named test accounts, each reset to a
+deterministic state on every login (see the `dev-test-scenario-accounts`
+skill) — confirm the current `TEST_EMAILS` in that file, don't assume a
+single hardcoded address. `dor@test.com` (active trial) is the closest
+equivalent to "the user's regular test account" for reproducing an
+ordinary flow; `dor+expired@test.com` / `dor+new@test.com` reproduce
+specific paywall/onboarding states on demand instead. It's the same
+mechanism the in-app dev sign-in buttons use in Expo Go, so **data you see
+through `dor@test.com` in particular is very likely the user's own live
+test data, not throwaway fixtures** — see the caution below.
 
 ```bash
 SUPA_URL="https://pjaeqxgwrctwnvugsqlx.supabase.co"
