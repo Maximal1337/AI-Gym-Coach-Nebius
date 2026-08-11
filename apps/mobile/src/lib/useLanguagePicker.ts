@@ -2,7 +2,7 @@ import { ActionSheetIOS, Alert, Platform } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useLanguage, type AppLanguage } from './language';
 
-const LANGUAGES: AppLanguage[] = ['en', 'he', 'ar'];
+const LANGUAGES: AppLanguage[] = ['en', 'he', 'ar', 'es', 'de', 'pt', 'fr', 'it'];
 
 /** Opens the native list of languages (ActionSheetIOS on iOS) and applies the pick. */
 export function useLanguagePicker() {

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Pressable, ScrollView, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { useTranslation } from 'react-i18next';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,8 +9,10 @@ import { Badge } from '../src/components/Badge';
 import { deviceLanguage, useLanguage, type AppLanguage } from '../src/lib/language';
 import { useTheme, spacing, radius } from '../src/theme';
 
-const LANGUAGES: AppLanguage[] = ['en', 'he', 'ar'];
-const LANGUAGE_DIR: Record<AppLanguage, 'ltr' | 'rtl'> = { en: 'ltr', he: 'rtl', ar: 'rtl' };
+const LANGUAGES: AppLanguage[] = ['en', 'he', 'ar', 'es', 'de', 'pt', 'fr', 'it'];
+const LANGUAGE_DIR: Record<AppLanguage, 'ltr' | 'rtl'> = {
+  en: 'ltr', he: 'rtl', ar: 'rtl', es: 'ltr', de: 'ltr', pt: 'ltr', fr: 'ltr', it: 'ltr',
+};
 
 /**
  * "The explicit step" (guidelines/language-discovery.html) — the design
@@ -41,7 +43,7 @@ export default function OnboardingLanguage() {
 
   return (
     <Screen>
-      <View style={{ flex: 1, padding: spacing.lg, justifyContent: 'center' }}>
+      <ScrollView contentContainerStyle={{ flexGrow: 1, padding: spacing.lg, justifyContent: 'center' }}>
         <Text style={{ color: theme.ink, fontSize: 22, fontWeight: '800', textAlign: 'center', marginBottom: spacing.xs }}>
           {t('langChooseTitle')}
         </Text>
@@ -80,7 +82,7 @@ export default function OnboardingLanguage() {
         <Button block busy={busy} onPress={confirm} style={{ marginTop: spacing.lg }}>
           {t('continue')}
         </Button>
-      </View>
+      </ScrollView>
     </Screen>
   );
 }

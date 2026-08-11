@@ -14,7 +14,7 @@ import {
 const GOALS = ["strength", "hypertrophy", "general_fitness", "fat_loss"];
 const LEVELS = ["beginner", "intermediate", "advanced"];
 const GENDERS = ["male", "female", "other"];
-const LANGUAGES = ["en", "he", "ar"];
+const LANGUAGES = ["en", "he", "ar", "es", "de", "pt", "fr", "it"];
 
 /**
  * AI-generated training plans (System Design §21).

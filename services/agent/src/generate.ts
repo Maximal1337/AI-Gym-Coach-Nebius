@@ -17,7 +17,7 @@ import { costCents, type LlmUsage } from "./llm.js";
  * tool-calling loop to earn its cost on.
  */
 
-export const appLanguageSchema = z.enum(["en", "he", "ar"]);
+export const appLanguageSchema = z.enum(["en", "he", "ar", "es", "de", "pt", "fr", "it"]);
 export type AppLanguage = z.infer<typeof appLanguageSchema>;
 
 export const generatePlanInputSchema = z.object({
@@ -56,6 +56,11 @@ const LANGUAGE_NAMES: Record<AppLanguage, string> = {
   en: "English",
   he: "Hebrew",
   ar: "Arabic (Modern Standard Arabic)",
+  es: "Spanish",
+  de: "German",
+  pt: "Portuguese (Brazilian)",
+  fr: "French",
+  it: "Italian",
 };
 
 const GOAL_LABELS: Record<GeneratePlanInput["primaryGoal"], string> = {
@@ -88,6 +93,31 @@ const SPLIT_NAMES: Record<AppLanguage, { fullBody: [string, string]; upperLower:
     fullBody: ["تمرين كامل الجسم A", "تمرين كامل الجسم B"],
     upperLower: ["تمرين الجزء العلوي", "تمرين الجزء السفلي"],
     ppl: ["يوم الدفع", "يوم السحب", "يوم الأرجل"],
+  },
+  es: {
+    fullBody: ["Entrenamiento de Cuerpo Completo A", "Entrenamiento de Cuerpo Completo B"],
+    upperLower: ["Entrenamiento de Tren Superior", "Entrenamiento de Tren Inferior"],
+    ppl: ["Día de Empuje", "Día de Tracción", "Día de Piernas"],
+  },
+  de: {
+    fullBody: ["Ganzkörpertraining A", "Ganzkörpertraining B"],
+    upperLower: ["Oberkörper-Training", "Unterkörper-Training"],
+    ppl: ["Push-Tag", "Pull-Tag", "Beintag"],
+  },
+  pt: {
+    fullBody: ["Treino de Corpo Inteiro A", "Treino de Corpo Inteiro B"],
+    upperLower: ["Treino de Membros Superiores", "Treino de Membros Inferiores"],
+    ppl: ["Dia de Empurrar", "Dia de Puxar", "Dia de Pernas"],
+  },
+  fr: {
+    fullBody: ["Entraînement Corps Complet A", "Entraînement Corps Complet B"],
+    upperLower: ["Entraînement Haut du Corps", "Entraînement Bas du Corps"],
+    ppl: ["Jour Poussée", "Jour Tirage", "Jour Jambes"],
+  },
+  it: {
+    fullBody: ["Allenamento Total Body A", "Allenamento Total Body B"],
+    upperLower: ["Allenamento Parte Superiore", "Allenamento Parte Inferiore"],
+    ppl: ["Giorno Spinta", "Giorno Trazione", "Giorno Gambe"],
   },
 };
 
@@ -212,6 +242,181 @@ Target language for every name and text field: Arabic.`,
             { orderIndex: 4, name: "تمرين خلف الفخذ بالجهاز", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
             { orderIndex: 5, name: "رفع سمانة وقوف", sets: 3, repRange: "12-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
             { orderIndex: 6, name: "بلانك", sets: 3, repRange: "30-45 ثانية", restSec: 45, intensity: "قريب من الفشل", warmup: null, equipmentType: "bodyweight" },
+          ],
+        },
+      ],
+    }),
+  },
+  es: {
+    input: `Goal: muscle growth / hypertrophy (moderate reps, higher volume)
+Experience level: intermediate
+Days per week: 4 -> split: upper/lower, 2 plans named "Entrenamiento de Tren Superior" (upper) and "Entrenamiento de Tren Inferior" (lower)
+Volume rule: Compound lifts: 6-10 reps, 3-4 sets, rest 90-120s. Isolation: 8-15 reps, 3 sets, rest 60-90s.
+Gender: not given. Age: not given. Weight: not given. Height: not given.
+Injury notes: none.
+Target language for every name and text field: Spanish.`,
+    output: JSON.stringify({
+      plans: [
+        {
+          name: "Entrenamiento de Tren Superior",
+          exercises: [
+            { orderIndex: 1, name: "Press de Banca con Barra", sets: 4, repRange: "6-10", restSec: 120, intensity: "RPE 7-8", warmup: "2 series de calentamiento ligeras antes de la primera serie de trabajo", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Jalón al Pecho", sets: 4, repRange: "8-10", restSec: 90, intensity: "RPE 7-8", warmup: null, equipmentType: "cable" },
+            { orderIndex: 3, name: "Press de Hombros con Mancuernas", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 4, name: "Remo con Mancuerna a Una Mano", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 5, name: "Curl de Bíceps con Mancuernas", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 6, name: "Extensión de Tríceps en Polea", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "cable" },
+          ],
+        },
+        {
+          name: "Entrenamiento de Tren Inferior",
+          exercises: [
+            { orderIndex: 1, name: "Sentadilla con Barra", sets: 4, repRange: "6-10", restSec: 150, intensity: "RPE 7-8", warmup: "2-3 series de calentamiento ascendentes antes de la primera serie de trabajo", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Peso Muerto Rumano con Barra", sets: 3, repRange: "8-10", restSec: 120, intensity: "RPE 7-8", warmup: null, equipmentType: "barbell" },
+            { orderIndex: 3, name: "Prensa de Piernas", sets: 3, repRange: "10-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 4, name: "Máquina de Curl Femoral", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 5, name: "Elevación de Talones de Pie", sets: 3, repRange: "12-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 6, name: "Plancha", sets: 3, repRange: "30-45 seg", restSec: 45, intensity: "cerca del fallo", warmup: null, equipmentType: "bodyweight" },
+          ],
+        },
+      ],
+    }),
+  },
+  de: {
+    input: `Goal: muscle growth / hypertrophy (moderate reps, higher volume)
+Experience level: intermediate
+Days per week: 4 -> split: upper/lower, 2 plans named "Oberkörper-Training" (upper) and "Unterkörper-Training" (lower)
+Volume rule: Compound lifts: 6-10 reps, 3-4 sets, rest 90-120s. Isolation: 8-15 reps, 3 sets, rest 60-90s.
+Gender: not given. Age: not given. Weight: not given. Height: not given.
+Injury notes: none.
+Target language for every name and text field: German.`,
+    output: JSON.stringify({
+      plans: [
+        {
+          name: "Oberkörper-Training",
+          exercises: [
+            { orderIndex: 1, name: "Bankdrücken mit Langhantel", sets: 4, repRange: "6-10", restSec: 120, intensity: "RPE 7-8", warmup: "2 leichte Aufwärmsätze vor dem ersten Arbeitssatz", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Latzug", sets: 4, repRange: "8-10", restSec: 90, intensity: "RPE 7-8", warmup: null, equipmentType: "cable" },
+            { orderIndex: 3, name: "Schulterdrücken mit Kurzhanteln", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 4, name: "Einarmiges Kurzhantelrudern", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 5, name: "Bizepscurls mit Kurzhanteln", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 6, name: "Trizeps-Pushdown am Kabel", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "cable" },
+          ],
+        },
+        {
+          name: "Unterkörper-Training",
+          exercises: [
+            { orderIndex: 1, name: "Kniebeuge mit Langhantel", sets: 4, repRange: "6-10", restSec: 150, intensity: "RPE 7-8", warmup: "2-3 aufsteigende Aufwärmsätze vor dem ersten Arbeitssatz", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Rumänisches Kreuzheben mit Langhantel", sets: 3, repRange: "8-10", restSec: 120, intensity: "RPE 7-8", warmup: null, equipmentType: "barbell" },
+            { orderIndex: 3, name: "Beinpresse", sets: 3, repRange: "10-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 4, name: "Beinbeuger-Maschine", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 5, name: "Wadenheben im Stehen", sets: 3, repRange: "12-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 6, name: "Plank", sets: 3, repRange: "30-45 Sek.", restSec: 45, intensity: "nahe am Muskelversagen", warmup: null, equipmentType: "bodyweight" },
+          ],
+        },
+      ],
+    }),
+  },
+  pt: {
+    input: `Goal: muscle growth / hypertrophy (moderate reps, higher volume)
+Experience level: intermediate
+Days per week: 4 -> split: upper/lower, 2 plans named "Treino de Membros Superiores" (upper) and "Treino de Membros Inferiores" (lower)
+Volume rule: Compound lifts: 6-10 reps, 3-4 sets, rest 90-120s. Isolation: 8-15 reps, 3 sets, rest 60-90s.
+Gender: not given. Age: not given. Weight: not given. Height: not given.
+Injury notes: none.
+Target language for every name and text field: Portuguese (Brazilian).`,
+    output: JSON.stringify({
+      plans: [
+        {
+          name: "Treino de Membros Superiores",
+          exercises: [
+            { orderIndex: 1, name: "Supino Reto com Barra", sets: 4, repRange: "6-10", restSec: 120, intensity: "RPE 7-8", warmup: "2 séries leves de aquecimento antes da primeira série de trabalho", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Puxada Frontal", sets: 4, repRange: "8-10", restSec: 90, intensity: "RPE 7-8", warmup: null, equipmentType: "cable" },
+            { orderIndex: 3, name: "Desenvolvimento com Halteres", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 4, name: "Remada Unilateral com Halter", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 5, name: "Rosca Bíceps com Halteres", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 6, name: "Tríceps Corda na Polia", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "cable" },
+          ],
+        },
+        {
+          name: "Treino de Membros Inferiores",
+          exercises: [
+            { orderIndex: 1, name: "Agachamento Livre", sets: 4, repRange: "6-10", restSec: 150, intensity: "RPE 7-8", warmup: "2-3 séries de aquecimento crescentes antes da primeira série de trabalho", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Levantamento Terra Romeno com Barra", sets: 3, repRange: "8-10", restSec: 120, intensity: "RPE 7-8", warmup: null, equipmentType: "barbell" },
+            { orderIndex: 3, name: "Leg Press", sets: 3, repRange: "10-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 4, name: "Mesa Flexora", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 5, name: "Elevação de Panturrilha em Pé", sets: 3, repRange: "12-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 6, name: "Prancha", sets: 3, repRange: "30-45 seg", restSec: 45, intensity: "próximo da falha", warmup: null, equipmentType: "bodyweight" },
+          ],
+        },
+      ],
+    }),
+  },
+  fr: {
+    input: `Goal: muscle growth / hypertrophy (moderate reps, higher volume)
+Experience level: intermediate
+Days per week: 4 -> split: upper/lower, 2 plans named "Entraînement Haut du Corps" (upper) and "Entraînement Bas du Corps" (lower)
+Volume rule: Compound lifts: 6-10 reps, 3-4 sets, rest 90-120s. Isolation: 8-15 reps, 3 sets, rest 60-90s.
+Gender: not given. Age: not given. Weight: not given. Height: not given.
+Injury notes: none.
+Target language for every name and text field: French.`,
+    output: JSON.stringify({
+      plans: [
+        {
+          name: "Entraînement Haut du Corps",
+          exercises: [
+            { orderIndex: 1, name: "Développé Couché à la Barre", sets: 4, repRange: "6-10", restSec: 120, intensity: "RPE 7-8", warmup: "2 séries légères d'échauffement avant la première série de travail", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Tirage Vertical", sets: 4, repRange: "8-10", restSec: 90, intensity: "RPE 7-8", warmup: null, equipmentType: "cable" },
+            { orderIndex: 3, name: "Développé Épaules avec Haltères", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 4, name: "Rowing Unilatéral à l'Haltère", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 5, name: "Curl Biceps avec Haltères", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 6, name: "Extension Triceps à la Poulie", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "cable" },
+          ],
+        },
+        {
+          name: "Entraînement Bas du Corps",
+          exercises: [
+            { orderIndex: 1, name: "Squat à la Barre", sets: 4, repRange: "6-10", restSec: 150, intensity: "RPE 7-8", warmup: "2-3 séries d'échauffement croissantes avant la première série de travail", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Soulevé de Terre Roumain à la Barre", sets: 3, repRange: "8-10", restSec: 120, intensity: "RPE 7-8", warmup: null, equipmentType: "barbell" },
+            { orderIndex: 3, name: "Presse à Cuisses", sets: 3, repRange: "10-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 4, name: "Leg Curl à la Machine", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 5, name: "Mollets Debout", sets: 3, repRange: "12-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 6, name: "Gainage", sets: 3, repRange: "30-45 sec", restSec: 45, intensity: "proche de l'échec", warmup: null, equipmentType: "bodyweight" },
+          ],
+        },
+      ],
+    }),
+  },
+  it: {
+    input: `Goal: muscle growth / hypertrophy (moderate reps, higher volume)
+Experience level: intermediate
+Days per week: 4 -> split: upper/lower, 2 plans named "Allenamento Parte Superiore" (upper) and "Allenamento Parte Inferiore" (lower)
+Volume rule: Compound lifts: 6-10 reps, 3-4 sets, rest 90-120s. Isolation: 8-15 reps, 3 sets, rest 60-90s.
+Gender: not given. Age: not given. Weight: not given. Height: not given.
+Injury notes: none.
+Target language for every name and text field: Italian.`,
+    output: JSON.stringify({
+      plans: [
+        {
+          name: "Allenamento Parte Superiore",
+          exercises: [
+            { orderIndex: 1, name: "Panca Piana con Bilanciere", sets: 4, repRange: "6-10", restSec: 120, intensity: "RPE 7-8", warmup: "2 serie leggere di riscaldamento prima della prima serie di lavoro", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Lat Machine", sets: 4, repRange: "8-10", restSec: 90, intensity: "RPE 7-8", warmup: null, equipmentType: "cable" },
+            { orderIndex: 3, name: "Military Press con Manubri", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 4, name: "Rematore Monobraccio con Manubrio", sets: 3, repRange: "8-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 5, name: "Curl Bicipiti con Manubri", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "dumbbell" },
+            { orderIndex: 6, name: "Push Down Tricipiti ai Cavi", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "cable" },
+          ],
+        },
+        {
+          name: "Allenamento Parte Inferiore",
+          exercises: [
+            { orderIndex: 1, name: "Squat con Bilanciere", sets: 4, repRange: "6-10", restSec: 150, intensity: "RPE 7-8", warmup: "2-3 serie di riscaldamento crescenti prima della prima serie di lavoro", equipmentType: "barbell" },
+            { orderIndex: 2, name: "Stacco Rumeno con Bilanciere", sets: 3, repRange: "8-10", restSec: 120, intensity: "RPE 7-8", warmup: null, equipmentType: "barbell" },
+            { orderIndex: 3, name: "Leg Press", sets: 3, repRange: "10-12", restSec: 90, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 4, name: "Leg Curl", sets: 3, repRange: "10-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 5, name: "Calf Raise in Piedi", sets: 3, repRange: "12-15", restSec: 60, intensity: "RPE 7", warmup: null, equipmentType: "machine" },
+            { orderIndex: 6, name: "Plank", sets: 3, repRange: "30-45 sec", restSec: 45, intensity: "vicino al cedimento", warmup: null, equipmentType: "bodyweight" },
           ],
         },
       ],

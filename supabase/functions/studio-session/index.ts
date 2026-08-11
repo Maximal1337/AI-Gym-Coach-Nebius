@@ -472,7 +472,7 @@ const EQUIPMENT_OPTIONS = [
   "bodyweight", "dumbbells", "kettlebell", "barbell", "box",
   "jump_rope", "erg_bike_row", "wall_ball", "pull_up_bar",
 ];
-const GENERATE_LANGUAGES = ["en", "he", "ar"];
+const GENERATE_LANGUAGES = ["en", "he", "ar", "es", "de", "pt", "fr", "it"];
 
 function validateGenerateIntake(raw: unknown): Record<string, unknown> | null {
   if (!raw || typeof raw !== "object") return null;

@@ -60,6 +60,11 @@ const LANGUAGE_NAMES: Record<AppLanguage, string> = {
   en: "English",
   he: "Hebrew",
   ar: "Arabic (Modern Standard Arabic)",
+  es: "Spanish",
+  de: "German",
+  pt: "Portuguese (Brazilian)",
+  fr: "French",
+  it: "Italian",
 };
 
 const LEVEL_LABELS: Record<GenerateStudioInput["fitnessLevel"], string> = {
@@ -254,6 +259,196 @@ Target language for every name and text field: Arabic.`,
             },
             {
               name: "بيربيز", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: [6, 10, 14], tierIndex: 1, perSide: false, ladder: null }],
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  es: {
+    input: `Fitness level: intermediate (comfortable with the movements — moderate tiers, loads, and volume)
+Target duration: about 20 minutes total
+Available equipment: dumbbells, a jump rope (plus bodyweight, always available)
+Focus: conditioning (higher heart rate, shorter loaded movements, machines/bodyweight-heavy)
+Injury notes: none.
+Target language for every name and text field: Spanish.`,
+    output: JSON.stringify({
+      name: "Cuerda y Mancuernas",
+      scoreType: "amrap",
+      blocks: [
+        {
+          name: null,
+          formatType: "amrap",
+          formatParams: { cap: 20 },
+          formatCustom: null,
+          exercises: [
+            {
+              name: "Salto de Cuerda", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 50, tiers: [30, 50, 70], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Thrusters con Mancuernas", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 12, tiers: [8, 12, 16], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Zancadas Caminando", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: null, tierIndex: null, perSide: true, ladder: null }],
+            },
+            {
+              name: "Burpees", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: [6, 10, 14], tierIndex: 1, perSide: false, ladder: null }],
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  de: {
+    input: `Fitness level: intermediate (comfortable with the movements — moderate tiers, loads, and volume)
+Target duration: about 20 minutes total
+Available equipment: dumbbells, a jump rope (plus bodyweight, always available)
+Focus: conditioning (higher heart rate, shorter loaded movements, machines/bodyweight-heavy)
+Injury notes: none.
+Target language for every name and text field: German.`,
+    output: JSON.stringify({
+      name: "Seil & Kurzhanteln",
+      scoreType: "amrap",
+      blocks: [
+        {
+          name: null,
+          formatType: "amrap",
+          formatParams: { cap: 20 },
+          formatCustom: null,
+          exercises: [
+            {
+              name: "Seilspringen", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 50, tiers: [30, 50, 70], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Thrusters mit Kurzhanteln", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 12, tiers: [8, 12, 16], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Ausfallschritte im Gehen", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: null, tierIndex: null, perSide: true, ladder: null }],
+            },
+            {
+              name: "Burpees", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: [6, 10, 14], tierIndex: 1, perSide: false, ladder: null }],
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  pt: {
+    input: `Fitness level: intermediate (comfortable with the movements — moderate tiers, loads, and volume)
+Target duration: about 20 minutes total
+Available equipment: dumbbells, a jump rope (plus bodyweight, always available)
+Focus: conditioning (higher heart rate, shorter loaded movements, machines/bodyweight-heavy)
+Injury notes: none.
+Target language for every name and text field: Portuguese (Brazilian).`,
+    output: JSON.stringify({
+      name: "Corda e Halteres",
+      scoreType: "amrap",
+      blocks: [
+        {
+          name: null,
+          formatType: "amrap",
+          formatParams: { cap: 20 },
+          formatCustom: null,
+          exercises: [
+            {
+              name: "Pular Corda", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 50, tiers: [30, 50, 70], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Thruster com Halteres", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 12, tiers: [8, 12, 16], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Avanço Caminhando", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: null, tierIndex: null, perSide: true, ladder: null }],
+            },
+            {
+              name: "Burpees", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: [6, 10, 14], tierIndex: 1, perSide: false, ladder: null }],
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  fr: {
+    input: `Fitness level: intermediate (comfortable with the movements — moderate tiers, loads, and volume)
+Target duration: about 20 minutes total
+Available equipment: dumbbells, a jump rope (plus bodyweight, always available)
+Focus: conditioning (higher heart rate, shorter loaded movements, machines/bodyweight-heavy)
+Injury notes: none.
+Target language for every name and text field: French.`,
+    output: JSON.stringify({
+      name: "Corde et Haltères",
+      scoreType: "amrap",
+      blocks: [
+        {
+          name: null,
+          formatType: "amrap",
+          formatParams: { cap: 20 },
+          formatCustom: null,
+          exercises: [
+            {
+              name: "Corde à Sauter", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 50, tiers: [30, 50, 70], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Thrusters avec Haltères", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 12, tiers: [8, 12, 16], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Fentes en Marchant", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: null, tierIndex: null, perSide: true, ladder: null }],
+            },
+            {
+              name: "Burpees", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: [6, 10, 14], tierIndex: 1, perSide: false, ladder: null }],
+            },
+          ],
+        },
+      ],
+    }),
+  },
+  it: {
+    input: `Fitness level: intermediate (comfortable with the movements — moderate tiers, loads, and volume)
+Target duration: about 20 minutes total
+Available equipment: dumbbells, a jump rope (plus bodyweight, always available)
+Focus: conditioning (higher heart rate, shorter loaded movements, machines/bodyweight-heavy)
+Injury notes: none.
+Target language for every name and text field: Italian.`,
+    output: JSON.stringify({
+      name: "Corda e Manubri",
+      scoreType: "amrap",
+      blocks: [
+        {
+          name: null,
+          formatType: "amrap",
+          formatParams: { cap: 20 },
+          formatCustom: null,
+          exercises: [
+            {
+              name: "Salto con la Corda", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 50, tiers: [30, 50, 70], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Thruster con Manubri", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 12, tiers: [8, 12, 16], tierIndex: 1, perSide: false, ladder: null }],
+            },
+            {
+              name: "Affondi in Camminata", parseConfidence: null,
+              metrics: [{ unit: "reps", value: 10, tiers: null, tierIndex: null, perSide: true, ladder: null }],
+            },
+            {
+              name: "Burpees", parseConfidence: null,
               metrics: [{ unit: "reps", value: 10, tiers: [6, 10, 14], tierIndex: 1, perSide: false, ladder: null }],
             },
           ],

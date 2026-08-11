@@ -104,10 +104,10 @@ const MAX_TOOL_ITERATIONS = 6;
  * first came back in Hebrew regardless of the selected language, since
  * this was the one prompt component still hardcoded to one language).
  */
-type FewShotLang = "en" | "he" | "ar";
+type FewShotLang = "en" | "he" | "ar" | "es" | "de" | "pt" | "fr" | "it";
 
 function isFewShotLang(v: string): v is FewShotLang {
-  return v === "en" || v === "he" || v === "ar";
+  return v === "en" || v === "he" || v === "ar" || v === "es" || v === "de" || v === "pt" || v === "fr" || v === "it";
 }
 
 const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
@@ -320,6 +320,356 @@ const FEW_SHOT_BY_LANG: Record<FewShotLang, BaseMessageLike[]> = {
     new ToolMessage("Corrected ضغط الأرجل set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
     new ToolMessage("Corrected ضغط الأرجل set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
     new AIMessage("تم، صححت أرقام ضغط الأرجل — 12 كغ لـ 8، 7، و7 تكرارات. أخبرني بأرقامك في تمرين مطرقة الرجل بالجلوس عندما تكون جاهزًا! 💪"),
+  ],
+  es: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "recuérdame empujar hasta el final con el peso" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "Empujar hasta el final con el peso", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("¡Listo, lo anoté — te lo recordaré la próxima vez! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "la máquina de press de pecho inclinado se acaba de liberar" ("the incline chest machine just freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "Press de Pecho Inclinado con Mancuernas" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to Press de Pecho Inclinado con Mancuernas (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("¡Genial! Aprovechemos la oportunidad y volvamos al ejercicio que queríamos hacer antes: Press de Pecho Inclinado con Mancuernas. Tu objetivo: 21kg para 10, 10, 10 repeticiones 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "¿Listo para empezar?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg para 8, 8, 8 repeticiones. User message: "Sí" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("¡Vamos! 💪 Avísame cuando termines tu primera serie."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is Prensa de Piernas (Leg Press, nothing logged for it yet this session). The PREVIOUS exercise this session was Sentadilla Goblet (Goblet Squat), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "En sentadilla goblet hice 12kg por 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Sentadilla Goblet set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Sentadilla Goblet set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("Listo, corregí tus números de Sentadilla Goblet — 12kg para 8, 7 y 7 repeticiones. Ya que estás en Prensa de Piernas, ¡avísame tus números ahí cuando estés listo! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is Curl Femoral Sentado (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was Prensa de Piernas (Leg Press), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "espera, en el ejercicio anterior en realidad hice 8/7/7, no 8/8/8" — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Prensa de Piernas set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Prensa de Piernas set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("Listo, corregí tus números de Prensa de Piernas — 12kg para 8, 7 y 7 repeticiones. Cuando estés listo, ¡avísame tus números en Curl Femoral Sentado! 💪"),
+  ],
+  de: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "erinnere mich daran, bei dem Gewicht ganz durchzudrücken" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "Bei dem Gewicht ganz durchdrücken", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("Alles klar, notiert — ich erinnere dich beim nächsten Mal! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "die Schrägbankdrücken-Maschine ist gerade frei geworden" ("the incline chest machine just freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "Schrägbankdrücken mit Kurzhanteln" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to Schrägbankdrücken mit Kurzhanteln (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("Super! Dann nutzen wir die Gelegenheit und gehen zurück zu der Übung, die wir vorhin machen wollten: Schrägbankdrücken mit Kurzhanteln. Dein Ziel: 21kg für 10, 10, 10 Wiederholungen 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "Bereit anzufangen?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg für 8, 8, 8 Wiederholungen. User message: "Ja" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("Los geht's! 💪 Sag mir Bescheid, sobald du deinen ersten Satz fertig hast."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is Beinpresse (Leg Press, nothing logged for it yet this session). The PREVIOUS exercise this session was Goblet Squat, logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "beim Goblet Squat habe ich 12kg mit 8/7/7 gemacht" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Goblet Squat set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Goblet Squat set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("Alles klar, deine Goblet-Squat-Zahlen sind korrigiert — 12kg für 8, 7 und 7 Wiederholungen. Da du jetzt bei Beinpresse bist, sag mir Bescheid mit deinen Zahlen dort, wenn du bereit bist! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is Beinbeuger im Sitzen (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was Beinpresse (Leg Press), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "warte, bei der vorherigen Übung habe ich eigentlich 8/7/7 gemacht, nicht 8/8/8" ("wait, in the previous exercise I actually did 8/7/7, not 8/8/8") — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Beinpresse set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Beinpresse set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("Alles klar, deine Beinpresse-Zahlen sind korrigiert — 12kg für 8, 7 und 7 Wiederholungen. Sag mir Bescheid mit deinen Zahlen bei Beinbeuger im Sitzen, wenn du bereit bist! 💪"),
+  ],
+  pt: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "me lembra de empurrar até o fim com o peso" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "Empurrar até o fim com o peso", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("Beleza, anotei — vou te lembrar da próxima vez! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "a máquina de supino inclinado acabou de vagar" ("the incline chest machine just freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "Supino Inclinado com Halteres" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to Supino Inclinado com Halteres (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("Ótimo! Vamos aproveitar a oportunidade e voltar para o exercício que queríamos fazer antes: Supino Inclinado com Halteres. Sua meta: 21kg para 10, 10, 10 repetições 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "Pronto para começar?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg para 8, 8, 8 repetições. User message: "Sim" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("Vamos lá! 💪 Me avisa quando terminar sua primeira série."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is Leg Press (nothing logged for it yet this session). The PREVIOUS exercise this session was Agachamento Goblet (Goblet Squat), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "no agachamento goblet eu fiz 12kg em 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Agachamento Goblet set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Agachamento Goblet set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("Beleza, corrigi seus números de Agachamento Goblet — 12kg para 8, 7 e 7 repetições. Já que você está no Leg Press agora, me avisa seus números lá quando estiver pronto! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is Mesa Flexora (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was Leg Press, logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "espera, no exercício anterior eu na verdade fiz 8/7/7, não 8/8/8" ("wait, in the previous exercise I actually did 8/7/7, not 8/8/8") — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Leg Press set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Leg Press set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("Beleza, corrigi seus números de Leg Press — 12kg para 8, 7 e 7 repetições. Quando estiver pronto, me avisa seus números na Mesa Flexora! 💪"),
+  ],
+  fr: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "rappelle-moi de pousser jusqu\'au bout avec le poids" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "Pousser jusqu'au bout avec le poids", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("C'est noté — je te le rappellerai la prochaine fois ! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "la machine de développé incliné vient de se libérer" ("the incline chest machine just freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "Développé Incliné avec Haltères" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to Développé Incliné avec Haltères (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("Génial ! Profitons-en pour revenir à l'exercice qu'on voulait faire tout à l'heure : Développé Incliné avec Haltères. Ton objectif : 21kg pour 10, 10, 10 répétitions 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "Prêt à commencer ?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg pour 8, 8, 8 répétitions. User message: "Oui" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("C'est parti ! 💪 Dis-moi quand tu as fini ta première série."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is Presse à Cuisses (Leg Press, nothing logged for it yet this session). The PREVIOUS exercise this session was Squat Goblet (Goblet Squat), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "au squat goblet j\'ai fait 12kg à 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Squat Goblet set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Squat Goblet set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("C'est noté, j'ai corrigé tes chiffres du Squat Goblet — 12kg pour 8, 7 et 7 répétitions. Maintenant que tu es à la Presse à Cuisses, dis-moi tes chiffres là-bas quand tu es prêt ! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is Leg Curl Assis (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was Presse à Cuisses (Leg Press), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "attends, à l\'exercice précédent j\'ai en fait fait 8/7/7, pas 8/8/8" ("wait, in the previous exercise I actually did 8/7/7, not 8/8/8") — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Presse à Cuisses set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Presse à Cuisses set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("C'est noté, j'ai corrigé tes chiffres de la Presse à Cuisses — 12kg pour 8, 7 et 7 répétitions. Quand tu es prêt, dis-moi tes chiffres au Leg Curl Assis ! 💪"),
+  ],
+  it: [
+    [
+      "human",
+      'EXAMPLE (not the real conversation, just showing you the correct shape) — user message: "ricordami di spingere fino in fondo con il peso" — no numbers, purely a reminder request, even though a target was already suggested earlier. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_note_1", name: "saveNote", args: { text: "Spingere fino in fondo con il peso", general: false } },
+      ],
+    }),
+    new ToolMessage("Noted for future sessions.", "example_note_1", "saveNote"),
+    new AIMessage("Fatto, l'ho segnato — te lo ricorderò la prossima volta! 💪"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is a leg curl machine, nothing logged for it yet, and an incline chest press was deferred earlier this session. User message: "la macchina per la panca inclinata si è appena liberata" ("the incline chest machine just freed up") — a STATEMENT, not a direct command, but it clearly means "let\'s do that now instead." Decide what to do (remember: listAvailableExercises first, then switchToExercise with the real id it gives you — never narrate a switch that didn\'t actually succeed).',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_1", name: "listAvailableExercises", args: {} }],
+    }),
+    new ToolMessage(
+      'id: ex_incline_chest_press — "Panca Inclinata con Manubri" (previously deferred), 3 sets of 8-10 reps',
+      "example_switch_1",
+      "listAvailableExercises",
+    ),
+    new AIMessage({
+      content: "",
+      tool_calls: [{ id: "example_switch_2", name: "switchToExercise", args: { exerciseId: "ex_incline_chest_press" } }],
+    }),
+    new ToolMessage(
+      "Switching to Panca Inclinata con Manubri (coming back to a previously deferred exercise).\nStructure: 3 work sets, 8-10 reps, rest 120s.\nComputed target for today: 21kg, sets of 10, 10, 10 reps.",
+      "example_switch_2",
+      "switchToExercise",
+    ),
+    new AIMessage("Fantastico! Approfittiamone e torniamo all'esercizio che volevamo fare prima: Panca Inclinata con Manubri. Il tuo obiettivo: 21kg per 10, 10, 10 ripetizioni 🎯"),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: your own last message asked "Pronto per iniziare?" (a READINESS question, not a request to report back after the set), with a target already given: 60kg per 8, 8, 8 ripetizioni. User message: "Sì" — a bare confirmation, but it answers the readiness question, it does not report a completed set. Decide what to do.',
+    ],
+    new AIMessage("Andiamo! 💪 Fammi sapere quando finisci la prima serie."),
+    [
+      "human",
+      'EXAMPLE — a real production bug this fixes: the current exercise is Leg Press (nothing logged for it yet this session). The PREVIOUS exercise this session was Squat Goblet (Goblet Squat), logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "nello squat goblet ho fatto 12kg a 8/7/7" — this names a DIFFERENT exercise (Goblet Squat, not the current Leg Press) and corrects sets 2 and 3 from 8 reps to 7; set 1 is unchanged. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_1", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_2", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Squat Goblet set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_1", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Squat Goblet set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_2", "correctPreviousExerciseSet"),
+    new AIMessage("Fatto, ho corretto i tuoi numeri dello Squat Goblet — 12kg per 8, 7 e 7 ripetizioni. Dato che ora sei al Leg Press, fammi sapere i tuoi numeri lì quando sei pronto! 💪"),
+    [
+      "human",
+      'EXAMPLE — same bug, but a GENERIC reference instead of a named exercise: the current exercise is Leg Curl da Seduto (Seated Leg Curl, nothing logged for it yet this session). The PREVIOUS exercise this session was Leg Press, logged as set 1: 12kg x 8, set 2: 12kg x 8, set 3: 12kg x 8. User message: "aspetta, nell\'esercizio precedente ho fatto in realtà 8/7/7, non 8/8/8" ("wait, in the previous exercise I actually did 8/7/7, not 8/8/8") — no exercise named, but "the previous exercise" plainly means Leg Press, not the current Seated Leg Curl. Decide what to do.',
+    ],
+    new AIMessage({
+      content: "",
+      tool_calls: [
+        { id: "example_prevfix_3", name: "correctPreviousExerciseSet", args: { setNo: 2, weightKg: 12, reps: 7 } },
+        { id: "example_prevfix_4", name: "correctPreviousExerciseSet", args: { setNo: 3, weightKg: 12, reps: 7 } },
+      ],
+    }),
+    new ToolMessage("Corrected Leg Press set 2: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_3", "correctPreviousExerciseSet"),
+    new ToolMessage("Corrected Leg Press set 3: was 12kg × 8 reps, now 12kg × 7 reps.", "example_prevfix_4", "correctPreviousExerciseSet"),
+    new AIMessage("Fatto, ho corretto i tuoi numeri del Leg Press — 12kg per 8, 7 e 7 ripetizioni. Quando sei pronto, fammi sapere i tuoi numeri al Leg Curl da Seduto! 💪"),
   ],
 };
 

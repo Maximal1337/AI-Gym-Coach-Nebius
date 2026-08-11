@@ -42,6 +42,11 @@ const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
   he: "Hebrew",
   ar: "Arabic",
+  es: "Spanish",
+  de: "German",
+  pt: "Portuguese (Brazilian)",
+  fr: "French",
+  it: "Italian",
 };
 
 const TONE_DESCRIPTIONS: Record<CoachProfile["tonePreset"], string> = {

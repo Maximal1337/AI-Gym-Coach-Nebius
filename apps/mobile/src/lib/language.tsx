@@ -4,11 +4,11 @@ import * as Localization from 'expo-localization';
 import i18n from '../i18n';
 import { supabase } from './supabase';
 
-export type AppLanguage = 'en' | 'he' | 'ar';
+export type AppLanguage = 'en' | 'he' | 'ar' | 'es' | 'de' | 'pt' | 'fr' | 'it';
 export type Direction = 'ltr' | 'rtl';
 
 const RTL_LANGUAGES: AppLanguage[] = ['he', 'ar'];
-const VALID: AppLanguage[] = ['en', 'he', 'ar'];
+const VALID: AppLanguage[] = ['en', 'he', 'ar', 'es', 'de', 'pt', 'fr', 'it'];
 const STORAGE_KEY = 'notch:language';
 
 function isAppLanguage(v: unknown): v is AppLanguage {

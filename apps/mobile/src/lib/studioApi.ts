@@ -1,4 +1,5 @@
 import { ApiError, callFn } from './api';
+import type { AppLanguage } from './language';
 
 /**
  * Thin client for the `studio-session` Edge Function. Types here mirror the
@@ -74,7 +75,7 @@ export interface GenerateStudioIntake {
   customEquipment: string[];
   focus: 'conditioning' | 'strength' | 'mixed';
   injuryNotes: string | null;
-  language: 'en' | 'he' | 'ar';
+  language: AppLanguage;
 }
 
 export interface StudioCustomUnit {
