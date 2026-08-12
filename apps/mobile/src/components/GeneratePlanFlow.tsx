@@ -12,7 +12,10 @@ import type { StartingWeightsPlan } from './StartingWeightsStep';
 import { SketchLoader } from './SketchLoader';
 import { Field } from './Field';
 import { useLanguage } from '../lib/language';
-import { useUnits, parseWeightToKg, parseHeightToCm, weightUnitLabel } from '../lib/units';
+import {
+  useUnits, parseWeightToKg, parseHeightToCm, weightUnitLabel,
+  formatWeightKg, formatHeightForEntry,
+} from '../lib/units';
 import { track } from '../lib/analytics';
 import { useTheme, spacing, radius } from '../theme';
 
@@ -106,6 +109,31 @@ export function GeneratePlanFlow({
       }
     });
   }, [mode, t]);
+
+  // Prefill from what the user already told us — a returning account
+  // (mode 'add', or a re-run after onboarding filled these) has a
+  // fitness_profiles row, and re-typing age/weight/height every time was a
+  // beta complaint. New accounts just get no row and start blank. The
+  // choice steps still show these as selected so they're easy to change;
+  // weight/height come back in kg/cm and are converted into the current
+  // display unit, same as FitnessProfileForm.
+  useEffect(() => {
+    let cancelled = false;
+    supabase.from('fitness_profiles')
+      .select('primary_goal, experience_level, days_per_week, gender, age, weight_kg, height_cm')
+      .maybeSingle()
+      .then(({ data }) => {
+        if (cancelled || !data) return;
+        if (data.primary_goal) setPrimaryGoal(data.primary_goal as PrimaryGoal);
+        if (data.experience_level) setExperienceLevel(data.experience_level as ExperienceLevel);
+        if (data.days_per_week) setDaysPerWeek(data.days_per_week);
+        if (data.gender) setGender(data.gender as Gender);
+        if (data.age != null) setAge(String(data.age));
+        if (data.weight_kg != null) setWeightInput(String(formatWeightKg(data.weight_kg, units)));
+        if (data.height_cm != null) setHeightInput(formatHeightForEntry(data.height_cm, units));
+      });
+    return () => { cancelled = true; };
+  }, [units]);
 
   // Saved as soon as the user moves past this step (System Design §21) —
   // goal/experience/days are already chosen by now, so the row is valid
