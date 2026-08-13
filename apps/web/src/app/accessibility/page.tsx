@@ -8,7 +8,7 @@ import { LegalPage } from "@/components/LegalPage";
 const LAST_UPDATED_HE = "13 באוגוסט 2026";
 const LAST_UPDATED_EN = "August 13, 2026";
 const COORDINATOR = "Dor Haim Bobrutsky";
-const CONTACT_EMAIL = "dorhaimbob@gmail.com";
+const CONTACT_EMAIL = "notch.app.support@gmail.com";
 
 export const metadata: Metadata = {
   title: "הצהרת נגישות · Accessibility Statement — Notch",

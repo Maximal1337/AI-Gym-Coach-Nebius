@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { LegalPage } from "@/components/LegalPage";
 
 const EFFECTIVE_DATE = "August 13, 2026";
-const CONTACT_EMAIL = "dorhaimbob@gmail.com";
+const CONTACT_EMAIL = "notch.app.support@gmail.com";
 
 export const metadata: Metadata = {
   title: "Privacy Policy — Notch",

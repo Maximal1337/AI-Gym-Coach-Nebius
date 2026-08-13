@@ -371,8 +371,8 @@ export default function Home() {
           </div>
           <div className={styles.footerCol}>
             <div className={styles.footerColTitle}>{t.footContact}</div>
-            <a href="mailto:dorhaimbob@gmail.com" className={styles.footerLink}>
-              dorhaimbob@gmail.com
+            <a href="mailto:notch.app.support@gmail.com" className={styles.footerLink}>
+              notch.app.support@gmail.com
             </a>
           </div>
           <nav className={styles.footerCol} aria-label={t.footLegal}>
