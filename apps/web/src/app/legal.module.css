@@ -1,0 +1,273 @@
+/* Shared design for the legal pages (Privacy / Terms / Accessibility).
+   Single dark theme by design — matches the app's dark-only landing. */
+
+.page {
+  --ground: #0a0b0d;
+  --ground-raised: #15181d;
+  --ink: #f0f4f3;
+  --ink-body: #cfd6d3;
+  --ink-soft: #99a39e;
+  --accent: #62fc98;
+  --accent-strong: #a9ffc3;
+  --rule: #23272e;
+  --rule-strong: #333941;
+
+  --font-core: var(--legal-font), -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--legal-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  min-height: 100vh;
+  width: 100%;
+  overflow-x: hidden;
+  background:
+    radial-gradient(120% 60% at 50% -10%, rgba(98, 252, 152, 0.08), transparent 60%),
+    var(--ground);
+  color: var(--ink-body);
+  font-family: var(--font-core);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+}
+
+.page * {
+  box-sizing: border-box;
+}
+
+/* ---- Chrome (header/footer) stays LTR even on the RTL page ---- */
+
+.header {
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: clamp(20px, 4vw, 30px) clamp(20px, 5vw, 32px);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  text-decoration: none;
+  color: var(--ink);
+}
+
+.brandMark {
+  width: 34px;
+  height: 34px;
+  display: block;
+}
+
+.brandName {
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.backLink {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.backLink:hover {
+  color: var(--accent);
+}
+
+/* ---- Content column ---- */
+
+.body {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: clamp(16px, 4vw, 40px) clamp(20px, 5vw, 32px) 0;
+  flex: 1;
+}
+
+.kicker {
+  margin: 0 0 14px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.title {
+  margin: 0;
+  font-size: clamp(32px, 6vw, 46px);
+  line-height: 1.08;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+/* Short accent underline under the H1 — the page's one flourish. */
+.title::after {
+  content: "";
+  display: block;
+  width: 56px;
+  height: 4px;
+  margin-top: 20px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.page[dir="rtl"] .title::after {
+  margin-inline-start: 0;
+}
+
+.meta {
+  margin: 18px 0 0;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+/* ---- Prose ---- */
+
+.prose {
+  margin-top: 40px;
+  font-size: 16px;
+  line-height: 1.72;
+  color: var(--ink-body);
+}
+
+.prose > :global(p:first-child) {
+  font-size: 17.5px;
+  line-height: 1.65;
+  color: var(--ink);
+}
+
+.prose :global(h2) {
+  margin: 44px 0 14px;
+  padding-top: 26px;
+  border-top: 1px solid var(--rule);
+  font-size: clamp(19px, 3.4vw, 22px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+
+.prose :global(h3) {
+  margin: 30px 0 10px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.prose :global(p) {
+  margin: 0 0 14px;
+}
+
+.prose :global(ul) {
+  margin: 0 0 18px;
+  padding-inline-start: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prose :global(li) {
+  line-height: 1.62;
+}
+
+.prose :global(li)::marker {
+  color: var(--accent);
+}
+
+.prose :global(strong) {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.prose :global(em) {
+  color: var(--ink);
+  font-style: normal;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.prose :global(a) {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.prose :global(a):hover {
+  color: var(--accent-strong);
+}
+
+.prose :global(hr) {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 48px 0;
+}
+
+/* A soft framed block for a translated section (used on the a11y page). */
+.section + .section {
+  margin-top: 8px;
+}
+
+/* ---- Footer ---- */
+
+.footer {
+  margin-top: clamp(56px, 9vw, 88px);
+  border-top: 1px solid var(--rule);
+}
+
+.footerInner {
+  width: 100%;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 28px clamp(20px, 5vw, 32px) 40px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.footerCopy {
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.footerLinks {
+  display: flex;
+  gap: 20px;
+}
+
+.footerLink {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink-soft);
+  text-decoration: none;
+}
+
+.footerLink:hover {
+  color: var(--accent);
+}
+
+/* ---- Focus + motion ---- */
+
+.page a:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .page * {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
