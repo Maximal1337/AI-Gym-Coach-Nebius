@@ -66,8 +66,8 @@ const COPY: Record<Lang, Copy> = {
     h1b: "you talk to.",
     heroSub:
       "Bring a plan, or photograph one — a printed program, even a whiteboard — and Notch turns it into a real, structured workout. From there, every session is a conversation. Only got 6 reps instead of 8? Just say so — it adjusts and keeps going.",
-    badge: "Coming soon to the App Store",
-    betaNote: "In TestFlight beta — free during early access.",
+    badge: "Download on the App Store",
+    betaNote: "Free for your first month.",
     whatOverline: "What Notch is",
     whatBody:
       "It remembers everything, so you don't have to. Every weight, every set, every session, ready before you walk in.",
@@ -94,7 +94,7 @@ const COPY: Record<Lang, Copy> = {
     skipToContent: "Skip to main content",
     langGroupLabel: "Choose language",
     shotsRegionLabel: "App screenshots — scroll horizontally to see more",
-    footStatus: "Currently in TestFlight beta.",
+    footStatus: "Available on the App Store.",
     footContact: "Contact",
     footLegal: "Legal",
     privacy: "Privacy policy",
@@ -109,8 +109,8 @@ const COPY: Record<Lang, Copy> = {
     h1b: "שמדברים איתו.",
     heroSub:
       "הביאו תוכנית, או צלמו אחת — תוכנית מודפסת, אפילו לוח מחיק — ו-Notch יהפוך אותה לאימון אמיתי ומסודר. משם, כל אימון הוא שיחה. יצאו 6 חזרות במקום 8? פשוט תגידו — הוא מתאים את עצמו וממשיך.",
-    badge: "בקרוב ב-App Store",
-    betaNote: "בבטא ב-TestFlight — חינם בתקופת ההשקה.",
+    badge: "הורידו מ-App Store",
+    betaNote: "חודש ראשון חינם.",
     whatOverline: "מה זה Notch",
     whatBody: "הוא זוכר הכול, כדי שאתם לא תצטרכו. כל משקל, כל סט, כל אימון — מוכן לפני שנכנסתם לחדר.",
     howOverline: "איך זה עובד",
@@ -136,7 +136,7 @@ const COPY: Record<Lang, Copy> = {
     skipToContent: "דלגו לתוכן הראשי",
     langGroupLabel: "בחירת שפה",
     shotsRegionLabel: "צילומי מסך מהאפליקציה — גללו לצדדים לצפייה בעוד",
-    footStatus: "כרגע בבטא ב-TestFlight.",
+    footStatus: "זמין ב-App Store.",
     footContact: "יצירת קשר",
     footLegal: "משפטי",
     privacy: "מדיניות פרטיות",
@@ -145,6 +145,8 @@ const COPY: Record<Lang, Copy> = {
     copyright: "© 2026 Dor Haim Bobrutsky. התוכניות נוצרות על ידי AI — מומלץ לעבור עליהן עם מאמן מוסמך לפני שמתחילים.",
   },
 };
+
+const APP_STORE_URL = "https://apps.apple.com/app/id6795972467";
 
 const HERO_SHOT = { src: "/hero-coach-chat.png", width: 1242, height: 1882 };
 
@@ -247,10 +249,15 @@ export default function Home() {
           </h1>
           <p className={styles.heroSub}>{t.heroSub}</p>
           <div className={styles.heroActions}>
-            <div className={styles.badge}>
+            <a
+              className={styles.badge}
+              href={APP_STORE_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               <AppleMark />
               <span className={styles.badgeText}>{t.badge}</span>
-            </div>
+            </a>
             <span className={styles.betaNote}>{t.betaNote}</span>
           </div>
         </div>

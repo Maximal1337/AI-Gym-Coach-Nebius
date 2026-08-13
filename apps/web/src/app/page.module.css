@@ -219,12 +219,23 @@
   border-radius: 24px;
   background: var(--surface-raised);
   border: 1px solid var(--border-hairline);
+  text-decoration: none;
+  color: var(--text-primary);
+  transition: background 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    border-color 160ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.badge:hover {
+  background: var(--ground-400);
+  border-color: var(--border-control);
+  color: var(--text-primary);
 }
 
 .badgeText {
   font-size: 14px;
   font-weight: 600;
   white-space: nowrap;
+  color: var(--text-primary);
 }
 
 .betaNote {
