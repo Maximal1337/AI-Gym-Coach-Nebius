@@ -52,7 +52,7 @@ export default function Terms() {
         <p>
           You're responsible for keeping your account credentials secure and
           for all activity under your account. Tell us right away at{" "}
-          <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: t.accent }}>
+          <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: "#2F5D00", textDecoration: "underline" }}>
             {CONTACT_EMAIL}
           </a>{" "}
           if you suspect unauthorized use.
@@ -64,7 +64,7 @@ export default function Terms() {
           workout data you provide. By using Notch, you let us process that
           content — including sending it to our AI provider — to generate
           coaching replies and track your progress, as described in our{" "}
-          <a href="/privacy" style={{ color: t.accent }}>
+          <a href="/privacy" style={{ color: "#2F5D00", textDecoration: "underline" }}>
             Privacy Policy
           </a>
           . Don't submit content that's illegal, infringes someone else's
@@ -92,12 +92,41 @@ export default function Terms() {
           accessible, whether or not you're subscribed.
         </p>
 
+        <h2>Cancellation &amp; refunds</h2>
+        <p>
+          You can cancel your subscription at any time from your device
+          Settings ({" "}
+          <em>Apple ID → Subscriptions</em>). Cancellation stops the next
+          renewal; you keep access until the end of the period you've
+          already paid for. Because all payments are processed by Apple, not
+          by us, refund requests are handled by Apple under its refund
+          policy — you can request one at{" "}
+          <a
+            href="https://reportaproblem.apple.com"
+            style={{ color: "#2F5D00", textDecoration: "underline" }}
+          >
+            reportaproblem.apple.com
+          </a>
+          . In addition, if you're a consumer in Israel, you may have a
+          right to cancel the transaction under the Consumer Protection Law,
+          5741-1981, including the cooling-off period for online (distance)
+          transactions. To exercise that right or ask about a refund,
+          contact us at{" "}
+          <a
+            href={`mailto:${CONTACT_EMAIL}`}
+            style={{ color: "#2F5D00", textDecoration: "underline" }}
+          >
+            {CONTACT_EMAIL}
+          </a>{" "}
+          and we'll help.
+        </p>
+
         <h2>Third-party services</h2>
         <p>
           Notch relies on third-party services to operate — including
           Supabase, Google Gemini, PostHog, Sentry, and Apple/Expo's push
           notification services, as described in our{" "}
-          <a href="/privacy" style={{ color: t.accent }}>
+          <a href="/privacy" style={{ color: "#2F5D00", textDecoration: "underline" }}>
             Privacy Policy
           </a>
           . We aren't responsible for outages or issues caused by these
@@ -138,7 +167,7 @@ export default function Terms() {
         <h2>Contact</h2>
         <p>
           Questions about these Terms:{" "}
-          <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: t.accent }}>
+          <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: "#2F5D00", textDecoration: "underline" }}>
             {CONTACT_EMAIL}
           </a>
         </p>

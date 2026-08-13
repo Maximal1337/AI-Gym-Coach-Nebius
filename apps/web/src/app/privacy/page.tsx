@@ -97,7 +97,7 @@ export default function Privacy() {
         <h2>Contact</h2>
         <p>
           Questions about this policy or your data:{" "}
-          <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: t.accent }}>
+          <a href={`mailto:${CONTACT_EMAIL}`} style={{ color: "#2F5D00", textDecoration: "underline" }}>
             {CONTACT_EMAIL}
           </a>
         </p>
