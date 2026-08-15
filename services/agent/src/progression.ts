@@ -14,6 +14,17 @@ import type { EquipmentType, Exercise, SetLog } from "@gymcoach/shared";
  *    "not enough". So: first set at/above ceiling -> increase weight
  *    (equipment-appropriate jump, see incrementForEquipment) and reset
  *    toward the bottom of the range.
+ *  - That "first set only" shortcut assumes a real range, where clearing
+ *    the ceiling means genuinely maxing out the intended band. It breaks
+ *    for a exercise whose repRange is a single fixed number (e.g. "8" —
+ *    a to-failure target, min===max after parsing): reaching that number
+ *    by even one rep on the freshest set isn't the same signal as
+ *    decisively clearing a real ceiling, since to-failure rep counts are
+ *    naturally variable set to set. A user who does 84kg for 12/10/9
+ *    against an "8 reps to failure" target shouldn't get bumped to
+ *    91kg x 8,8,8 on the strength of the first set alone if the other
+ *    two hadn't also cleared it — so for a fixed-number target, ALL
+ *    logged sets at the top weight must clear it, not just the first.
  *  - Otherwise keep the weight and target +1 rep on sets below the
  *    ceiling — a set that already independently reached the ceiling
  *    holds there rather than being walked backward.
@@ -119,8 +130,12 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
 
   const topWeightSets = ordered.filter((l) => l.weightKg === topWeight);
 
-  const readyForMoreWeight =
-    topWeightSets.length >= exercise.sets && (topWeightSets[0]?.reps ?? 0) >= max;
+  // Fixed target (min===max, e.g. "8 reps to failure") needs every set to
+  // clear it — a single early clear on the freshest set isn't the same
+  // signal as it is for a real range's ceiling (see the comment above).
+  const readyForMoreWeight = min === max
+    ? topWeightSets.length >= exercise.sets && topWeightSets.every((l) => l.reps >= max)
+    : topWeightSets.length >= exercise.sets && (topWeightSets[0]?.reps ?? 0) >= max;
 
   if (readyForMoreWeight) {
     // Ready to move the WHOLE exercise up together — every set (including

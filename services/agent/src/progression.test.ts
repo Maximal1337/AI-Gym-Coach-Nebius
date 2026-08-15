@@ -106,6 +106,33 @@ test("real regression: 12/11/7 against a 6-10 range increases weight, not a lowe
   assert.deepEqual(t.targetWeights, [57, 57, 57]);
 });
 
+test("fixed rep target (min===max, a 'reps to failure' plan, not a real range): all sets clearing it increases weight, same as a real ceiling", () => {
+  // User-reported scenario: 84kg for 12/10/9 against an exercise whose
+  // repRange is the single number "8" (a to-failure target). All three
+  // sets cleared 8, so bumping weight is the right call here — this
+  // pins down that the fix below doesn't break the case it was actually
+  // meant to still handle correctly.
+  const toFailure: Exercise = { ...exercise, repRange: "8" };
+  const t = suggestTargets(toFailure, logs([[84, 12], [84, 10], [84, 9]]));
+  assert.equal(t.reason, "increase_weight");
+  assert.equal(t.suggestedWeightKg, 84 + incrementForEquipment("machine", 84));
+  assert.deepEqual(t.targetReps, [8, 8, 8]);
+  assert.deepEqual(t.targetWeights, [91, 91, 91]);
+});
+
+test("fixed rep target: only the FIRST set clearing it must not alone trigger a weight increase (the actual bug)", () => {
+  // Same "8 reps to failure" plan, but this time only the freshest set
+  // cleared 8 — sets 2-3 didn't. For a real range, "first set clears the
+  // ceiling" is enough (later sets fatiguing is expected). For a fixed
+  // to-failure target it isn't: one early clear on a naturally variable
+  // to-failure count doesn't mean the weight's outgrown, so this must
+  // fall through to the ordinary +1-nudge path instead of jumping weight.
+  const toFailure: Exercise = { ...exercise, repRange: "8" };
+  const t = suggestTargets(toFailure, logs([[84, 12], [84, 7], [84, 6]]));
+  assert.notEqual(t.reason, "increase_weight");
+  assert.equal(t.suggestedWeightKg, 84);
+});
+
 test("a non-first set that independently exceeded ceiling holds there, not reduced, even when weight doesn't increase", () => {
   // First set (6) is below ceiling, so overall we're not ready for more
   // weight yet — but set 3 (11) already passed the ceiling on its own
