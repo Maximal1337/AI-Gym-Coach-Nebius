@@ -13,6 +13,20 @@ const REVENUECAT_API_KEY_IOS = process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS;
 export const purchasesConfigured = !!REVENUECAT_API_KEY_IOS;
 
 /**
+ * Global kill switch for the paywall — everyone gets full access, no trial
+ * clock, no "subscribe" prompts anywhere, until this is turned back off.
+ * Mirrored server-side by subscriptionAccess() in
+ * supabase/functions/_shared/mod.ts, which reads the equivalent
+ * SUBSCRIPTION_PAUSED Supabase secret — that's the real enforcement
+ * boundary; this is what keeps the client UI (redirects, banners, the
+ * Settings row) from showing a paywall the server wouldn't back up
+ * anyway. Both have to be flipped together (`eas env` for this one,
+ * `supabase secrets set` for the other) since they're two separate
+ * deploy targets — there's no single switch that reaches both.
+ */
+export const SUBSCRIPTION_PAUSED = process.env.EXPO_PUBLIC_SUBSCRIPTION_PAUSED === 'true';
+
+/**
  * Call once per app launch after the Supabase session resolves (see
  * app/index.tsx, alongside registerPush) — same fire-and-forget,
  * idempotent-on-repeat-launch shape. appUserID is the Supabase user id so
@@ -47,7 +61,7 @@ export async function restore(): Promise<boolean> {
 }
 
 export type AccessStatus = {
-  status: 'trialing' | 'active' | 'canceled' | 'expired';
+  status: 'trialing' | 'active' | 'canceled' | 'expired' | 'paused';
   entitled: boolean;
   trialEndsAt: string | null;
   subscriptionExpiresAt: string | null;
@@ -64,6 +78,9 @@ export type AccessStatus = {
  * this can lag it by as much as a webhook round-trip.
  */
 export async function fetchAccessStatus(): Promise<AccessStatus> {
+  if (SUBSCRIPTION_PAUSED) {
+    return { status: 'paused', entitled: true, trialEndsAt: null, subscriptionExpiresAt: null, daysLeftInTrial: 0 };
+  }
   const { data } = await supabase
     .from('users')
     .select('subscription_status, trial_ends_at, subscription_expires_at')

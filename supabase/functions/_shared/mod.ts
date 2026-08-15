@@ -134,6 +134,14 @@ export async function subscriptionAccess(
   db: SupabaseClient,
   userId: string,
 ): Promise<{ ok: boolean; status: string; trialEndsAt: string | null }> {
+  // Global kill switch (Supabase secret, not a per-row column): the app
+  // launched free, no paywall yet — everyone is entitled regardless of
+  // trial/subscription state until this is turned back off. Mirrored
+  // client-side by SUBSCRIPTION_PAUSED in apps/mobile/src/lib/subscription.ts
+  // for UI purposes, but this check is the actual enforcement boundary.
+  if (Deno.env.get("SUBSCRIPTION_PAUSED") === "true") {
+    return { ok: true, status: "paused", trialEndsAt: null };
+  }
   const { data } = await db
     .from("users")
     .select("subscription_status, trial_ends_at, subscription_expires_at")
