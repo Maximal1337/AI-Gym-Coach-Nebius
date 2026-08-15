@@ -90,6 +90,25 @@ export function formatHistory(logs: SetLog[], units: UnitSystem): string {
 }
 
 /**
+ * Compact one-line form of formatHistory, mirroring formatTargets' own
+ * "uniform weight" collapsing — meant to sit directly next to
+ * formatTargets' output in a prompt instruction so the two numbers are
+ * trivial for the model to restate side by side (e.g. "last time 84kg,
+ * sets of 12, 10, 9 reps — today's target 91kg, sets of 8, 8, 8 reps").
+ * formatHistory's multi-line/per-set form stays available in context for
+ * anything needing finer detail (a note on one specific set, etc.); this
+ * is only for the guaranteed last-time/today pairing in the closing
+ * instruction of each "introduce this exercise" prompt builder below.
+ */
+export function formatHistorySummary(logs: SetLog[], units: UnitSystem): string {
+  if (logs.length === 0) return "no previous data for this exercise";
+  const ordered = [...logs].sort((a, b) => a.setNo - b.setNo);
+  const uniform = ordered.every((l) => l.weightKg === ordered[0].weightKg);
+  if (uniform) return `${formatWeightForPrompt(ordered[0].weightKg, units)}, sets of ${ordered.map((l) => l.reps).join(", ")} reps`;
+  return ordered.map((l) => `${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}`).join(", ");
+}
+
+/**
  * Describes a non-baseline Targets as a single line for the prompt. Most
  * sets share one suggested weight, so the common case stays the terse
  * "Xkg, sets of Y, Y, Y reps" — but a set carried on its own track (e.g. a
@@ -104,6 +123,24 @@ export function formatTargets(targets: Targets, units: UnitSystem): string {
   const uniform = targetWeights.every((w) => w === targetWeights[0]);
   if (uniform) return `${formatWeightForPrompt(targetWeights[0], units)}, sets of ${targetReps.join(", ")} reps`;
   return targetReps.map((r, i) => `set ${i + 1}: ${formatWeightForPrompt(targetWeights[i], units)} x ${r} reps`).join(", ");
+}
+
+/**
+ * The "here's the target" line shared by every prompt builder that
+ * introduces an exercise (buildTurnPrompt, buildConfirmPrompt's and
+ * buildOrchestrationIntroPrompt's next-exercise branches, and
+ * buildConversationPrompt's). Used to live as four independent
+ * near-copies — which is exactly how buildConversationPrompt's copy
+ * went stale (missing the mandatory last-time/target pairing) when the
+ * other three were strengthened separately. One shared source means a
+ * future wording change, or a new call site, can't silently diverge
+ * like that again.
+ */
+function targetLine(targets: Targets, lastLogs: SetLog[], units: UnitSystem): string {
+  if (targets.reason === "baseline") {
+    return "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime.";
+  }
+  return `Computed target for today (already validated, present it as the goal): ${formatTargets(targets, units)}. You MUST state last time's numbers AND today's target side by side, so the user can see the two compared at a glance — never present the target alone: "last time ${formatHistorySummary(lastLogs, units)} — today's target ${formatTargets(targets, units)}" (translated into the reply's language, phrased in your own coaching voice, not copied verbatim).`;
 }
 
 export function buildTurnPrompt(
@@ -123,6 +160,9 @@ export function buildTurnPrompt(
       "",
     );
   }
+  const targetLineText = targets.reason === "baseline"
+    ? targetLine(targets, lastLogs, units)
+    : `${targetLine(targets, lastLogs, units)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"})`;
   lines.push(
     `Current exercise: ${exercise.name}`,
     `Structure: ${exercise.sets} work sets, ${exercise.repRange} reps, rest ${exercise.restSec}s, intensity: ${exercise.intensity}.`,
@@ -131,16 +171,16 @@ export function buildTurnPrompt(
     "Last time:",
     formatHistory(lastLogs, units),
     "",
-    targets.reason === "baseline"
-      ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${formatTargets(targets, units)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
+    targetLineText,
   );
   if (notes.length > 0) {
     lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
   }
   lines.push(
     "",
-    "Write the coaching message for this exercise: last time's numbers, today's target, intensity and rest. End by asking the user to report back after the set.",
+    targets.reason === "baseline"
+      ? "Write the coaching message for this exercise: ask for a starting weight as instructed above, plus intensity and rest. End by asking the user to report back after the set."
+      : "Write the coaching message for this exercise, following the last-time/today's-target instruction above exactly, plus intensity and rest. End by asking the user to report back after the set.",
   );
   return lines.join("\n");
 }
@@ -181,9 +221,7 @@ export function buildConfirmPrompt(params: {
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
       formatHistory(nextLastLogs, units),
-      nextTargets.reason === "baseline"
-        ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
+      targetLine(nextTargets, nextLastLogs, units),
     );
     if (nextNotes.length > 0) lines.push("", "Saved notes about the next exercise:", ...nextNotes.map((n) => `- ${n}`));
   } else {
@@ -224,9 +262,7 @@ export function buildOrchestrationIntroPrompt(params: {
     nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
     "Last time on this exercise:",
     formatHistory(nextLastLogs, units),
-    nextTargets.reason === "baseline"
-      ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
+    targetLine(nextTargets, nextLastLogs, units),
   ];
   if (nextNotes.length > 0) lines.push("", "Saved notes about this exercise:", ...nextNotes.map((n) => `- ${n}`));
   lines.push(
@@ -338,9 +374,7 @@ export function buildConversationPrompt(params: {
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
       formatHistory(nextLastLogs, units),
-      nextTargets.reason === "baseline"
-        ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
+      targetLine(nextTargets, nextLastLogs, units),
     );
   } else if (!nextExercise) {
     lines.push(
