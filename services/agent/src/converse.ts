@@ -719,6 +719,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     nextExercise: input.nextExercise,
     nextTargets: defaultNextTargets,
     nextLastLogs: input.nextLastLogs,
+    nextNotes: input.nextNotes,
     previousExercise: input.previousExercise,
     previousExerciseLogs: input.previousExerciseLogs,
     units: input.profile.units,

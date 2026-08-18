@@ -143,6 +143,26 @@ function targetLine(targets: Targets, lastLogs: SetLog[], units: UnitSystem): st
   return `Computed target for today (already validated, present it as the goal): ${formatTargets(targets, units)}. You MUST state last time's numbers AND today's target side by side, so the user can see the two compared at a glance — never present the target alone: "last time ${formatHistorySummary(lastLogs, units)} — today's target ${formatTargets(targets, units)}" (translated into the reply's language, phrased in your own coaching voice, not copied verbatim).`;
 }
 
+/**
+ * "Saved notes" block shared across every prompt builder that lists an
+ * exercise's (or the whole plan's — a general note has exercise_id
+ * null, see notesForExercise) saved coach notes. Listing them as inert
+ * context isn't enough: a general plan-wide note (a "warm up before
+ * training" reminder is the canonical example) only helps the user if
+ * it's actually SAID, not just sitting in the model's context for it to
+ * maybe act on. Returns [] (a no-op when spread into lines.push) when
+ * there's nothing to say.
+ */
+function notesBlock(label: string, notes: string[]): string[] {
+  if (notes.length === 0) return [];
+  return [
+    "",
+    `${label}:`,
+    ...notes.map((n) => `- ${n}`),
+    "You MUST work every one of these notes into your reply — a saved note (a warm-up reminder, a technique cue, anything else saved here) only does its job if it's actually said, not left implicit. Say it naturally, in your own coaching voice, not copied verbatim.",
+  ];
+}
+
 export function buildTurnPrompt(
   exercise: Exercise,
   lastLogs: SetLog[],
@@ -173,9 +193,7 @@ export function buildTurnPrompt(
     "",
     targetLineText,
   );
-  if (notes.length > 0) {
-    lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
-  }
+  lines.push(...notesBlock("Saved notes about this exercise", notes));
   lines.push(
     "",
     targets.reason === "baseline"
@@ -209,7 +227,7 @@ export function buildConfirmPrompt(params: {
   const lines: string[] = [
     `The user just confirmed they completed ${exercise.name}: ${setsDesc}. This came from a quick-confirm UI button, not typed text — there is nothing to interpret or extract, these numbers are already final and logged. Restate them exactly; never alter them.`,
   ];
-  if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
+  lines.push(...notesBlock("Saved notes about this exercise", notes));
   lines.push("", "Write a short, encouraging acknowledgment of what was just done.");
   if (nextExercise && nextTargets) {
     lines.push(
@@ -222,8 +240,8 @@ export function buildConfirmPrompt(params: {
       "Last time on this exercise:",
       formatHistory(nextLastLogs, units),
       targetLine(nextTargets, nextLastLogs, units),
+      ...notesBlock("Saved notes about the next exercise", nextNotes),
     );
-    if (nextNotes.length > 0) lines.push("", "Saved notes about the next exercise:", ...nextNotes.map((n) => `- ${n}`));
   } else {
     lines.push(
       "",
@@ -263,8 +281,8 @@ export function buildOrchestrationIntroPrompt(params: {
     "Last time on this exercise:",
     formatHistory(nextLastLogs, units),
     targetLine(nextTargets, nextLastLogs, units),
+    ...notesBlock("Saved notes about this exercise", nextNotes),
   ];
-  if (nextNotes.length > 0) lines.push("", "Saved notes about this exercise:", ...nextNotes.map((n) => `- ${n}`));
   lines.push(
     "",
     "Do not use any wrap-up/completion language — there is more workout left right now.",
@@ -298,6 +316,7 @@ export function buildConversationPrompt(params: {
   nextExercise: Exercise | null;
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
+  nextNotes: string[];
   /** The exercise (if any) most recently logged this session before the current one — see correctPreviousExerciseSet. */
   previousExercise: Exercise | null;
   previousExerciseLogs: SetLog[];
@@ -305,7 +324,7 @@ export function buildConversationPrompt(params: {
 }): string {
   const {
     exercise, lastLogs, notes, userMessage, recentHistory,
-    currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs,
+    currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs, nextNotes,
     previousExercise, previousExerciseLogs, units,
   } = params;
   const lines: string[] = [
@@ -327,7 +346,7 @@ export function buildConversationPrompt(params: {
       ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `set ${l.setNo}: ${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}`).join(", ")}.`
       : `Nothing logged yet this session for this exercise (0 of ${exercise.sets} work sets).`,
   );
-  if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
+  lines.push(...notesBlock("Saved notes about this exercise", notes));
   if (previousExercise) {
     lines.push(
       "",
@@ -375,6 +394,7 @@ export function buildConversationPrompt(params: {
       "Last time on this exercise:",
       formatHistory(nextLastLogs, units),
       targetLine(nextTargets, nextLastLogs, units),
+      ...notesBlock("Saved notes about the next exercise", nextNotes),
     );
   } else if (!nextExercise) {
     lines.push(
