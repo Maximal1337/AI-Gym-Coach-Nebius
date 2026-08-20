@@ -21,24 +21,6 @@ export interface PersonaValues {
   freeform: string;
 }
 
-function Chip({ label, active, onPress }: { label: string; active: boolean; onPress: () => void }) {
-  const theme = useTheme();
-  return (
-    <Pressable
-      onPress={onPress}
-      style={{
-        paddingVertical: 8, paddingHorizontal: 14, borderRadius: 16, borderWidth: 1,
-        borderColor: active ? theme.accent : theme.rule,
-        backgroundColor: active ? theme.accent : 'transparent',
-      }}
-    >
-      <Text style={{ color: active ? theme.onAccent : theme.inkSoft, fontWeight: '600', fontSize: 13 }}>
-        {label}
-      </Text>
-    </Pressable>
-  );
-}
-
 /**
  * Coach persona form (GYM-27), shared between first-run onboarding and
  * editing the persona afterward (GYM-70) — coach_profiles is the one
@@ -57,7 +39,9 @@ export function PersonaForm({
   const { dir, language } = useLanguage();
   const [coachName, setCoachName] = useState(initial?.coachName ?? '');
   const tone: PersonaValues['tone'] = FIXED_TONE;
-  const [acc, setAcc] = useState<PersonaValues['acc']>(initial?.acc ?? 'gentle');
+  // Accountability selection was removed from the UI; keep the stored value
+  // (defaulting to 'gentle') so the upsert below doesn't null the column.
+  const acc: PersonaValues['acc'] = initial?.acc ?? 'gentle';
   const [freeform, setFreeform] = useState(initial?.freeform ?? '');
   const [busy, setBusy] = useState(false);
 
@@ -115,13 +99,6 @@ export function PersonaForm({
           padding: 12, color: theme.ink, marginBottom: spacing.md, textAlign: dir === 'rtl' ? 'right' : 'left',
         }}
       />
-
-      <Text style={label('acc')}>{t('accountability')}</Text>
-      <View style={{ flexDirection: dir === 'rtl' ? 'row-reverse' : 'row', flexWrap: 'wrap', gap: 8, marginBottom: spacing.md }}>
-        {ACCS.map((v) => (
-          <Chip key={v} label={t(`acc_${v}`)} active={acc === v} onPress={() => { track('persona_accountability_selected', { value: v }); setAcc(v); }} />
-        ))}
-      </View>
 
       <Text style={label('freeform')}>{t('personaFreeform')}</Text>
       <TextInput
