@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { suggestTargets, parseRepRange, incrementForEquipment, DEFAULT_WEIGHT_INCREMENT_KG } from "./progression.js";
+import { suggestTargets, parseRepRange, incrementForEquipment, assessAgainstLastTime, DEFAULT_WEIGHT_INCREMENT_KG } from "./progression.js";
 import type { Exercise, SetLog } from "@gymcoach/shared";
 
 const exercise: Exercise = {
@@ -217,4 +217,120 @@ test("the same-weight clamp never touches a set that legitimately already exceed
   // down that the new same-weight clamp doesn't regress it.
   const t = suggestTargets(exercise, logs([[50, 6], [50, 6], [50, 11]]));
   assert.deepEqual(t.targetReps, [7, 7, 11]);
+});
+
+// --- overrideWeightKg: a saved weight preference forces the weight, reps stay math (see decideWeight.ts) ---
+
+test("override holds the weight the deterministic rules would have increased, and progresses reps at it (the leg-curl bug)", () => {
+  // 84kg x 12/10/9 against 8-12 would normally jump to 91kg x 8,8,8. With a
+  // "stay at 84" preference the component must show 84 with reps progressed
+  // off what was actually done there (12 is already the ceiling; 10->11, 9->10).
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const def = suggestTargets(wideRange, logs([[84, 12], [84, 10], [84, 9]]));
+  assert.equal(def.reason, "increase_weight");
+  assert.equal(def.suggestedWeightKg, 91);
+
+  const held = suggestTargets(wideRange, logs([[84, 12], [84, 10], [84, 9]]), 84);
+  assert.equal(held.suggestedWeightKg, 84);
+  assert.deepEqual(held.targetWeights, [84, 84, 84]);
+  assert.deepEqual(held.targetReps, [12, 11, 10]);
+});
+
+test("override snaps to an actual logged weight when it's within a step (float/unit round-trip tolerance)", () => {
+  // A hold decided as 83.9kg (a lb round-trip of the same rung) must snap to
+  // the logged 84 so the per-set history at that weight is recognized.
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const t = suggestTargets(wideRange, logs([[84, 12], [84, 10], [84, 9]]), 83.9);
+  assert.equal(t.suggestedWeightKg, 84);
+  assert.deepEqual(t.targetReps, [12, 11, 10]);
+});
+
+test("override to a genuinely lighter weight with no history there starts reps at the range floor (a deload)", () => {
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const t = suggestTargets(wideRange, logs([[84, 12], [84, 10], [84, 9]]), 70);
+  assert.equal(t.suggestedWeightKg, 70);
+  assert.deepEqual(t.targetWeights, [70, 70, 70]);
+  assert.deepEqual(t.targetReps, [8, 8, 8]);
+});
+
+test("override is ignored when non-positive — falls through to normal deterministic behavior", () => {
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const t = suggestTargets(wideRange, logs([[84, 12], [84, 10], [84, 9]]), 0);
+  assert.equal(t.reason, "increase_weight");
+  assert.equal(t.suggestedWeightKg, 91);
+});
+
+test("override NEVER walks a real set backward: a floored no-history lead set must not clamp later real sets down", () => {
+  // Reverse-pyramid last time (set 1 lighter at 70, sets 2-3 at 84), holding
+  // at 84. Set 1 has no history at 84 -> range floor (8). Sets 2/3 have real
+  // history at 84 (10, 9) -> progress to 11, 10. The floor-8 lead set must NOT
+  // clamp them down to 8/8 (the bug). Set 1 stays 8, sets 2/3 keep 11/10.
+  const wideRange: Exercise = { ...exercise, repRange: "8-12" };
+  const t = suggestTargets(wideRange, logs([[70, 12], [84, 10], [84, 9]]), 84);
+  assert.equal(t.suggestedWeightKg, 84);
+  assert.deepEqual(t.targetWeights, [84, 84, 84]);
+  assert.deepEqual(t.targetReps, [8, 11, 10]);
+});
+
+test("override still clamps between two REAL same-weight sets (ascending real reps don't survive)", () => {
+  // Both sets have real history at 84; set 2's +1 nudge (10->11) shouldn't
+  // exceed set 1's target (8->9). Clamp keeps the sequence non-increasing.
+  const wideRange: Exercise = { ...exercise, repRange: "8-12", sets: 2 };
+  const t = suggestTargets(wideRange, logs([[84, 8], [84, 10]]), 84);
+  assert.deepEqual(t.targetReps, [9, 9]);
+});
+
+// --- assessAgainstLastTime: honest acknowledgment must not celebrate a regression ---
+
+test("fewer total reps at the same weight -> 'below' (the rope-pushdown bug: 18x8/8/8 after 18x10/9/9)", () => {
+  const v = assessAgainstLastTime(
+    [{ weightKg: 18, reps: 8 }, { weightKg: 18, reps: 8 }, { weightKg: 18, reps: 8 }],
+    logs([[18, 10], [18, 9], [18, 9]]),
+  );
+  assert.equal(v, "below");
+});
+
+test("a lighter top weight than last time -> 'below' even if reps are higher", () => {
+  const v = assessAgainstLastTime(
+    [{ weightKg: 16, reps: 15 }, { weightKg: 16, reps: 15 }],
+    logs([[18, 8], [18, 8]]),
+  );
+  assert.equal(v, "below");
+});
+
+test("matching or beating last time -> 'met_or_beat'", () => {
+  assert.equal(
+    assessAgainstLastTime([{ weightKg: 18, reps: 10 }, { weightKg: 18, reps: 9 }, { weightKg: 18, reps: 9 }], logs([[18, 10], [18, 9], [18, 9]])),
+    "met_or_beat",
+  );
+  assert.equal(
+    assessAgainstLastTime([{ weightKg: 20, reps: 8 }], logs([[18, 12]])),
+    "met_or_beat",
+  );
+});
+
+test("no comparable history -> 'unknown' (nothing to be honest or dishonest about)", () => {
+  assert.equal(assessAgainstLastTime([{ weightKg: 18, reps: 8 }], []), "unknown");
+  assert.equal(assessAgainstLastTime([{ weightKg: 18, reps: 8 }], logs([[0, 8]])), "unknown");
+});
+
+test("verdict is set-count invariant: fewer sets but more reps each is 'met_or_beat', not a false 'below'", () => {
+  // Last time 4 sets at 18 (10/10/10/8, avg 9.5); today 3 sets at 18
+  // (12/12/11, avg 11.67). A raw-total comparison (35 < 38) would wrongly say
+  // "below" though every set improved. Average-per-set gets it right.
+  const v = assessAgainstLastTime(
+    [{ weightKg: 18, reps: 12 }, { weightKg: 18, reps: 12 }, { weightKg: 18, reps: 11 }],
+    logs([[18, 10], [18, 10], [18, 10], [18, 8]]),
+  );
+  assert.equal(v, "met_or_beat");
+});
+
+test("verdict is set-count invariant: more sets but fewer reps each is 'below', not a false win", () => {
+  // Last time stopped early at 2 sets (8/8, avg 8); today 3 sets (7/7/7,
+  // avg 7). Raw total (21 > 16) would praise a per-set regression.
+  const v = assessAgainstLastTime(
+    [{ weightKg: 18, reps: 7 }, { weightKg: 18, reps: 7 }, { weightKg: 18, reps: 7 }],
+    logs([[18, 8], [18, 8]]),
+  );
+  assert.equal(v, "below");
 });

@@ -374,6 +374,10 @@ export async function lastLogsForExercise(
   db: SupabaseClient,
   userId: string,
   exerciseId: string,
+  /** Skip this session when picking "most recent" — used by the confirm path,
+   * which has already written the CURRENT session's sets before it needs the
+   * PRIOR session's numbers to judge the performance against. */
+  excludeSessionId?: string,
 ): Promise<Record<string, unknown>[]> {
   // Any session counts toward progression, not just completed ones — an
   // abandoned/still-in-progress session's logged sets are still real
@@ -395,6 +399,7 @@ export async function lastLogsForExercise(
   let lastSessionId: string | null = null;
   let latestStartedAt = -Infinity;
   for (const row of rows) {
+    if (excludeSessionId && row.session_id === excludeSessionId) continue;
     const session = row.workout_sessions as unknown as { started_at: string };
     const startedAt = new Date(session.started_at).getTime();
     if (startedAt > latestStartedAt) {
@@ -1026,8 +1031,11 @@ export async function confirmExerciseSets(
   const nextRow = pickDefaultNext(ordered, attemptedIds, deferred, exerciseId);
   const isRevisit = nextRow ? deferred.some((d) => d.exercise_id === nextRow.id) : false;
 
-  const [notes, nextLastLogs, nextNotes] = await Promise.all([
+  const [notes, lastLogs, nextLastLogs, nextNotes] = await Promise.all([
     notesForExercise(db, userId, planId, exerciseId),
+    // Exclude THIS session: its sets were just upserted above, so without the
+    // exclusion "last time" would be the sets we're acknowledging themselves.
+    lastLogsForExercise(db, userId, exerciseId, sessionId),
     nextRow ? lastLogsForExercise(db, userId, nextRow.id) : Promise.resolve([]),
     nextRow ? notesForExercise(db, userId, planId, nextRow.id) : Promise.resolve([]),
   ]);
@@ -1037,6 +1045,7 @@ export async function confirmExerciseSets(
       profile: profileToAgent(profileRow),
       exercise: exerciseToAgent(exercise),
       confirmedSets,
+      lastLogs: setLogsToAgent(lastLogs),
       notes,
       nextExercise: nextRow ? exerciseToAgent(nextRow) : null,
       nextLastLogs: setLogsToAgent(nextLastLogs),

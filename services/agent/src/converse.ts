@@ -8,6 +8,37 @@ import { composeWithLlm, costCents, type LlmUsage } from "./llm.js";
 import { llmConfig } from "./config.js";
 import { buildTurnTools, emptyOutcome, type RemainingExerciseCandidate } from "./tools.js";
 import { formatWeightForPrompt } from "./units.js";
+import { decideWorkingWeight } from "./decideWeight.js";
+
+/**
+ * The exercise being introduced by this reply gets its component target from
+ * the deterministic default UNLESS a saved weight preference overrides the
+ * weight (see decideWeight.ts) — then reps are re-derived at that weight so
+ * the component matches what the coach says. Reused by every path that
+ * introduces an exercise. Notes drive whether the decision call even runs, so
+ * a note-free introduction stays a single deterministic computation.
+ */
+async function targetsForIntroducedExercise(
+  exercise: Exercise,
+  lastLogs: SetLog[],
+  notes: string[],
+  units: CoachProfile["units"],
+): Promise<{ targets: Targets; usage: LlmUsage }> {
+  const defaultTargets = suggestTargets(exercise, lastLogs);
+  const decision = await decideWorkingWeight({ exercise, lastLogs, notes, defaultTargets, units });
+  const targets = decision.overrideWeightKg != null
+    ? suggestTargets(exercise, lastLogs, decision.overrideWeightKg)
+    : defaultTargets;
+  return { targets, usage: decision.usage };
+}
+
+function addUsage(a: LlmUsage, b: LlmUsage): LlmUsage {
+  return {
+    tokensInput: a.tokensInput + b.tokensInput,
+    tokensOutput: a.tokensOutput + b.tokensOutput,
+    costCents: a.costCents + b.costCents,
+  };
+}
 
 /**
  * Free-text mid-workout turn (GYM-61/67, revised for §20's tool-calling
@@ -791,25 +822,48 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
   }
 
   // Whichever exercise is actually next: an explicit switch/substitute
-  // override, or the default already computed above.
+  // override, or the default introduced exercise. Its component target
+  // honors a saved weight preference (see targetsForIntroducedExercise) so
+  // it can't disagree with the coaching prose.
+  //
+  // Only introduced-this-turn exercises need the (LLM-backed) weight
+  // decision — a turn that doesn't advance (a question, a partial report)
+  // never shows the next exercise's component, so mirror the Edge's own
+  // `advance` rule and skip the call otherwise, falling back to the free
+  // deterministic default. Skipping it here would only ever cost tokens,
+  // never correctness: a non-advancing turn's next-targets aren't rendered.
+  const currentComplete = input.thisSessionLogs.length + outcome.loggedSets.length >= input.exercise.sets;
+  const advancing = !!outcome.switchTarget || !!outcome.substituteExercise || outcome.stoppedEarly || outcome.deferred || currentComplete;
   let nextSuggestedWeightKg = defaultNextTargets?.suggestedWeightKg ?? null;
   let nextTargetReps = defaultNextTargets?.targetReps ?? null;
   let nextTargetWeights = defaultNextTargets?.targetWeights ?? null;
+  let decisionUsage: LlmUsage = { tokensInput: 0, tokensOutput: 0, costCents: 0 };
   if (outcome.switchTarget) {
-    const t = suggestTargets(outcome.switchTarget.exercise, outcome.switchTarget.lastLogs);
-    nextSuggestedWeightKg = t.suggestedWeightKg;
-    nextTargetReps = t.targetReps;
-    nextTargetWeights = t.targetWeights;
+    const { targets, usage } = await targetsForIntroducedExercise(
+      outcome.switchTarget.exercise, outcome.switchTarget.lastLogs, outcome.switchTarget.notes, input.profile.units,
+    );
+    nextSuggestedWeightKg = targets.suggestedWeightKg;
+    nextTargetReps = targets.targetReps;
+    nextTargetWeights = targets.targetWeights;
+    decisionUsage = usage;
   } else if (outcome.substituteExercise) {
     // Brand-new exercise, no history — always baseline, nothing to suggest.
     nextSuggestedWeightKg = null;
     nextTargetReps = null;
     nextTargetWeights = null;
+  } else if (advancing && input.nextExercise) {
+    const { targets, usage } = await targetsForIntroducedExercise(
+      input.nextExercise, input.nextLastLogs, input.nextNotes, input.profile.units,
+    );
+    nextSuggestedWeightKg = targets.suggestedWeightKg;
+    nextTargetReps = targets.targetReps;
+    nextTargetWeights = targets.targetWeights;
+    decisionUsage = usage;
   }
 
   return {
     message: finalMessage,
-    usage: { tokensInput, tokensOutput, costCents: costCents(tokensInput, tokensOutput) },
+    usage: addUsage({ tokensInput, tokensOutput, costCents: costCents(tokensInput, tokensOutput) }, decisionUsage),
     degraded: false,
     loggedSets: outcome.loggedSets,
     stoppedEarly: outcome.stoppedEarly,
@@ -832,6 +886,8 @@ export interface ConfirmInput {
   profile: CoachProfile;
   exercise: Exercise;
   confirmedSets: Array<{ weightKg: number; reps: number }>;
+  /** Prior-session sets for the just-completed exercise — the honest-acknowledgment reference (excludes the current session). */
+  lastLogs: SetLog[];
   notes: string[];
   nextExercise: Exercise | null;
   nextLastLogs: SetLog[];
@@ -860,14 +916,17 @@ export interface ConfirmOutput {
  * no ambiguity here for a tool loop to help resolve.
  */
 export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput> {
-  const nextTargets: Targets | null = input.nextExercise
-    ? suggestTargets(input.nextExercise, input.nextLastLogs)
+  const intro = input.nextExercise
+    ? await targetsForIntroducedExercise(input.nextExercise, input.nextLastLogs, input.nextNotes, input.profile.units)
     : null;
+  const nextTargets: Targets | null = intro?.targets ?? null;
+  const decisionUsage: LlmUsage = intro?.usage ?? { tokensInput: 0, tokensOutput: 0, costCents: 0 };
 
   const systemPrompt = buildSystemPrompt(input.profile);
   const turnPrompt = buildConfirmPrompt({
     exercise: input.exercise,
     confirmedSets: input.confirmedSets,
+    lastLogs: input.lastLogs,
     notes: input.notes,
     nextExercise: input.nextExercise,
     nextTargets,
@@ -881,7 +940,7 @@ export async function runConfirmTurn(input: ConfirmInput): Promise<ConfirmOutput
   if (reply) {
     return {
       message: reply.message,
-      usage: reply.usage,
+      usage: addUsage(reply.usage, decisionUsage),
       degraded: false,
       nextSuggestedWeightKg: nextTargets?.suggestedWeightKg ?? null,
       nextTargetReps: nextTargets?.targetReps ?? null,
