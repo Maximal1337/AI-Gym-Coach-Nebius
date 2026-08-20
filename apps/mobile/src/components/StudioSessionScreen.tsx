@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { ApiError } from '../lib/api';
 import { useLanguage } from '../lib/language';
 import { track } from '../lib/analytics';
+import { maybeRequestReview } from '../lib/review';
 import { useTheme, spacing, radius } from '../theme';
 import {
   addCustomUnit, discardStudioSession, getStudioSession, saveStudioSession, updateStudioSession,
@@ -104,7 +105,7 @@ interface RemovedItem {
  * only lifecycle actions here are Save (opens the one post-save question)
  * and Discard (the rare, confirm-gated exit with no result recorded).
  */
-export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string; onClose: () => void }) {
+export function StudioSessionScreen({ sessionId, onClose, onboarding }: { sessionId: string; onClose: () => void; onboarding?: boolean }) {
   const theme = useTheme();
   const { t } = useTranslation();
   const { dir } = useLanguage();
@@ -465,6 +466,9 @@ export function StudioSessionScreen({ sessionId, onClose }: { sessionId: string;
         intensity,
         note: note.trim() || null,
       });
+      // A finished workout is a positive moment for the review prompt — but not
+      // the onboarding demo session (too early). At most once ever; best-effort.
+      if (!onboarding) void maybeRequestReview();
       onClose();
     } catch (e) {
       if (e instanceof ApiError && e.code === 'subscription_required') {

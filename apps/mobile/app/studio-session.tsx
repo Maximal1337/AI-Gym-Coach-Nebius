@@ -17,6 +17,7 @@ export default function StudioSessionRoute() {
     <Screen>
       <StudioSessionScreen
         sessionId={sessionId}
+        onboarding={!!onboarding}
         onClose={() => (onboarding ? router.replace('/') : router.back())}
       />
     </Screen>
