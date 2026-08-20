@@ -136,6 +136,10 @@ export const confirmTurnInputSchema = z.object({
     .array(z.object({ weightKg: z.number().min(0).max(500), reps: z.number().int().min(0).max(200) }))
     .min(1)
     .max(20),
+  // Prior-session sets for the just-completed exercise (excludes the current
+  // session) — lets the acknowledgment be honest about a shortfall vs last
+  // time instead of praising unconditionally.
+  lastLogs: z.array(setLogSchema).max(200).default([]),
   notes: z.array(z.string().max(1000)).max(50),
   nextExercise: exerciseSchema.nullable(),
   nextLastLogs: z.array(setLogSchema).max(200).default([]),

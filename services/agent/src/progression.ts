@@ -14,6 +14,17 @@ import type { EquipmentType, Exercise, SetLog } from "@gymcoach/shared";
  *    "not enough". So: first set at/above ceiling -> increase weight
  *    (equipment-appropriate jump, see incrementForEquipment) and reset
  *    toward the bottom of the range.
+ *  - That "first set only" shortcut assumes a real range, where clearing
+ *    the ceiling means genuinely maxing out the intended band. It breaks
+ *    for a exercise whose repRange is a single fixed number (e.g. "8" —
+ *    a to-failure target, min===max after parsing): reaching that number
+ *    by even one rep on the freshest set isn't the same signal as
+ *    decisively clearing a real ceiling, since to-failure rep counts are
+ *    naturally variable set to set. A user who does 84kg for 12/10/9
+ *    against an "8 reps to failure" target shouldn't get bumped to
+ *    91kg x 8,8,8 on the strength of the first set alone if the other
+ *    two hadn't also cleared it — so for a fixed-number target, ALL
+ *    logged sets at the top weight must clear it, not just the first.
  *  - Otherwise keep the weight and target +1 rep on sets below the
  *    ceiling — a set that already independently reached the ceiling
  *    holds there rather than being walked backward.
@@ -77,6 +88,41 @@ export function incrementForEquipment(equipmentType: EquipmentType | null, curre
   }
 }
 
+/**
+ * How a just-finished set of work compares to last time on the same
+ * exercise — the deterministic basis for an HONEST acknowledgment, so the
+ * coach never celebrates a regression as if it were a win (a real report:
+ * the user did fewer reps than last time and still got "impressive
+ * consistency, keep it up"). Kept as a rule here, not left to the model to
+ * judge from raw numbers.
+ *
+ * "below" = came in under last time (lighter top weight, or same weight but
+ * fewer reps per set on average). "met_or_beat" = matched or exceeded it.
+ * "unknown" = no comparable history (first time, or a zero/again-untrusted
+ * weight), where there's nothing to be honest OR dishonest about.
+ */
+export type PerformanceVerdict = "below" | "met_or_beat" | "unknown";
+
+export function assessAgainstLastTime(
+  doneSets: Array<{ weightKg: number; reps: number }>,
+  lastLogs: SetLog[],
+): PerformanceVerdict {
+  if (doneSets.length === 0 || lastLogs.length === 0) return "unknown";
+  const doneTopWeight = Math.max(...doneSets.map((s) => s.weightKg));
+  const lastTopWeight = Math.max(...lastLogs.map((l) => l.weightKg));
+  if (doneTopWeight <= 0 || lastTopWeight <= 0) return "unknown";
+  if (doneTopWeight < lastTopWeight) return "below";
+  if (doneTopWeight > lastTopWeight) return "met_or_beat";
+  // Same top weight: compare AVERAGE reps per set, not the total — the set
+  // count can differ between sessions (a plan change, or an extra/missed set
+  // last time), and a raw total would then falsely flag an all-around-better
+  // session as "below" (fewer sets, more reps each) or praise a per-set
+  // regression as a win (more sets, fewer reps each).
+  const doneAvg = doneSets.reduce((sum, s) => sum + s.reps, 0) / doneSets.length;
+  const lastAvg = lastLogs.reduce((sum, l) => sum + l.reps, 0) / lastLogs.length;
+  return doneAvg < lastAvg ? "below" : "met_or_beat";
+}
+
 export function parseRepRange(repRange: string): { min: number; max: number } {
   const m = repRange.match(/^(\d+)\s*-\s*(\d+)$/);
   if (!m) {
@@ -87,8 +133,90 @@ export function parseRepRange(repRange: string): { min: number; max: number } {
   return { min: Number(m[1]), max: Number(m[2]) };
 }
 
-export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets {
+/** Rounds a weight to the 0.5 granularity every display path already uses. */
+function roundHalf(kg: number): number {
+  return Math.round(kg * 2) / 2;
+}
+
+/**
+ * When a weight override (see decideWeight.ts) is essentially a weight the
+ * user actually logged — the usual "keep me at 84" case, where the override
+ * IS last time's top weight — snap to that exact logged value. Two reasons:
+ * a lb-entered override round-trips through kg with float noise that would
+ * otherwise miss the `=== workingWeight` history check below, and it keeps
+ * the suggestion anchored to a real rung the user has hit. Only snaps within
+ * half an equipment step; a deliberately different weight (a real deload)
+ * stays put.
+ */
+function snapToLoggedWeight(kg: number, ordered: SetLog[], equipmentType: EquipmentType | null): number {
+  if (ordered.length === 0) return roundHalf(kg);
+  let best: number | null = null;
+  let bestDiff = Infinity;
+  for (const l of ordered) {
+    const d = Math.abs(l.weightKg - kg);
+    if (d < bestDiff) { bestDiff = d; best = l.weightKg; }
+  }
+  // Tolerance is only meant to absorb display round-trip noise (a weight
+  // entered in lb, shown to the model rounded to 0.5lb, converted back to kg
+  // drifts <~0.15kg) — NOT a full equipment step. Cap it below the smallest
+  // real rung (a 1kg light-dumbbell step) so a deliberate one-step change the
+  // note asked for is never silently snapped back onto the old weight.
+  const tolerance = Math.min(0.5, incrementForEquipment(equipmentType, kg) / 2);
+  return best != null && bestDiff <= tolerance ? best : roundHalf(kg);
+}
+
+/**
+ * @param overrideWeightKg When set (see decideWeight.ts — a durable weight
+ *   preference the deterministic rules can't see, e.g. "keep me at 84kg"),
+ *   forces the working weight instead of computing whether to increase it.
+ *   The split is deliberate: the WEIGHT is a decision context can move, but
+ *   the REPS are still math — derived here at the chosen weight with the same
+ *   progression/ordering rules, never handed to the model. Null = normal
+ *   deterministic behavior, unchanged.
+ */
+export function suggestTargets(exercise: Exercise, lastLogs: SetLog[], overrideWeightKg: number | null = null): Targets {
   const { min, max } = parseRepRange(exercise.repRange);
+
+  // Forced working weight: skip the increase/hold decision entirely (the
+  // weight is already decided) and just compute reps at that weight — a set
+  // with real history AT this weight progresses off it, anything else starts
+  // from the range floor. Same ordering clamp as the normal path.
+  if (overrideWeightKg != null && overrideWeightKg > 0) {
+    const orderedOv = [...lastLogs].sort((a, b) => a.setNo - b.setNo);
+    const w = snapToLoggedWeight(overrideWeightKg, orderedOv, exercise.equipmentType);
+    const targetReps: number[] = [];
+    const targetWeights: number[] = [];
+    for (let i = 0; i < exercise.sets; i++) {
+      const last = orderedOv[i];
+      const hasHistoryAtW = !!last && last.weightKg === w;
+      let reps: number;
+      let computed: boolean;
+      if (hasHistoryAtW) {
+        if (last!.reps >= max) { reps = last!.reps; computed = false; }
+        else { reps = Math.min(Math.max(last!.reps + 1, min), max); computed = true; }
+      } else {
+        // No history at this weight for this set position — the range floor
+        // is the only safe anchor. Deliberately NOT a fatigue anchor for the
+        // clamp below (see next comment).
+        reps = min;
+        computed = true;
+      }
+      // Ordering clamp: a computed nudge shouldn't exceed the immediately
+      // preceding set — but ONLY when that preceding set is a real same-weight
+      // anchor (it actually had history at w). Because the override forces
+      // every set to weight w, a set with NO history at w gets the range floor,
+      // and that placeholder must never clamp a later set that DID hit real,
+      // higher reps at w down to it (the "walked backward" regression). So the
+      // clamp keys off the previous set's real history, not the forced weight.
+      const prevReal = i > 0 && !!orderedOv[i - 1] && orderedOv[i - 1].weightKg === w;
+      if (computed && prevReal && reps > targetReps[i - 1]) {
+        reps = targetReps[i - 1];
+      }
+      targetWeights.push(w);
+      targetReps.push(reps);
+    }
+    return { suggestedWeightKg: w, targetReps, targetWeights, reason: "hold" };
+  }
 
   // Baseline (no trustworthy weight on record): the weight is still
   // unknown — never invent one — but the plan already specifies a rep
@@ -119,8 +247,12 @@ export function suggestTargets(exercise: Exercise, lastLogs: SetLog[]): Targets 
 
   const topWeightSets = ordered.filter((l) => l.weightKg === topWeight);
 
-  const readyForMoreWeight =
-    topWeightSets.length >= exercise.sets && (topWeightSets[0]?.reps ?? 0) >= max;
+  // Fixed target (min===max, e.g. "8 reps to failure") needs every set to
+  // clear it — a single early clear on the freshest set isn't the same
+  // signal as it is for a real range's ceiling (see the comment above).
+  const readyForMoreWeight = min === max
+    ? topWeightSets.length >= exercise.sets && topWeightSets.every((l) => l.reps >= max)
+    : topWeightSets.length >= exercise.sets && (topWeightSets[0]?.reps ?? 0) >= max;
 
   if (readyForMoreWeight) {
     // Ready to move the WHOLE exercise up together — every set (including

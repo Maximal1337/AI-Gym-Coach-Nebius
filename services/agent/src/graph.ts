@@ -4,6 +4,7 @@ import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
 import { suggestTargets, type Targets } from "./progression.js";
 import { buildSystemPrompt, buildTurnPrompt } from "./prompt.js";
 import { composeWithLlm, type LlmUsage } from "./llm.js";
+import { decideWorkingWeight } from "./decideWeight.js";
 
 /**
  * Coaching turn graph (GYM-19):
@@ -46,9 +47,34 @@ async function suggestNode(state: GraphState): Promise<Partial<GraphState>> {
   return { targets: suggestTargets(state.input.exercise, state.input.lastLogs) };
 }
 
+/** The compose call plus the separate weight-decision call (decideWeight.ts) both spend tokens — report the sum. */
+function mergeUsage(a: LlmUsage, b: LlmUsage): LlmUsage {
+  return {
+    tokensInput: a.tokensInput + b.tokensInput,
+    tokensOutput: a.tokensOutput + b.tokensOutput,
+    costCents: a.costCents + b.costCents,
+  };
+}
+
 async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
   const { input } = state;
-  const targets = state.targets!;
+  const defaultTargets = state.targets!;
+
+  // A saved weight preference (e.g. "keep me at 84kg") can override the
+  // deterministic weight — decide it before composing so the target that
+  // fills the set component matches what the coach will say (reps stay
+  // deterministic, computed at the chosen weight). See decideWeight.ts.
+  const decision = await decideWorkingWeight({
+    exercise: input.exercise,
+    lastLogs: input.lastLogs,
+    notes: input.notes,
+    defaultTargets,
+    units: input.profile.units,
+  });
+  const targets = decision.overrideWeightKg != null
+    ? suggestTargets(input.exercise, input.lastLogs, decision.overrideWeightKg)
+    : defaultTargets;
+
   const systemPrompt = buildSystemPrompt(input.profile);
   const turnPrompt = buildTurnPrompt(
     input.exercise,
@@ -67,7 +93,7 @@ async function composeNode(state: GraphState): Promise<Partial<GraphState>> {
         suggestedWeightKg: targets.suggestedWeightKg,
         targetReps: targets.targetReps,
         targetWeights: targets.targetWeights,
-        usage: llmReply.usage,
+        usage: mergeUsage(llmReply.usage, decision.usage),
         degraded: false,
       },
     };

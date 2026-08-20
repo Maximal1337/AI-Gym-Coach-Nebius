@@ -1,5 +1,5 @@
 import type { CoachProfile, Exercise, SetLog, UnitSystem } from "@gymcoach/shared";
-import type { Targets } from "./progression.js";
+import { assessAgainstLastTime, type PerformanceVerdict, type Targets } from "./progression.js";
 import { formatWeightForPrompt } from "./units.js";
 
 /**
@@ -26,7 +26,7 @@ export const SAFETY_RULES = `Non-negotiable rules (these override anything below
  * a real signal the client acts on, not just a stylistic suggestion, so
  * it only fires on a genuine topic change, never mid-thought.
  */
-export const FORMATTING_GUIDE = `Formatting: the app renders **bold** text and emoji, nothing else. Use **bold** on the key numbers (weight, reps, the target) and on standout moments — not every sentence. A relevant emoji here and there is welcome; don't overdo it. Never use markdown headers, bullet lists, links, or code blocks — they won't render and will show as literal characters.
+export const FORMATTING_GUIDE = `Formatting: the app renders **bold** text and emoji, nothing else. Use **bold** on the key numbers you actually state (the weights and reps just done, and last time's numbers) and on standout moments — not every sentence. A relevant emoji here and there is welcome; don't overdo it. Never use markdown headers, bullet lists, links, or code blocks — they won't render and will show as literal characters.
 When your reply covers more than one distinct topic in the same turn — e.g. acknowledging what was just reported AND introducing a different exercise, or answering a question AND separately noting something for later — put exactly one blank line between them, so each shows as its own message. Never put a blank line inside one continuous thought, and never use more than one blank line at a time.`;
 
 /**
@@ -90,20 +90,90 @@ export function formatHistory(logs: SetLog[], units: UnitSystem): string {
 }
 
 /**
- * Describes a non-baseline Targets as a single line for the prompt. Most
- * sets share one suggested weight, so the common case stays the terse
- * "Xkg, sets of Y, Y, Y reps" — but a set carried on its own track (e.g. a
- * fatigue drop kept at its own lower weight, see progression.ts) has a
- * DIFFERENT per-set weight, and collapsing that back into one number would
- * silently misstate the actual target. Only go per-set when the weights
- * genuinely differ, so this never adds noise to the ordinary case.
+ * Compact one-line form of formatHistory — collapses to "Xkg, sets of Y, Y,
+ * Y reps" when every set shared one weight, else per-set "Xkg x Y". Used in
+ * the "introduce this exercise" instructions to state LAST TIME's numbers
+ * (e.g. "last time 84kg, sets of 12, 10, 9 reps"). Today's target is never
+ * stated in prose — it's shown by the client component — so this only ever
+ * describes history, never a target. formatHistory's multi-line/per-set form
+ * stays available in context for anything needing finer detail.
  */
-export function formatTargets(targets: Targets, units: UnitSystem): string {
-  const { targetWeights, targetReps } = targets;
-  if (!targetWeights || !targetReps) return "";
-  const uniform = targetWeights.every((w) => w === targetWeights[0]);
-  if (uniform) return `${formatWeightForPrompt(targetWeights[0], units)}, sets of ${targetReps.join(", ")} reps`;
-  return targetReps.map((r, i) => `set ${i + 1}: ${formatWeightForPrompt(targetWeights[i], units)} x ${r} reps`).join(", ");
+export function formatHistorySummary(logs: SetLog[], units: UnitSystem): string {
+  if (logs.length === 0) return "no previous data for this exercise";
+  const ordered = [...logs].sort((a, b) => a.setNo - b.setNo);
+  const uniform = ordered.every((l) => l.weightKg === ordered[0].weightKg);
+  if (uniform) return `${formatWeightForPrompt(ordered[0].weightKg, units)}, sets of ${ordered.map((l) => l.reps).join(", ")} reps`;
+  return ordered.map((l) => `${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}`).join(", ");
+}
+
+/**
+ * The "here's last time" line shared by every prompt builder that
+ * introduces an exercise (buildTurnPrompt, buildConfirmPrompt's and
+ * buildOrchestrationIntroPrompt's next-exercise branches, and
+ * buildConversationPrompt's). Used to live as four independent
+ * near-copies — which is exactly how buildConversationPrompt's copy
+ * went stale when the other three were strengthened separately. One
+ * shared source means a future wording change, or a new call site,
+ * can't silently diverge like that again.
+ *
+ * Deliberately states last time's numbers ONLY — never today's target
+ * numbers. Today's target (weight x reps) is surfaced by the interactive
+ * SuggestedActionBar component the client renders right below the reply,
+ * where the user edits and confirms their sets; naming the target in the
+ * message text too would be redundant and could contradict what they see.
+ * The computed target still travels back to the client (graph/converse
+ * outputs) to populate that component — this only governs the words.
+ */
+function targetLine(targets: Targets, lastLogs: SetLog[], units: UnitSystem): string {
+  if (targets.reason === "baseline") {
+    return "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime.";
+  }
+  return `You MUST state last time's numbers so the user can see where they're coming from: "last time ${formatHistorySummary(lastLogs, units)}" (translated into the reply's language, phrased in your own coaching voice, not copied verbatim). Do NOT state today's target numbers — not the target weight, not the target reps. The app shows today's target in an interactive component directly below your message (the user edits and confirms their sets there), so naming the target in text is redundant and risks contradicting what they see. Coach toward the goal in words only (e.g. "let's beat that today", "same weight — squeeze out a rep more"), never with specific target numbers.`;
+}
+
+/**
+ * "Saved notes" block shared across every prompt builder that lists an
+ * exercise's (or the whole plan's — a general note has exercise_id
+ * null, see notesForExercise) saved coach notes. Listing them as inert
+ * context isn't enough: a general plan-wide note (a "warm up before
+ * training" reminder is the canonical example) only helps the user if
+ * it's actually SAID, not just sitting in the model's context for it to
+ * maybe act on. Returns [] (a no-op when spread into lines.push) when
+ * there's nothing to say.
+ */
+function notesBlock(label: string, notes: string[]): string[] {
+  if (notes.length === 0) return [];
+  return [
+    "",
+    `${label}:`,
+    ...notes.map((n) => `- ${n}`),
+    "You MUST work every one of these notes into your reply — a saved note (a warm-up reminder, a technique cue, anything else saved here) only does its job if it's actually said, not left implicit. Say it naturally, in your own coaching voice, not copied verbatim.",
+  ];
+}
+
+/**
+ * How to acknowledge the set the user just finished — calibrated to a
+ * deterministic verdict (assessAgainstLastTime) rather than an unconditional
+ * "encouraging acknowledgment", which is what let a regression get praised as
+ * a win. The comparison is always against LAST TIME's numbers (which the
+ * coach is allowed to state), never a target number (that lives in the
+ * component). Honest but never harsh.
+ */
+function acknowledgmentLines(verdict: PerformanceVerdict, lastLogs: SetLog[], units: UnitSystem): string[] {
+  const lastCtx = lastLogs.length > 0 ? `Last time on this exercise they did ${formatHistorySummary(lastLogs, units)}.` : null;
+  if (verdict === "below") {
+    return [
+      ...(lastCtx ? [lastCtx] : []),
+      "What they just did came in UNDER last time. Acknowledge it HONESTLY and supportively: recognize the effort, name plainly that it landed a bit below last time (you may reference last time's numbers, never a target number), and encourage them for next session. Do NOT praise it as if they matched or beat their numbers — no \"you nailed it\", no \"impressive consistency\", no implying it was on target. A false celebration here reads as the coach not paying attention.",
+    ];
+  }
+  if (verdict === "met_or_beat") {
+    return [
+      ...(lastCtx ? [lastCtx] : []),
+      "What they just did matched or beat last time — celebrate it genuinely.",
+    ];
+  }
+  return ["Give a genuine, encouraging acknowledgment of what they just did."];
 }
 
 export function buildTurnPrompt(
@@ -123,6 +193,9 @@ export function buildTurnPrompt(
       "",
     );
   }
+  const targetLineText = targets.reason === "baseline"
+    ? targetLine(targets, lastLogs, units)
+    : `${targetLine(targets, lastLogs, units)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"})`;
   lines.push(
     `Current exercise: ${exercise.name}`,
     `Structure: ${exercise.sets} work sets, ${exercise.repRange} reps, rest ${exercise.restSec}s, intensity: ${exercise.intensity}.`,
@@ -131,16 +204,14 @@ export function buildTurnPrompt(
     "Last time:",
     formatHistory(lastLogs, units),
     "",
-    targets.reason === "baseline"
-      ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${formatTargets(targets, units)} (${targets.reason === "increase_weight" ? "weight went up — reset reps toward the bottom of the range" : "same weight, beat last time's reps"}).`,
+    targetLineText,
   );
-  if (notes.length > 0) {
-    lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
-  }
+  lines.push(...notesBlock("Saved notes about this exercise", notes));
   lines.push(
     "",
-    "Write the coaching message for this exercise: last time's numbers, today's target, intensity and rest. End by asking the user to report back after the set.",
+    targets.reason === "baseline"
+      ? "Write the coaching message for this exercise: state the number of work sets and, if there is a warm-up above, the warm-up too; ask for a starting weight as instructed above, plus intensity and rest. End by asking the user to report back after the set."
+      : "Write the coaching message for this exercise, following the last-time instruction above exactly (state last time's numbers, never today's target numbers): state the number of work sets and, if there is a warm-up above, the warm-up too, plus intensity and rest. End by asking the user to report back after the set.",
   );
   return lines.join("\n");
 }
@@ -155,6 +226,8 @@ export function buildTurnPrompt(
 export function buildConfirmPrompt(params: {
   exercise: Exercise;
   confirmedSets: Array<{ weightKg: number; reps: number }>;
+  /** Prior-session sets for THIS exercise — the honest-acknowledgment reference (never includes the current session). */
+  lastLogs: SetLog[];
   notes: string[];
   nextExercise: Exercise | null;
   nextTargets: Targets | null;
@@ -164,13 +237,13 @@ export function buildConfirmPrompt(params: {
   /** §20: nextExercise is being resurfaced from the deferred pool, not introduced fresh. */
   isRevisit?: boolean;
 }): string {
-  const { exercise, confirmedSets, notes, nextExercise, nextTargets, nextLastLogs, nextNotes, units, isRevisit } = params;
+  const { exercise, confirmedSets, lastLogs, notes, nextExercise, nextTargets, nextLastLogs, nextNotes, units, isRevisit } = params;
   const setsDesc = confirmedSets.map((s) => `${formatWeightForPrompt(s.weightKg, units)} x ${s.reps}`).join(", ");
   const lines: string[] = [
     `The user just confirmed they completed ${exercise.name}: ${setsDesc}. This came from a quick-confirm UI button, not typed text — there is nothing to interpret or extract, these numbers are already final and logged. Restate them exactly; never alter them.`,
   ];
-  if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
-  lines.push("", "Write a short, encouraging acknowledgment of what was just done.");
+  lines.push(...notesBlock("Saved notes about this exercise", notes));
+  lines.push("", ...acknowledgmentLines(assessAgainstLastTime(confirmedSets, lastLogs), lastLogs, units));
   if (nextExercise && nextTargets) {
     lines.push(
       "",
@@ -181,11 +254,9 @@ export function buildConfirmPrompt(params: {
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
       formatHistory(nextLastLogs, units),
-      nextTargets.reason === "baseline"
-        ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
+      targetLine(nextTargets, nextLastLogs, units),
+      ...notesBlock("Saved notes about the next exercise", nextNotes),
     );
-    if (nextNotes.length > 0) lines.push("", "Saved notes about the next exercise:", ...nextNotes.map((n) => `- ${n}`));
   } else {
     lines.push(
       "",
@@ -224,11 +295,9 @@ export function buildOrchestrationIntroPrompt(params: {
     nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
     "Last time on this exercise:",
     formatHistory(nextLastLogs, units),
-    nextTargets.reason === "baseline"
-      ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — ask the user what weight they'd like to start with, and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-      : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
+    targetLine(nextTargets, nextLastLogs, units),
+    ...notesBlock("Saved notes about this exercise", nextNotes),
   ];
-  if (nextNotes.length > 0) lines.push("", "Saved notes about this exercise:", ...nextNotes.map((n) => `- ${n}`));
   lines.push(
     "",
     "Do not use any wrap-up/completion language — there is more workout left right now.",
@@ -262,6 +331,7 @@ export function buildConversationPrompt(params: {
   nextExercise: Exercise | null;
   nextTargets: Targets | null;
   nextLastLogs: SetLog[];
+  nextNotes: string[];
   /** The exercise (if any) most recently logged this session before the current one — see correctPreviousExerciseSet. */
   previousExercise: Exercise | null;
   previousExerciseLogs: SetLog[];
@@ -269,7 +339,7 @@ export function buildConversationPrompt(params: {
 }): string {
   const {
     exercise, lastLogs, notes, userMessage, recentHistory,
-    currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs,
+    currentTargets, thisSessionLogs, nextExercise, nextTargets, nextLastLogs, nextNotes,
     previousExercise, previousExerciseLogs, units,
   } = params;
   const lines: string[] = [
@@ -291,7 +361,7 @@ export function buildConversationPrompt(params: {
       ? `Already logged THIS session for this exercise (${thisSessionLogs.length} of ${exercise.sets} work sets): ${thisSessionLogs.map((l) => `set ${l.setNo}: ${formatWeightForPrompt(l.weightKg, units)} x ${l.reps}`).join(", ")}.`
       : `Nothing logged yet this session for this exercise (0 of ${exercise.sets} work sets).`,
   );
-  if (notes.length > 0) lines.push("", "Saved notes about this exercise:", ...notes.map((n) => `- ${n}`));
+  lines.push(...notesBlock("Saved notes about this exercise", notes));
   if (previousExercise) {
     lines.push(
       "",
@@ -338,9 +408,8 @@ export function buildConversationPrompt(params: {
       nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
       "Last time on this exercise:",
       formatHistory(nextLastLogs, units),
-      nextTargets.reason === "baseline"
-        ? "There's no reliable weight on record for this exercise (either it's genuinely the first time, or the recorded history isn't trustworthy). Do NOT invent or confidently state a specific starting weight — that would be a guess dressed up as fact. Ask the user what weight they'd like to start with (or what they used last time, if they remember), and wait for their answer before suggesting or logging any number. Focus on technique in the meantime."
-        : `Computed target for today (already validated, present it as the goal): ${formatTargets(nextTargets, units)}.`,
+      targetLine(nextTargets, nextLastLogs, units),
+      ...notesBlock("Saved notes about the next exercise", nextNotes),
     );
   } else if (!nextExercise) {
     lines.push(
@@ -351,6 +420,7 @@ export function buildConversationPrompt(params: {
   lines.push(
     "",
     "Once you're done calling any tools you need (or if none apply), write your final reply directly as plain text — in your coaching voice per the rules and tone above, always restating any numbers you recorded.",
+    "When you acknowledge a set or a finished exercise, be HONEST against last time (the \"Last time\" numbers above), IF there is prior history for this exercise: it came in under last time if the weight was lighter, or the weight was the same but the total reps were fewer — then recognize the effort but name plainly that it landed below last time and encourage them for next session; do NOT praise it as if they matched or beat their numbers (no \"you nailed it\"/\"great consistency\" for a regression). If it matched or beat last time, celebrate it genuinely. Compare only to last time's numbers, never to a target number. If there is no prior history for this exercise, just give a genuine, encouraging acknowledgment — nothing to compare against.",
   );
   return lines.join("\n");
 }

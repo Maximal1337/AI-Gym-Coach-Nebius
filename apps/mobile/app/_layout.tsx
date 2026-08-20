@@ -1,3 +1,6 @@
+// Must run before any screen renders — installs the app-wide font scale by
+// replacing the react-native Text/TextInput exports (see fontScale.tsx).
+import '../src/lib/fontScale';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { Stack, router } from 'expo-router';

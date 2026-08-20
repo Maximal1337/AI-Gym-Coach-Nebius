@@ -11,11 +11,11 @@ import { useLanguage } from '../src/lib/language';
 import { useLanguagePicker } from '../src/lib/useLanguagePicker';
 import { useUnits, formatWeightKg, formatHeightCm, weightUnitLabel } from '../src/lib/units';
 import { TERMS_URL, PRIVACY_URL } from '../src/lib/webUrl';
-import { fetchAccessStatus, type AccessStatus } from '../src/lib/subscription';
+import { fetchAccessStatus, type AccessStatus, SUBSCRIPTION_PAUSED } from '../src/lib/subscription';
 import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius, TAB_BAR_CLEARANCE } from '../src/theme';
 
-const SUBSCRIPTION_UI_ENABLED = true;
+const SUBSCRIPTION_UI_ENABLED = !SUBSCRIPTION_PAUSED;
 
 export default function Settings() {
   const theme = useTheme();

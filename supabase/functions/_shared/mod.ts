@@ -134,6 +134,14 @@ export async function subscriptionAccess(
   db: SupabaseClient,
   userId: string,
 ): Promise<{ ok: boolean; status: string; trialEndsAt: string | null }> {
+  // Global kill switch (Supabase secret, not a per-row column): the app
+  // launched free, no paywall yet — everyone is entitled regardless of
+  // trial/subscription state until this is turned back off. Mirrored
+  // client-side by SUBSCRIPTION_PAUSED in apps/mobile/src/lib/subscription.ts
+  // for UI purposes, but this check is the actual enforcement boundary.
+  if (Deno.env.get("SUBSCRIPTION_PAUSED") === "true") {
+    return { ok: true, status: "paused", trialEndsAt: null };
+  }
   const { data } = await db
     .from("users")
     .select("subscription_status, trial_ends_at, subscription_expires_at")
@@ -366,6 +374,10 @@ export async function lastLogsForExercise(
   db: SupabaseClient,
   userId: string,
   exerciseId: string,
+  /** Skip this session when picking "most recent" — used by the confirm path,
+   * which has already written the CURRENT session's sets before it needs the
+   * PRIOR session's numbers to judge the performance against. */
+  excludeSessionId?: string,
 ): Promise<Record<string, unknown>[]> {
   // Any session counts toward progression, not just completed ones — an
   // abandoned/still-in-progress session's logged sets are still real
@@ -387,6 +399,7 @@ export async function lastLogsForExercise(
   let lastSessionId: string | null = null;
   let latestStartedAt = -Infinity;
   for (const row of rows) {
+    if (excludeSessionId && row.session_id === excludeSessionId) continue;
     const session = row.workout_sessions as unknown as { started_at: string };
     const startedAt = new Date(session.started_at).getTime();
     if (startedAt > latestStartedAt) {
@@ -1018,8 +1031,11 @@ export async function confirmExerciseSets(
   const nextRow = pickDefaultNext(ordered, attemptedIds, deferred, exerciseId);
   const isRevisit = nextRow ? deferred.some((d) => d.exercise_id === nextRow.id) : false;
 
-  const [notes, nextLastLogs, nextNotes] = await Promise.all([
+  const [notes, lastLogs, nextLastLogs, nextNotes] = await Promise.all([
     notesForExercise(db, userId, planId, exerciseId),
+    // Exclude THIS session: its sets were just upserted above, so without the
+    // exclusion "last time" would be the sets we're acknowledging themselves.
+    lastLogsForExercise(db, userId, exerciseId, sessionId),
     nextRow ? lastLogsForExercise(db, userId, nextRow.id) : Promise.resolve([]),
     nextRow ? notesForExercise(db, userId, planId, nextRow.id) : Promise.resolve([]),
   ]);
@@ -1029,6 +1045,7 @@ export async function confirmExerciseSets(
       profile: profileToAgent(profileRow),
       exercise: exerciseToAgent(exercise),
       confirmedSets,
+      lastLogs: setLogsToAgent(lastLogs),
       notes,
       nextExercise: nextRow ? exerciseToAgent(nextRow) : null,
       nextLastLogs: setLogsToAgent(nextLastLogs),

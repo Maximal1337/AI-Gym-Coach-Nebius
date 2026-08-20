@@ -342,7 +342,7 @@ Full detail on how this account works: `secrets/app-review-account.md`
 First name: Dor
 Last name:  Haim Bobrutsky
 Phone:      +972548835011
-Email:      dorhaimbob@gmail.com
+Email:      notch.app.support@gmail.com
 ```
 
 ---

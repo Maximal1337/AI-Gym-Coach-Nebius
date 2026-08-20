@@ -6,7 +6,9 @@ import { Ionicons } from '@expo/vector-icons';
 import type { PurchasesPackage } from 'react-native-purchases';
 import { Screen } from '../src/components/Screen';
 import { useLanguage, type Direction } from '../src/lib/language';
-import { fetchAccessStatus, getCurrentOffering, purchase, purchasesConfigured, restore } from '../src/lib/subscription';
+import {
+  fetchAccessStatus, getCurrentOffering, purchase, purchasesConfigured, restore, SUBSCRIPTION_PAUSED,
+} from '../src/lib/subscription';
 import { track } from '../src/lib/analytics';
 import { useTheme, spacing, radius } from '../src/theme';
 
@@ -56,10 +58,15 @@ export default function Subscribe() {
   const row = dir === 'rtl' ? 'row-reverse' : 'row';
   const align = dir === 'rtl' ? 'right' : 'left';
 
+  // Purchasing is off either because it's paused (see SUBSCRIPTION_PAUSED's
+  // own comment) or because RevenueCat was never configured for this build
+  // — both fall back to the same dormant "coming soon" state below.
+  const purchasingUnavailable = SUBSCRIPTION_PAUSED || !purchasesConfigured;
+
   async function handleContinue() {
     track('subscribe_continue_tapped', { plan });
     const pkg = plan === 'annual' ? annualPkg : monthlyPkg;
-    if (!purchasesConfigured || !pkg) {
+    if (purchasingUnavailable || !pkg) {
       Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
       return;
     }
@@ -78,7 +85,7 @@ export default function Subscribe() {
 
   async function handleRestore() {
     track('subscribe_restore_tapped');
-    if (!purchasesConfigured) {
+    if (purchasingUnavailable) {
       Alert.alert(t('subscribeComingSoonTitle'), t('subscribeComingSoonBody'));
       return;
     }
