@@ -26,11 +26,15 @@ It will report pre-existing `GenericStringError` noise from the untyped
 Supabase client — see `verify` for how to tell that apart from errors you
 actually introduced.
 
-**New user-facing string**: add the same key to all three locale files —
-`apps/mobile/src/locales/en.json`, `he.json`, `ar.json` — never just one.
-A hand-edited locale file can silently break at runtime on a trailing comma
-with no typecheck error, so validate every file you touched:
-`python3 -c "import json; json.load(open('FILE'))"` (repeat per file).
+**New user-facing string**: add the same key to ALL EIGHT locale files in
+`apps/mobile/src/locales/` — `en, he, ar, de, es, fr, it, pt`.json — never
+just one (an older version of this note said three; the app expanded to
+eight). Anchor the insert on a stable existing key that sits at the same line
+in every file (e.g. `grep -Hn '"coachName"' *.json` → all at one line number),
+then Edit each. A hand-edited locale file can silently break at runtime on a
+trailing comma with no typecheck error, so validate every file you touched:
+`node -e "JSON.parse(require('fs').readFileSync('FILE','utf8'))"` (repeat per
+file). he/ar are RTL — keep the translations, not the English string.
 
 ## 2. Deploy — map the change to the layer
 
@@ -60,6 +64,20 @@ with no typecheck error, so validate every file you touched:
   `COPY pnpm-workspace.yaml`, etc. need the monorepo root as build context —
   running it from inside `services/agent/` fails with "not found" errors on
   those COPY lines.
+- **`supabase functions deploy` needs `--use-api` in this sandbox.** The
+  default local bundler needs Docker, which isn't running here, so it fails
+  with `failed to open eszip: ENOENT ... output.eszip`. Retrying doesn't help —
+  add `--use-api` to bundle server-side instead (no Docker):
+  `supabase functions deploy <name> --use-api`. It uploads `index.ts` +
+  `_shared/mod.ts` and succeeds.
+- **`supabase db push` prints a scary error but STILL applies the migration.**
+  At the end it may dump a pgdelta event-loop error —
+  `Failed to read certificate file '.../pgdelta-target-ca.crt': ENOENT` — then
+  `Finished supabase db push`. That's the CLI's post-apply diff/verify step
+  choking, NOT a failed migration. Confirm it actually applied: `supabase
+  migration list` (the new timestamp's `remote` column is now populated) AND a
+  `supabase db query --linked "select ... from <new object>;"`. Don't re-run
+  push assuming it failed.
 - "Docker is not running" warnings printed by `supabase db push` /
   `supabase functions deploy` are non-fatal — ignore them, the commands
   still complete. A `WARNING: The app is not listening on the expected
@@ -80,7 +98,27 @@ with no typecheck error, so validate every file you touched:
 if you're mid an already-approved batch of changes — this is a standing
 rule for this repo, not a one-time confirmation. See
 `apps/mobile/AGENTS.md` for the `--non-interactive` flag requirement once
-approved.
+approved, and the `eas-ios-submit` skill for the credentials story.
+
+Operational notes learned shipping this:
+- **The Claude Code auto-mode classifier may BLOCK `eas build`/`eas submit`
+  independently of the user's approval** ("Blocked by classifier"). It's a
+  harness guard, separate from consent. If it blocks, either the user runs it
+  themselves via a `! cd apps/mobile && eas build ...` prompt line, or they add
+  a Bash permission rule for `eas build`/`eas submit`. (Observed: build blocked
+  on the first attempt, allowed after the user said "build and submit".)
+- **A new native dependency (e.g. `expo-store-review`) only reaches users in a
+  fresh binary build** — it can't ship to existing installs; there's no OTA
+  here (no `expo-updates`).
+- **Auto-submit after a `--no-wait` build:** poll for completion then submit —
+  `eas build:view <id> --json` → `.status == "FINISHED"` → `eas submit
+  --platform ios --id <id> --non-interactive`. Run the poll in the background.
+  ⚠️ The shell here is **zsh**, where `status` is a read-only special variable
+  — name the loop variable anything else (`bstatus`), or the loop dies with
+  `read-only variable: status`.
+- **Build from the merged branch.** `eas build` packages the current git
+  state, so `git checkout main && git pull` first if the work was merged via
+  PRs, else the build ships a stale tree.
 
 ## 4. Commit style
 
