@@ -33,7 +33,7 @@ export default function Entry() {
       if (!(await hasChosenLanguage())) return router.replace('/onboarding-language');
       if (cancelled) return;
 
-      const [userRes, profileRes, planRes] = await Promise.all([
+      const loadState = () => Promise.all([
         supabase.from('users').select('terms_accepted_at, plan_setup_skipped_at').eq('id', user.id).maybeSingle(),
         supabase.from('coach_profiles').select('user_id').eq('user_id', user.id).maybeSingle(),
         supabase
@@ -41,10 +41,21 @@ export default function Entry() {
           .select('id', { count: 'exact', head: true })
           .eq('status', 'active'),
       ]);
+      // On a fresh install the first queries can flake (cold start, network),
+      // and onboarding re-runs this router several times (after language, plan,
+      // persona). A single flaky pass used to bounce an already-consented user
+      // back to consent (terms live server-side in users.terms_accepted_at),
+      // so it appeared more than once — retry before falling back to the gate.
+      let [userRes, profileRes, planRes] = await loadState();
+      for (let attempt = 1; attempt < 3 && (userRes.error || profileRes.error || planRes.error); attempt++) {
+        await new Promise((r) => setTimeout(r, 400 * attempt));
+        if (cancelled) return;
+        [userRes, profileRes, planRes] = await loadState();
+      }
       if (cancelled) return;
-      // A transient query error must not silently re-route an onboarded
-      // user backwards; consent is the one safe (and legally conservative)
-      // fallback, and accept-terms is idempotent.
+      // Only after retries: a transient query error must not silently re-route
+      // an onboarded user backwards; consent is the one safe (and legally
+      // conservative) fallback, and accept-terms is idempotent.
       if (userRes.error || profileRes.error || planRes.error) {
         return router.replace('/consent');
       }
