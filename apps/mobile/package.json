@@ -26,6 +26,7 @@
     "expo-notifications": "~0.32.17",
     "expo-router": "~6.0.24",
     "expo-status-bar": "~3.0.9",
+    "expo-store-review": "~9.0.9",
     "i18next": "^26.3.6",
     "posthog-react-native": "^4.61.4",
     "react": "19.1.0",

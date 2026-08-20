@@ -27,6 +27,7 @@ import { useUnits, formatWeightKg, weightUnitLabel, type UnitSystem } from '../.
 import { fetchAccessStatus, type AccessStatus } from '../../src/lib/subscription';
 import { useUnread } from '../../src/lib/unread';
 import { track } from '../../src/lib/analytics';
+import { maybeRequestReview } from '../../src/lib/review';
 import { listStudioSessions } from '../../src/lib/studioApi';
 import { useTheme, spacing, radius, typography, TAB_BAR_CLEARANCE } from '../../src/theme';
 
@@ -617,6 +618,9 @@ export default function Chat() {
         'session-complete', { sessionId: id },
       );
       track('workout_completed');
+      // A finished workout is a positive moment — ask for a review here (at
+      // most once ever; best-effort, never blocks the flow).
+      void maybeRequestReview();
       const lines = res.exercises.map((e) => `${e.name}: ${e.sets.join(', ')}`).join('\n');
       push('coach', `${t('workoutSummary')}\n${lines}`);
       setSessionId(null);
