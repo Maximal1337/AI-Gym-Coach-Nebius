@@ -46,8 +46,11 @@ export default function Settings() {
   const [signingOut, setSigningOut] = useState(false);
   const [deleting, setDeleting] = useState(false);
   // Which field's edit sheet is open, and the working text/number for it.
+  // initialDraft is what the field held when opened — a Save that didn't change
+  // it writes nothing (avoids the round-trip re-rounding a stored value).
   const [editing, setEditing] = useState<EditField | null>(null);
   const [draft, setDraft] = useState('');
+  const [initialDraft, setInitialDraft] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -69,57 +72,86 @@ export default function Settings() {
   // Optimistic per-field write: the row updates as the sheet closes, and on
   // a rare failure we revert and surface it — a spinner would cost more than
   // the revert at this size (design: "Optimistic update").
+  // Resolve the user id at save time (fetch it if the focus load hasn't landed
+  // yet) BEFORE the optimistic update — otherwise a save before userId loaded
+  // would show a value that never persists and silently vanishes on refocus.
+  async function currentUserId(): Promise<string | null> {
+    if (userId) return userId;
+    const { data } = await supabase.auth.getUser();
+    return data.user?.id ?? null;
+  }
+
   async function persistCoach(patch: Partial<CoachProfile>) {
+    const uid = await currentUserId();
+    if (!uid) return;
     const prev = coach;
     setCoach((c) => (c ? { ...c, ...patch } : c));
-    if (!userId) return;
-    const { error } = await supabase.from('coach_profiles').update(patch).eq('user_id', userId);
+    const { error } = await supabase.from('coach_profiles').update(patch).eq('user_id', uid);
     if (error) { setCoach(prev); Alert.alert(t('coachUnavailable')); }
   }
 
   async function persistFitness(patch: Partial<FitnessProfile>) {
+    const uid = await currentUserId();
+    if (!uid) return;
     const prev = fitnessProfile;
     setFitnessProfile((f) => (f ? { ...f, ...patch } : f));
-    if (!userId) return;
     const { error } = await supabase.from('fitness_profiles')
       .update({ ...patch, updated_at: new Date().toISOString() })
-      .eq('user_id', userId);
+      .eq('user_id', uid);
     if (error) { setFitnessProfile(prev); Alert.alert(t('coachUnavailable')); }
   }
 
   function openField(field: EditField) {
     track('settings_edit_field_opened', { field });
-    if (field === 'name') setDraft(coach?.coach_name ?? '');
-    else if (field === 'notes') setDraft(coach?.persona_freeform ?? '');
-    else if (field === 'age') setDraft(fitnessProfile?.age != null ? String(fitnessProfile.age) : '');
-    else if (field === 'weight') setDraft(fitnessProfile?.weight_kg != null ? String(formatWeightKg(fitnessProfile.weight_kg, units)) : '');
-    else if (field === 'height') setDraft(fitnessProfile?.height_cm != null ? formatHeightForEntry(fitnessProfile.height_cm, units) : '');
-    else setDraft(''); // gender commits on tap, no text draft
+    let d = '';
+    if (field === 'name') d = coach?.coach_name ?? '';
+    else if (field === 'notes') d = coach?.persona_freeform ?? '';
+    else if (field === 'age') d = fitnessProfile?.age != null ? String(fitnessProfile.age) : '';
+    else if (field === 'weight') d = fitnessProfile?.weight_kg != null ? String(formatWeightKg(fitnessProfile.weight_kg, units)) : '';
+    else if (field === 'height') d = fitnessProfile?.height_cm != null ? formatHeightForEntry(fitnessProfile.height_cm, units) : '';
+    setDraft(d);
+    setInitialDraft(d);
     setEditing(field);
   }
 
   function saveField() {
-    switch (editing) {
+    const field = editing;
+    if (!field || field === 'gender') return;
+    // Unchanged -> close without writing (never re-round a stored value).
+    if (draft.trim() === initialDraft.trim()) { setEditing(null); return; }
+    switch (field) {
       case 'name': {
         const v = draft.trim();
-        if (!v) return; // coach name is required — keep the sheet open
+        if (!v) return; // coach name is required — keep the sheet open (Save is disabled)
         void persistCoach({ coach_name: v });
         break;
       }
       case 'notes':
         void persistCoach({ persona_freeform: draft.trim() || null });
         break;
+      // Numbers: an empty field clears the value; a non-empty but unparseable
+      // one is a mistake, not a clear — keep the sheet open rather than wiping.
       case 'age': {
+        if (!draft.trim()) { void persistFitness({ age: null }); break; }
         const n = parseInt(draft, 10);
-        void persistFitness({ age: draft.trim() && Number.isFinite(n) ? n : null });
+        if (!Number.isFinite(n)) return;
+        void persistFitness({ age: n });
         break;
       }
-      case 'weight':
-        void persistFitness({ weight_kg: draft.trim() ? parseWeightToKg(draft, units) : null });
+      case 'weight': {
+        if (!draft.trim()) { void persistFitness({ weight_kg: null }); break; }
+        const kg = parseWeightToKg(draft, units);
+        if (kg == null) return;
+        void persistFitness({ weight_kg: kg });
         break;
-      case 'height':
-        void persistFitness({ height_cm: draft.trim() ? parseHeightToCm(draft, units) : null });
+      }
+      case 'height': {
+        if (!draft.trim()) { void persistFitness({ height_cm: null }); break; }
+        const cm = parseHeightToCm(draft, units);
+        if (cm == null) return;
+        void persistFitness({ height_cm: cm });
         break;
+      }
     }
     setEditing(null);
   }
@@ -230,12 +262,16 @@ export default function Settings() {
     age: t('ageLabel'), weight: t('weightLabel'), height: t('heightLabel'),
   };
 
+  // Coach name is required — its Save greys out while empty so an empty tap
+  // isn't a silent dead end; other fields can always save (incl. clearing).
+  const saveDisabled = editing === 'name' && !draft.trim();
   const saveButton = (
     <Pressable
       onPress={saveField}
-      style={{ backgroundColor: theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
+      disabled={saveDisabled}
+      style={{ backgroundColor: saveDisabled ? theme.rule : theme.accent, padding: 14, borderRadius: radius.pill, alignItems: 'center', marginTop: spacing.md }}
     >
-      <Text style={{ color: theme.onAccent, fontWeight: '700' }}>{t('save')}</Text>
+      <Text style={{ color: saveDisabled ? theme.inkSoft : theme.onAccent, fontWeight: '700' }}>{t('save')}</Text>
     </Pressable>
   );
 
@@ -350,8 +386,10 @@ export default function Settings() {
                 setEditing(null);
               }}
               style={{
+                // On theme.surface (not theme.bg) so the chip reads as a
+                // raised button against the sheet's own theme.bg ground.
                 flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: radius.field,
-                backgroundColor: theme.bg, borderWidth: 1.5,
+                backgroundColor: theme.surface, borderWidth: 1.5,
                 borderColor: fitnessProfile?.gender === g ? theme.accent : 'transparent',
               }}
             >
