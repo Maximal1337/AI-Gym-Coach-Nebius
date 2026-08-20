@@ -3,6 +3,7 @@ import { ActivityIndicator, View } from 'react-native';
 import { router } from 'expo-router';
 import { supabase } from '../src/lib/supabase';
 import { hasChosenLanguage } from '../src/lib/language';
+import { fetchUpdateStatus } from '../src/lib/appUpdate';
 import { registerPush } from '../src/lib/push';
 import { initPurchases } from '../src/lib/subscription';
 import { Screen } from '../src/components/Screen';
@@ -21,9 +22,19 @@ export default function Entry() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      const { data } = await supabase.auth.getSession();
-      const user = data.session?.user;
+      try {
+      // Hard version gate — a client below the server-set minimum must update
+      // before doing anything else (even signing in, since its API calls may be
+      // what broke). Run it alongside the session read so it adds no launch
+      // latency. Fail-open: fetchUpdateStatus never throws and returns "no
+      // update" on any error or timeout, so a config outage can't lock the app.
+      const [update, { data }] = await Promise.all([fetchUpdateStatus(), supabase.auth.getSession()]);
       if (cancelled) return;
+      if (update.mustUpdate) {
+        return router.replace({ pathname: '/force-update', params: { storeUrl: update.storeUrl ?? '' } });
+      }
+
+      const user = data.session?.user;
       if (!user) return router.replace('/sign-in');
 
       // Checked first (guidelines/language-discovery.html's "explicit
@@ -71,6 +82,11 @@ export default function Entry() {
       void registerPush(user.id);
       initPurchases(user.id);
       router.replace('/(tabs)');
+      } catch {
+        // Never strand the user on a blank loader if an unexpected error (e.g.
+        // a rejected getSession) escapes — route to a recoverable entry.
+        if (!cancelled) router.replace('/sign-in');
+      }
     })().finally(() => !cancelled && setChecking(false));
     return () => {
       cancelled = true;

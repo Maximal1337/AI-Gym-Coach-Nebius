@@ -4,6 +4,7 @@ import { BlurView } from 'expo-blur';
 import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUnread } from '../../src/lib/unread';
+import { useUpdateNudge } from '../../src/lib/appUpdate';
 import { RestTimer } from '../../src/components/RestTimer';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
@@ -52,6 +53,10 @@ export default function TabsLayout() {
   const { t } = useTranslation();
   const { count: unread } = useUnread();
   const pathname = usePathname();
+  // Soft, dismissible "update available" nudge (once per version). The hard
+  // update gate lives in the entry router (app/index.tsx); this is the
+  // non-blocking counterpart for optional updates.
+  useUpdateNudge();
   // The chat screen ("/train") shows its own docked RestTimer above the
   // composer — this pill is the same object at a third, quieter density
   // for every other tab (guidelines/rest-timer.html), so it only renders
