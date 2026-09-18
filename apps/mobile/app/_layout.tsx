@@ -12,6 +12,7 @@ import { palette } from '@gymcoach/shared';
 import { LanguageProvider } from '../src/lib/language';
 import { UnitsProvider } from '../src/lib/units';
 import { UnreadProvider, useUnread } from '../src/lib/unread';
+import { FlagsProvider } from '../src/lib/flags';
 import { RestTimerProvider, REST_NOTIFICATION_TYPE } from '../src/lib/restTimer';
 import '../src/i18n';
 
@@ -99,18 +100,20 @@ function RootLayout() {
     <SafeAreaProvider>
       <LanguageProvider>
         <UnitsProvider>
-          <UnreadProvider>
-            <RestTimerProvider>
-              <NotificationBridge />
-              <StatusBar style="light" />
-              <Stack
-                screenOptions={{
-                  headerShown: false,
-                  contentStyle: { backgroundColor: theme.bg },
-                }}
-              />
-            </RestTimerProvider>
-          </UnreadProvider>
+          <FlagsProvider>
+            <UnreadProvider>
+              <RestTimerProvider>
+                <NotificationBridge />
+                <StatusBar style="light" />
+                <Stack
+                  screenOptions={{
+                    headerShown: false,
+                    contentStyle: { backgroundColor: theme.bg },
+                  }}
+                />
+              </RestTimerProvider>
+            </UnreadProvider>
+          </FlagsProvider>
         </UnitsProvider>
       </LanguageProvider>
     </SafeAreaProvider>

@@ -108,9 +108,8 @@ export function formatHistorySummary(logs: SetLog[], units: UnitSystem): string 
 
 /**
  * The "here's last time" line shared by every prompt builder that
- * introduces an exercise (buildTurnPrompt, buildConfirmPrompt's and
- * buildOrchestrationIntroPrompt's next-exercise branches, and
- * buildConversationPrompt's). Used to live as four independent
+ * introduces an exercise (buildTurnPrompt, and buildConfirmPrompt's and
+ * buildConversationPrompt's next-exercise branches). Used to live as four independent
  * near-copies — which is exactly how buildConversationPrompt's copy
  * went stale when the other three were strengthened separately. One
  * shared source means a future wording change, or a new call site,
@@ -266,42 +265,6 @@ export function buildConfirmPrompt(params: {
   lines.push(
     "",
     "Write the coaching message directly as plain text (not JSON) — in your coaching voice per the rules and tone above, always restating the numbers exactly as given above.",
-  );
-  return lines.join("\n");
-}
-
-/**
- * §20 follow-up compose-only call: used only when a free-text turn's
- * chosen next exercise diverges from the deterministic default it was
- * given full targets for — that first reply deliberately doesn't state
- * numbers for the override (it has none), so this composes the short
- * standalone introduction with the numbers now that they're known.
- */
-export function buildOrchestrationIntroPrompt(params: {
-  isRevisit: boolean;
-  deferReason: string | null;
-  nextExercise: Exercise;
-  nextTargets: Targets;
-  nextLastLogs: SetLog[];
-  nextNotes: string[];
-  units: UnitSystem;
-}): string {
-  const { isRevisit, deferReason, nextExercise, nextTargets, nextLastLogs, nextNotes, units } = params;
-  const lines: string[] = [
-    isRevisit
-      ? `The user is coming back to ${nextExercise.name}, an exercise deferred earlier this session${deferReason ? ` (reason given at the time: "${deferReason}")` : ""}. Write a short note that plainly says you're returning to it — not introducing it as brand new — then its target.`
-      : `The user just asked to switch to a different exercise: ${nextExercise.name}, in place of what was originally planned. Write a short, natural acknowledgment of the switch, then its target.`,
-    `Structure: ${nextExercise.sets} work sets, ${nextExercise.repRange} reps, rest ${nextExercise.restSec}s, intensity: ${nextExercise.intensity}.`,
-    nextExercise.warmup ? `Warm-up: ${nextExercise.warmup}` : "No warm-up for this exercise.",
-    "Last time on this exercise:",
-    formatHistory(nextLastLogs, units),
-    targetLine(nextTargets, nextLastLogs, units),
-    ...notesBlock("Saved notes about this exercise", nextNotes),
-  ];
-  lines.push(
-    "",
-    "Do not use any wrap-up/completion language — there is more workout left right now.",
-    "Write the message directly as plain text (not JSON), in your coaching voice per the rules and tone above, keeping it brief since this follows directly after another message in the same turn.",
   );
   return lines.join("\n");
 }

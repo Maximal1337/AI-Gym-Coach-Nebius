@@ -17,8 +17,12 @@ const functionsDir = join(root, "supabase", "functions");
 const baselinePath = join(root, "scripts", "deno-check-baseline.json");
 const update = process.argv.includes("--update");
 
+// Every shared module is checked on its own too, so one no function imports
+// yet (e.g. a helper written ahead of its first caller) is still covered.
 const targets = [
-  "_shared/mod.ts",
+  ...readdirSync(join(functionsDir, "_shared"))
+    .filter((f) => f.endsWith(".ts"))
+    .map((f) => `_shared/${f}`),
   ...readdirSync(functionsDir, { withFileTypes: true })
     .filter((d) => d.isDirectory() && !d.name.startsWith("_") && existsSync(join(functionsDir, d.name, "index.ts")))
     .map((d) => `${d.name}/index.ts`),

@@ -50,8 +50,8 @@ which is the closest thing to actually running the app that's available here.
 ## Backend — Supabase Edge Functions (Deno)
 
 1. Run `node scripts/check-edge-functions.mjs` from the repo root (needs
-   `deno` on PATH). It `deno check`s every function plus `_shared/mod.ts` and
-   fails only when a file has more type errors than recorded in
+   `deno` on PATH). It `deno check`s every function plus every `_shared/*.ts`
+   module and fails only when a file has more type errors than recorded in
    `scripts/deno-check-baseline.json`. CI runs the same script.
 2. **Pre-existing errors are baselined, not zero.** As of 2026-09-18 only
    `session-start` (1) and `studio-session` (31, mostly `GenericStringError`

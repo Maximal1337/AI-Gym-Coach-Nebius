@@ -325,9 +325,9 @@ Two places hardcode account emails that allow instant sign-in without a one-time
 #### NH-10 · Per-user feature flags
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** —
 
-- [ ] Additive migration `user_flags(user_id, flag, enabled, updated_at)`; users can read their own flags, only the service role writes
-- [ ] Helper `isFlagEnabled(db, userId, flag)` in `supabase/functions/_shared/assistant.ts`
-- [ ] Flags defined: `assistant_chat`, `assistant_memory`, `assistant_workout`, plus a global `assistant_enabled` kill switch
+- [ ] Additive migration: `feature_flags(flag, enabled, …)` (one global switch per flag) and `user_flags(user_id, flag, enabled, updated_at)`; clients read their own effective flags via `my_feature_flags()` and never write
+- [ ] Helper `isFlagEnabled(db, userId, flag)` in `supabase/functions/_shared/assistant.ts`, failing closed
+- [ ] Flags defined: `assistant_chat`, `assistant_memory`, `assistant_workout`. A flag is on only when its global switch and the user's row are both on, so the global switch is the kill switch
 - [ ] Only team and demo accounts have flags enabled
 
 #### NH-11 · Shared config for new Edge Functions
@@ -360,6 +360,8 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 
 - [ ] One agreed limit applied in `supabase/functions/coach-turn/index.ts` and `services/agent/src/schema.ts`
 - [ ] Verified with the `verify` skill and a live smoke test; deployed
+
+**Resolution (2026-09-18):** no user-facing drift. The app's composer already caps input at 200 characters (`maxLength` in `apps/mobile/app/(tabs)/train.tsx`), matching `coach-turn`; the agent's 2000 is only a looser outer bound. No code change; close as won't fix.
 
 #### NH-15 · Remove dead code
 **Priority:** Low · **Estimate:** 1 · **Labels:** Area/Backend, Area/Agent, Type/Chore · **Blocked by:** —
@@ -566,7 +568,7 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 #### NH-57 · Kill switch and usage queries
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-51
 
-- [ ] Global `assistant_enabled` flag turns the assistant off for everyone
+- [ ] Kill switch tested: `update public.feature_flags set enabled = false where flag like 'assistant_%'` hides the assistant for everyone
 - [ ] Saved SQL queries: messages per day, tokens and spend per day, errors per day
 
 ### M6 — Personalization memory · target 2026-10-12

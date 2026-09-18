@@ -246,9 +246,9 @@ Deno.serve(withSentry(async (req) => {
       }
     }
 
-    // Scope to exercises on one of this user's own active plans — same
-    // ownership check coach-note uses for a single exercise, extended to a
-    // batch via `.in`.
+    // Scope to exercises on one of this user's own active plans — ownership
+    // is checked through the parent plan's user_id, for the whole batch at
+    // once via `.in`.
     const { data: owned } = await db
       .from("exercises")
       .select("id, plan_id, training_plans!inner(user_id, status)")

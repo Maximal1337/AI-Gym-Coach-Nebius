@@ -1,8 +1,8 @@
 {
+  "_shared/assistant.ts": 0,
   "_shared/mod.ts": 0,
   "accept-terms/index.ts": 0,
   "account-delete/index.ts": 0,
-  "coach-note/index.ts": 0,
   "coach-turn/index.ts": 0,
   "dev-test-login/index.ts": 0,
   "history-import/index.ts": 0,
