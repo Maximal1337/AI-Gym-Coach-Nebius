@@ -41,34 +41,31 @@ which is the closest thing to actually running the app that's available here.
    wrong path 404s. If unsure of the exact entry path, fetch `/` (no
    platform param) first — the returned HTML's `<script src=...>` shows the
    correct bundle URL and query params for this Expo version.
-3. Locale files: after editing `src/locales/*.json`, validate with
-   `python3 -c "import json; json.load(open('FILE'))"` for each of
-   `en.json`/`he.json`/`ar.json` — a trailing comma or bad escape silently
-   breaks the app for one language only, easy to miss.
+3. Locale files: after editing `src/locales/*.json`, run
+   `node scripts/check-locales.mjs` from the repo root. It validates JSON
+   syntax, key parity with `en.json`, and `{{placeholder}}` parity across all
+   eight locales — a trailing comma or bad escape silently breaks the app for
+   one language only, easy to miss. CI runs the same script.
 
 ## Backend — Supabase Edge Functions (Deno)
 
-1. `deno` is installed locally. Typecheck a specific function (fast, doesn't
-   need Docker):
+1. Run `node scripts/check-edge-functions.mjs` from the repo root (needs
+   `deno` on PATH). It `deno check`s every function plus `_shared/mod.ts` and
+   fails only when a file has more type errors than recorded in
+   `scripts/deno-check-baseline.json`. CI runs the same script.
+2. **Pre-existing errors are baselined, not zero.** As of 2026-09-18 only
+   `session-start` (1) and `studio-session` (31, mostly `GenericStringError`
+   from the Supabase client having no generated DB types) have any. Don't
+   chase them in unrelated work. If you fix some, or add a new function,
+   review the output, run `node scripts/check-edge-functions.mjs --update`,
+   and commit the updated baseline.
+3. Quick single-function check while iterating:
    ```bash
    DENO_NO_PACKAGE_JSON=1 deno check --no-config supabase/functions/<name>/index.ts
    ```
-2. **This will report pre-existing errors unrelated to your change** — the
-   Supabase client here has no generated DB types, so `.select()` results
-   type as `GenericStringError` and Deno's checker (stricter than whatever
-   tolerance the actual Edge Runtime has) flags every property access on
-   them. Don't chase these. Compare against baseline before assuming you
-   introduced something:
-   ```bash
-   git stash && DENO_NO_PACKAGE_JSON=1 deno check --no-config supabase/functions/<name>/index.ts > /tmp/before.txt 2>&1
-   git stash pop
-   # then diff the error *line numbers near your edit* against /tmp/before.txt
-   ```
-   If your new code's line range has zero errors and the rest match the
-   baseline (shifted by however many lines you inserted), you're clean.
-3. `supabase/functions/_shared/mod.ts` typechecks clean on its own —
-   `DENO_NO_PACKAGE_JSON=1 deno check --no-config supabase/functions/_shared/mod.ts`
-   is a useful fast check when only touching that file.
+   With `--no-config` there's no lockfile, so `npm:` imports resolve to the
+   latest matching version at check time — a new upstream release of
+   supabase-js can move the counts without any change in this repo.
 
 ## Backend — agent service (Node)
 
