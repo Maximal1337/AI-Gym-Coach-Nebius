@@ -4,12 +4,10 @@ node_modules/
 dist/
 build/
 *.tsbuildinfo
-.env
-.env.*
+.env*
 !.env.example
 secrets/
 .DS_Store
 supabase/.temp/
 coverage/
 .vercel
-.env*

@@ -17,23 +17,25 @@ note on which to reach for first depending on how the bug was reported.
 ## Get a real auth token
 
 `supabase/functions/dev-test-login` is a dev-only instant-sign-in endpoint.
-It now covers a small set of named test accounts, each reset to a
-deterministic state on every login (see the `dev-test-scenario-accounts`
-skill) — confirm the current `TEST_EMAILS` in that file, don't assume a
-single hardcoded address. `dor@test.com` (active trial) is the closest
-equivalent to "the user's regular test account" for reproducing an
-ordinary flow; `dor+expired@test.com` / `dor+new@test.com` reproduce
+It covers a small set of named test accounts, each reset to a deterministic
+state on every login (see the `dev-test-scenario-accounts` skill). The
+addresses are **not** in the repo — ask the user for one, or read them from
+their local `apps/mobile/.env` (`EXPO_PUBLIC_DEV_TEST_ACCOUNTS`); the server
+allowlist is the `DEV_TEST_LOGIN_EMAILS` Supabase secret. The "active trial"
+account is the closest equivalent to "the user's regular test account" for
+reproducing an ordinary flow; the "expired" / "no data" accounts reproduce
 specific paywall/onboarding states on demand instead. It's the same
 mechanism the in-app dev sign-in buttons use in Expo Go, so **data you see
-through `dor@test.com` in particular is very likely the user's own live
-test data, not throwaway fixtures** — see the caution below.
+through the active-trial account in particular is very likely the user's
+own live test data, not throwaway fixtures** — see the caution below.
 
 ```bash
-SUPA_URL="https://pjaeqxgwrctwnvugsqlx.supabase.co"
+SUPA_URL="<EXPO_PUBLIC_SUPABASE_URL from apps/mobile/.env>"
 ANON_KEY="<EXPO_PUBLIC_SUPABASE_ANON_KEY from apps/mobile/.env>"
+TEST_EMAIL="<an address from EXPO_PUBLIC_DEV_TEST_ACCOUNTS>"
 curl -s -X POST "$SUPA_URL/functions/v1/dev-test-login" \
   -H "Authorization: Bearer $ANON_KEY" -H "Content-Type: application/json" \
-  -d '{"email":"dor@test.com"}' > /tmp/login.json
+  -d "{\"email\":\"$TEST_EMAIL\"}" > /tmp/login.json
 TOKEN=$(python3 -c "import json; print(json.load(open('/tmp/login.json'))['accessToken'])")
 ```
 

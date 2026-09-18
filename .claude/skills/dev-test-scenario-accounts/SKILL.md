@@ -11,20 +11,33 @@ specific product state, reset fresh on every single login — useful for
 anything that's otherwise slow or awkward to reach organically (a 30-day
 trial expiring, an account with zero data).
 
+**No test address may appear in the repository.** The repo is public, and
+every allowlisted address signs in without a one-time code — an address in
+the code is a password in the code. All addresses live in secrets and
+out-of-band data only (NH-06).
+
 ## Where the pieces live
 
-- `supabase/functions/dev-test-login/index.ts` — the email allow-list
-  (`TEST_EMAILS`) and instant sign-in (generates + immediately verifies a
-  magic-link OTP server-side, no real email sent).
+- `DEV_TEST_LOGIN_EMAILS` Supabase secret — the instant-sign-in allowlist
+  (comma-separated, lowercase), read by
+  `supabase/functions/dev-test-login/index.ts`. Unset means nothing is
+  allowed. Documented in `supabase/functions/.env.example`.
+- `private.dev_test_accounts (email, scenario)` — which accounts reset, and
+  to what (`active` | `expired` | `fresh`). The `private` schema isn't
+  exposed through PostgREST; rows are written out of band (SQL editor or
+  `supabase db query --linked`), never in a migration.
 - `dev_test_reset_account(uuid)` — a `security definer` Postgres function
   (see the `postgrest-security-definer-writes` skill for why it has to be
   one, not a direct table write from the edge function) that does the
-  actual state reset. Resolves **both** the target account's validity and
-  which scenario to apply from a fixed `email → scenario` mapping inside
-  the function body itself — never from a caller-supplied parameter — so
-  it's safe to grant broadly regardless of which role ends up calling it.
-- `apps/mobile/app/sign-in.tsx` — `DEV_TEST_ACCOUNTS`, one dev-only button
-  per scenario, each just POSTs its email to `dev-test-login`.
+  actual state reset. It resolves the account's email from `auth.users` and
+  its scenario from `private.dev_test_accounts` inside the function body —
+  never from a caller-supplied parameter — so it's safe to grant broadly
+  regardless of which role ends up calling it. Current version:
+  `20260918120000_dev_test_accounts_private.sql`.
+- `apps/mobile/app/sign-in.tsx` — dev-only buttons built from the local
+  `EXPO_PUBLIC_DEV_TEST_ACCOUNTS` env var (JSON array of
+  `{ email, label, resetLanguage? }`, see `apps/mobile/.env.example`); each
+  POSTs its email to `dev-test-login`.
 
 ## The reset-every-login principle
 
@@ -36,31 +49,44 @@ is idempotent by design — safe to call repeatedly with no accumulating side
 effects (an `upsert`/`on conflict do update` for the onboarded case, a
 plain `delete` for the fresh case).
 
-## Adding a new scenario
+## Adding a QA account for an existing scenario
 
-1. Add the email to `TEST_EMAILS` in `dev-test-login/index.ts`.
-2. Add the case to `dev_test_reset_account`'s email→scenario mapping — this
-   means a **new migration** (`create or replace function`), since editing
-   an already-applied migration file's content is a no-op for `db push`
-   (see `postgrest-security-definer-writes` for why).
-3. Add a button to `DEV_TEST_ACCOUNTS` in `sign-in.tsx` with a clear label.
-4. Deploy the migration (`supabase db push`) **and** redeploy the function
-   (`supabase functions deploy dev-test-login`) — both layers changed.
-5. Verify with a real login, not just a code read — call the function
+No code change and no deploy of code:
+1. Pick a random, non-guessable address (e.g. `qa-expired-<random>@example.com`).
+2. Add it to the `DEV_TEST_LOGIN_EMAILS` secret
+   (`supabase secrets set DEV_TEST_LOGIN_EMAILS=...` — the value replaces the
+   whole list, so include the existing addresses).
+3. Add its row: `insert into private.dev_test_accounts (email, scenario)
+   values ('<address>', 'expired');`
+4. For the Expo Go button, add it to your local `EXPO_PUBLIC_DEV_TEST_ACCOUNTS`
+   (with `"resetLanguage": true` for a "no data" account).
+5. Verify with a real login (below).
+
+## Adding a new scenario type
+
+1. New migration (`create or replace function public.dev_test_reset_account`)
+   with the new case, plus widening the `scenario` check constraint on
+   `private.dev_test_accounts`. Editing an already-applied migration file's
+   content is a no-op for `db push` (see `postgrest-security-definer-writes`).
+2. `supabase db push`, then add accounts as above.
+3. Verify with a real login, not just a code read — call the function
    directly (`live-backend-debug` skill's curl pattern) and check the
    actual DB row afterward, since a `security definer` function failing
    silently mid-body is exactly the kind of bug that looks fine from the
    code alone.
 
-## The App Review account is a deliberately different case
+## App Review and demo/judge accounts are deliberately different
 
-`ios-review-<random>@notch.app` (Apple App Reviewer instant sign-in,
-allowed in every build, not just `__DEV__`) shares the same endpoint but is
-**not** in the reset allow-list — it behaves like a genuine first-time
-signup, real onboarding, real persisted data, on purpose. The point is
-giving Apple's reviewer the actual product experience, not a canned demo
-state. See `secrets/app-review-account.md` for the full rationale and the
-exact App Store Connect fields it needs to be pasted into.
+They share the same endpoint and secret allowlist but have **no row** in
+`private.dev_test_accounts`, so they are never reset: they behave like a
+genuine signup, real onboarding, real persisted data — giving Apple's
+reviewer (or a hackathon judge) the actual product experience. They must use
+the app's instant-sign-in domain (`@notch.app`, `INSTANT_SIGN_IN_DOMAIN` in
+`sign-in.tsx`): the production app only asks `dev-test-login` for addresses
+on that domain, in every build, and falls back to the normal one-time code
+when the server doesn't allowlist the address. The review address is entered
+in App Store Connect → App Review Information; keep the details in the
+git-ignored `secrets/` folder, never in the repo.
 
 ## Gotcha: device-local state needs its own separate reset
 
@@ -69,7 +95,6 @@ Language choice (`apps/mobile/src/lib/language.tsx`) is stored in
 language across different signed-in accounts. Resetting the server-side
 `public.users` row for a "no data / always onboarding" scenario does
 **not** touch it. If a scenario needs to reproduce true first-launch
-behavior (onboarding-language screen included), reset that separately and
-explicitly — see `resetLanguageChoice()` and its one call site in
-`sign-in.tsx`'s `devTestLogin()`, gated to only the specific scenario that
-needs it.
+behavior (onboarding-language screen included), set `resetLanguage: true`
+on that account in `EXPO_PUBLIC_DEV_TEST_ACCOUNTS` — `instantSignIn()` in
+`sign-in.tsx` then calls `resetLanguageChoice()` for it.

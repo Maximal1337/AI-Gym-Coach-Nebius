@@ -1,6 +1,6 @@
 # Notch × Nebius Hackathon — Decisions & Action Plan
 
-> **Status:** Draft v1.0 · **Last updated:** 2026-09-17 · **Owners:** TBD
+> **Status:** Accepted v1.0 (2026-09-18) · **Last updated:** 2026-09-18 · **Owners:** TBD
 > **Track:** Personal AI · **Submission deadline:** 2026-10-30 10:00 PT · **Judging:** 2026-12-01 → 2026-12-15
 > **Tracking:** Linear — see [§8 Linear setup](#8-linear-setup)
 
@@ -111,6 +111,7 @@ As of 2026-09-17:
 | O-04 | Spike go/no-go thresholds | TBD | 2026-09-23 | Chat p95 ≤ 10 s; ≤ 1 GiB RAM per container; ≤ $0.05 per 10-turn conversation |
 | O-05 | How NanoClaw reaches Token Factory | Spike (NH-22) | 2026-09-30 | OpenCode provider with a custom OpenAI-compatible endpoint; fallback: Claude provider + Anthropic-compatible proxy |
 | O-06 | Owner per milestone | TBD | 2026-09-20 | — |
+| O-07 | Git history contains personal data (the creator's phone number and personal email, in `app-store-connect-form.md` and older landing pages). How do we publish? | Creator | Before NH-92 | Publish a **new** public repository from a filtered copy of the history (`git filter-repo --replace-text`, commit dates kept) and keep the current repository private. A force-push alone doesn't clean GitHub's `refs/pull/*` for already-merged PRs |
 
 ---
 
@@ -292,6 +293,8 @@ Run gitleaks (or equivalent) across all branches and the full history before the
 - [ ] Every finding rotated or confirmed as non-secret
 - [ ] Scan added to the pre-publish checklist (NH-92)
 
+**Findings (2026-09-18):** a local pattern scan of all refs found no API keys, tokens, JWTs or private keys, and no `.env` file was ever committed. The history does contain personal data → O-07. It also contains the old test and review sign-in addresses; those become harmless once NH-06 rotates them. `.github/workflows/secret-scan.yml` runs gitleaks over the full history; run it manually right before NH-92.
+
 #### NH-06 · Move test and review account allowlists out of code; rotate the review account
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Backend, Area/Security, Type/Chore · **Blocked by:** —
 
@@ -301,6 +304,7 @@ Two places hardcode account emails that allow instant sign-in without a one-time
 - [ ] New test and App Store review accounts created; the old addresses are rejected by `dev-test-login`
 - [ ] App Review information in App Store Connect updated with the new review account
 - [ ] Additive migration only; verified with a live smoke test
+- [ ] No test or review address left in the repo: `sign-in.tsx`, `.claude/skills/*`, and `app-store-connect-form.md` (also holds the creator's name and phone — move it to the git-ignored `secrets/` folder)
 
 #### NH-07 · CI: run unit tests
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/QA, Type/Chore · **Blocked by:** —

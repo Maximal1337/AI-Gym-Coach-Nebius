@@ -20,22 +20,43 @@ import { useTheme, spacing, radius } from '../src/theme';
 
 const RESEND_COOLDOWN_SEC = 30;
 const CODE_LENGTH = 6;
-// Three fixed test accounts, allowlisted server-side in dev-test-login
-// itself — the real safety boundary is there, not this __DEV__ gate. Each
-// one is reset to its named state on every login (see that function), not
-// just created once, so it stays reliable across repeated testing. Lets
-// testing in Expo Go skip waiting on a real inbox before custom SMTP is
-// wired up.
-const DEV_TEST_ACCOUNTS = [
-  { email: 'dor@test.com', label: 'active trial' },
-  { email: 'dor+expired@test.com', label: 'subscription ended' },
-  { email: 'dor+new@test.com', label: 'no data — always onboarding' },
-] as const;
-// Apple App Review has no inbox to receive a real one-time code in, so
-// this exact address (allowlisted server-side in dev-test-login, and
-// deliberately excluded from its QA-scenario reset) skips straight to a
-// session in every build, not just __DEV__ — see sendCode() below.
-const REVIEW_TEST_EMAIL = 'ios-review-7f2ka9@notch.app';
+// Apple App Review and demo/judge accounts have no inbox to receive a real
+// one-time code in, so addresses on this domain ask dev-test-login for an
+// instant session first, in every build, not just __DEV__ — see sendCode()
+// below. The allowlist itself is a server-side secret (the repo is public);
+// this domain check only keeps ordinary users from paying for the extra
+// round trip, and an address the server doesn't know falls back to the
+// normal one-time code.
+const INSTANT_SIGN_IN_DOMAIN = '@notch.app';
+
+// Dev-only QA accounts for Expo Go, one button each, read from the local
+// .env (EXPO_PUBLIC_DEV_TEST_ACCOUNTS, a JSON array) so no test address
+// ships in the repo. Each must also be allowlisted server-side in
+// dev-test-login — the real safety boundary is there, not this __DEV__
+// gate. See the dev-test-scenario-accounts skill.
+interface DevTestAccount {
+  email: string;
+  label: string;
+  /** Also clear the device-local language choice, for a "no data — always onboarding" account. */
+  resetLanguage?: boolean;
+}
+
+function readDevTestAccounts(): DevTestAccount[] {
+  const raw = process.env.EXPO_PUBLIC_DEV_TEST_ACCOUNTS;
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((a): a is DevTestAccount =>
+      typeof a === 'object' && a !== null
+      && typeof (a as DevTestAccount).email === 'string'
+      && typeof (a as DevTestAccount).label === 'string');
+  } catch {
+    return [];
+  }
+}
+
+const DEV_TEST_ACCOUNTS: DevTestAccount[] = __DEV__ ? readDevTestAccounts() : [];
 
 /**
  * Email/code sign-in (System Design: auth-flow guidelines, option B —
@@ -117,9 +138,16 @@ export default function SignIn() {
       Alert.alert(t('signInError'), t('enterValidEmail'));
       return;
     }
-    if (trimmed === REVIEW_TEST_EMAIL) {
-      await devTestLogin(trimmed);
-      return;
+    if (trimmed.toLowerCase().endsWith(INSTANT_SIGN_IN_DOMAIN)) {
+      setBusy(true);
+      try {
+        if (await instantSignIn(trimmed)) return;
+      } catch {
+        Alert.alert(t('signInError'));
+        return;
+      } finally {
+        setBusy(false);
+      }
     }
     setBusy(true);
     const { error } = await supabase.auth.signInWithOtp({ email: trimmed });
@@ -161,31 +189,44 @@ export default function SignIn() {
     setCooldown(0);
   }
 
-  // Dev-only: the edge function isn't behind the normal auth check (it
-  // can't be — there's no session yet), so this is a plain unauthenticated
-  // fetch rather than the usual callFn helper, which requires one.
-  async function devTestLogin(testEmail: string) {
+  // Instant session from dev-test-login. The edge function isn't behind the
+  // normal auth check (it can't be — there's no session yet), so this is a
+  // plain unauthenticated fetch rather than the usual callFn helper, which
+  // requires one. Resolves false, without signing in, when the server
+  // doesn't allowlist this address (403) so the caller can fall back to the
+  // one-time code; throws on any other failure.
+  async function instantSignIn(targetEmail: string, opts: { resetLanguage?: boolean } = {}): Promise<boolean> {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/dev-test-login`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        apikey: SUPABASE_ANON_KEY,
+        authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({ email: targetEmail }),
+    });
+    if (res.status === 403) return false;
+    if (!res.ok) throw new Error(await res.text());
+    const { accessToken, refreshToken } = await res.json();
+    const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+    if (error) throw error;
+    // The "no data" account resets its server-side row on every login
+    // (dev-test-login), but the language choice is device-local, not
+    // server data — without this, onboarding-language never reshows
+    // once this device has picked a language even once.
+    if (opts.resetLanguage) await resetLanguageChoice();
+    afterAuth();
+    return true;
+  }
+
+  // Dev-only QA buttons: unlike sendCode(), an address the server rejects is
+  // a misconfiguration here, not a reason to fall back to the one-time code.
+  async function devTestLogin(account: DevTestAccount) {
     setBusy(true);
     try {
-      const res = await fetch(`${SUPABASE_URL}/functions/v1/dev-test-login`, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          apikey: SUPABASE_ANON_KEY,
-          authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ email: testEmail }),
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const { accessToken, refreshToken } = await res.json();
-      const { error } = await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
-      if (error) throw error;
-      // The "no data" account resets its server-side row on every login
-      // (dev-test-login), but the language choice is device-local, not
-      // server data — without this, onboarding-language never reshows
-      // once this device has picked a language even once.
-      if (testEmail === 'dor+new@test.com') await resetLanguageChoice();
-      afterAuth();
+      if (!(await instantSignIn(account.email, { resetLanguage: account.resetLanguage }))) {
+        throw new Error('not_allowed');
+      }
     } catch {
       Alert.alert(t('signInError'));
     } finally {
@@ -254,13 +295,13 @@ export default function SignIn() {
           />
           <Button block disabled={busy} onPress={() => { track('signin_email_continue_tapped'); sendCode(); }}>{t('continue')}</Button>
 
-          {__DEV__ && DEV_TEST_ACCOUNTS.map(({ email: testEmail, label }) => (
+          {__DEV__ && DEV_TEST_ACCOUNTS.map((account) => (
             <Button
-              key={testEmail}
-              variant="dashed" block disabled={busy} onPress={() => devTestLogin(testEmail)}
+              key={account.email}
+              variant="dashed" block disabled={busy} onPress={() => devTestLogin(account)}
               style={{ marginTop: spacing.md }}
             >
-              Dev: {label}
+              Dev: {account.label}
             </Button>
           ))}
         </>

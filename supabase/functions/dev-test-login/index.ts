@@ -1,41 +1,42 @@
 import { admin, corsHeaders, json, withSentry } from "../_shared/mod.ts";
 
 /**
- * Instant sign-in for a small set of hardcoded test accounts. Generates a
- * valid one-time code server-side and verifies it in the same request, so
- * the client gets back a real session without an email ever being sent.
- * Two purposes share this endpoint:
- *  - Dev QA scenarios (dor@test.com, dor+expired@test.com, dor+new@test.com),
- *    each pinned to a deterministic subscription/onboarding state and RESET
- *    on every login — see below.
- *  - Apple App Review (ios-review-7f2ka9@notch.app) — a reviewer has no
- *    inbox to receive a real one-time code in, so apps/mobile/app/sign-in.tsx
- *    routes this exact address through here instead of the normal OTP flow,
- *    in every build, not just __DEV__. It's deliberately NOT in the reset
- *    allow-list below: it behaves like an ordinary first-time signup (real
- *    onboarding, real data), which is the more representative review path.
+ * Instant sign-in for a small allowlist of accounts that can't receive a
+ * one-time code. Generates a valid one-time code server-side and verifies
+ * it in the same request, so the client gets back a real session without
+ * an email ever being sent. Two purposes share this endpoint:
+ *  - Dev QA scenario accounts, each pinned to a deterministic
+ *    subscription/onboarding state and RESET on every login — see below.
+ *  - Apple App Review and demo/judge accounts — a reviewer has no inbox to
+ *    receive a real one-time code in, so apps/mobile/app/sign-in.tsx asks
+ *    this endpoint first for addresses on its instant-sign-in domain, in
+ *    every build, not just __DEV__. These are deliberately NOT in the reset
+ *    table: they behave like ordinary accounts (real onboarding, real data),
+ *    which is the more representative review path.
  *
- * The email is checked here, server-side — this is the actual security
- * boundary. Anything other than one of the allowed addresses is rejected
- * outright, so this can never be used to sign in as a real user's account.
- * The review address is a random, non-guessable string (not "dev@test.com"
- * or similar) so it isn't stumbled into by accident.
+ * The allowlist is the DEV_TEST_LOGIN_EMAILS secret (comma-separated), never
+ * the repository: the repository is public, and every allowlisted address
+ * is an instant-sign-in credential. Use random, non-guessable addresses.
+ * The check here, server-side, is the actual security boundary — anything
+ * not on the list is rejected outright, and an unset secret rejects
+ * everything, so this can never be used to sign in as a real user's account.
  *
- * Each dev QA account's state is RESET on every single login, not just
- * created once — otherwise "the expired one" would drift as soon as you
- * actually used the app with it (finish onboarding, a webhook fires,
- * etc.), and stop reliably reproducing the scenario it's named for. The
- * reset itself runs through the dev_test_reset_account(uuid) RPC — see
- * that function's own comment (20260810141500 migration) for why it's a
- * security-definer function with the account/scenario resolved from a
- * fixed allow-list inside the function body, not direct table writes.
+ * Each QA account's state is RESET on every single login, not just created
+ * once — otherwise "the expired one" would drift as soon as you actually
+ * used the app with it (finish onboarding, a webhook fires, etc.), and stop
+ * reliably reproducing the scenario it's named for. The reset runs through
+ * the dev_test_reset_account(uuid) RPC, which resolves the scenario from
+ * private.dev_test_accounts inside the function body (20260918120000
+ * migration) — an allowlisted address with no row there is simply not reset.
  */
-const TEST_EMAILS = new Set([
-  "dor@test.com",
-  "dor+expired@test.com",
-  "dor+new@test.com",
-  "ios-review-7f2ka9@notch.app",
-]);
+function allowedEmails(): Set<string> {
+  return new Set(
+    (Deno.env.get("DEV_TEST_LOGIN_EMAILS") ?? "")
+      .split(",")
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
 
 Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -47,8 +48,8 @@ Deno.serve(withSentry(async (req) => {
   } catch {
     return json(400, { error: "invalid_input" });
   }
-  const email = body.email;
-  if (!email || !TEST_EMAILS.has(email)) return json(403, { error: "not_allowed" });
+  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
+  if (!email || !allowedEmails().has(email)) return json(403, { error: "not_allowed" });
 
   const db = admin();
 
