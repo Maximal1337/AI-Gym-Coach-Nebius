@@ -353,6 +353,8 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 - [ ] Facts seeded once NH-60 lands
 - [ ] Flags enabled only for these accounts; per-account daily caps apply
 
+**Implementation (2026-09-18):** migration `20260918140000_demo_accounts.sql` adds `private.demo_accounts` (the registry) and `private.seed_demo_account(email)`. The `private` schema isn't exposed through the API, so the seed runs only from the SQL editor or `supabase db query`. It seeds an English persona: Upper/Lower plan, 8 workouts / 128 sets whose weights follow `progression.ts`, 32 workout-chat messages rich in personal context for the memory job, 2 saved notes and both assistant flags. It refuses unregistered and QA-scenario addresses because it wipes the account first. Re-run it right before judging. Runbook: `dev-test-scenario-accounts` skill, "Demo and judge accounts". Facts get added to the seed with NH-60.
+
 #### NH-14 · Fix message-length drift in coach-turn
 **Priority:** Medium · **Estimate:** 1 · **Labels:** Area/Backend, Type/Bug · **Blocked by:** —
 

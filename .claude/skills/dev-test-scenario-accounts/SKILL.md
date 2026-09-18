@@ -88,6 +88,32 @@ when the server doesn't allowlist the address. The review address is entered
 in App Store Connect → App Review Information; keep the details in the
 git-ignored `secrets/` folder, never in the repo.
 
+## Demo and judge accounts
+
+Demo and judge accounts get two weeks of realistic history — plan, eight
+workouts, workout chat, saved notes, and the `assistant_chat` /
+`assistant_memory` feature flags — from `private.seed_demo_account(email)`
+(migration `20260918140000_demo_accounts.sql`). The function wipes the
+account's plans, workouts, notes, studio sessions and usage first, so it only
+runs for addresses registered in `private.demo_accounts`. It also refuses QA
+scenario accounts, whose state resets on every login. Setup, per account
+(one team demo account plus one per judge):
+
+1. Pick a random address on the instant-sign-in domain, e.g. `judge-<random>@notch.app`.
+2. `insert into private.demo_accounts (email, label) values ('<address>', 'Judge 1');`
+3. Add the address to the `DEV_TEST_LOGIN_EMAILS` secret (the value replaces the whole list).
+4. Create the auth user by signing in once through dev-test-login — the
+   `live-backend-debug` curl call is enough, no device needed.
+5. `select private.seed_demo_account('<address>');` — returns counts:
+   2 plans, 10 exercises, 8 workouts, 128 sets, 32 messages, 2 notes.
+
+History is placed relative to `now()`. Right before judging, re-seed every
+account so the two weeks line up with the judging window and anything a
+tester changed is reset:
+`select email, private.seed_demo_account(email) from private.demo_accounts order by email;`
+The in-app language choice is device-local, so a first launch on a new
+device still shows the language screen once.
+
 ## Gotcha: device-local state needs its own separate reset
 
 Language choice (`apps/mobile/src/lib/language.tsx`) is stored in
