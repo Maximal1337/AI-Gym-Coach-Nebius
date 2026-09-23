@@ -1,6 +1,6 @@
 # Notch × Nebius Hackathon — Decisions & Action Plan
 
-> **Status:** Accepted v1.0 (2026-09-18) · **Last updated:** 2026-09-18 · **Owners:** TBD
+> **Status:** Accepted v1.1 — revised 2026-09-23 against the event briefing · **Last updated:** 2026-09-23 · **Owners:** TBD
 > **Track:** Personal AI · **Submission deadline:** 2026-10-30 10:00 PT · **Judging:** 2026-12-01 → 2026-12-15
 > **Tracking:** Linear — see [§8 Linear setup](#8-linear-setup)
 
@@ -40,7 +40,7 @@ Notch gets a personal AI coach:
 The existing stack stays in place during the hackathon: Supabase, the Fly.io agent service and the Vercel landing page. New features are enabled only for team, demo and judge accounts via server-side feature flags. All real users keep the current experience until a post-hackathon rollout.
 
 What we submit:
-- **Stage A (required):** NanoClaw "Coach chat" outside workouts, with Tavily search and personalization memory.
+- **Stage A (required):** NanoClaw "Coach chat" outside workouts, with Tavily search, personalization memory, write tools so the assistant acts on the user's behalf, and a proactive daily check-in.
 - **Stage B (stretch):** in-workout coaching on NanoClaw.
 - **Submission package:** public repo with an OSS license, English README, demo video under 3 minutes, TestFlight link with demo accounts.
 
@@ -55,8 +55,14 @@ Source: [Nebius x NVIDIA Global AI Hackathon rules](https://nebiusglobalaihackat
 - The repository is **public** with an open-source license (Apache 2.0, MIT or MPL 2.0).
 - Submission includes an English README with setup instructions, a demo video under 3 minutes, and a working demo or test build that judges can access.
 - For a pre-existing project, the submission explains what was **significantly updated after 2026-08-26**.
-- The Tavily bonus prize requires a functional runtime call to the **Tavily API**.
-- Judges must be able to access the working project **through the end of judging (2026-12-15)**.
+- The Tavily bonus prize requires a functional runtime call to the **Tavily API**. A project can win one overall **or** one track award, plus at most one bonus.
+- Judges must be able to access the working project **through the end of judging (2026-12-15)**, free of charge; if it's gated, the submission provides a login.
+- The demo video is public on YouTube, under 3 minutes, with a **voiceover that explains how Token Factory and Nemotron are used**, and no third-party music or trademarks.
+- The license must be visible in GitHub's **About** panel, and the README must explain how Nemotron and Token Factory are used.
+- The submission selects the **Tel Aviv** city (City Winner) and includes feedback on Token Factory, AI Cloud and the NVIDIA tools.
+- Judging stage 1 is pass/fail on track fit and on **not being a superficial rebrand** of an open-source base. Stage 2 scores four criteria equally: technical implementation (how effectively Token Factory and Nemotron are used), design as a whole product, impact, and quality of idea.
+- The Personal AI track's judging hint: not a chatbot with a system prompt, but an assistant that **remembers across sessions and acts on the user's behalf**.
+- NanoClaw, NemoClaw and Tavily are **optional**; only the Nebius runtime call and the NVIDIA open model are mandatory.
 
 ---
 
@@ -82,7 +88,7 @@ As of 2026-09-17:
 |---|---|---|---|---|
 | D-01 | Compete in the **Personal AI** track | Confirmed | 2026-09-17 | A private assistant with persistent memory matches the track |
 | D-02 | Agent runtime: **NanoClaw** ([nanoclaw.dev](https://nanoclaw.dev)) | Confirmed | 2026-09-17 | Container isolation per agent, custom channels, templates, Tavily integration |
-| D-03 | Model: **NVIDIA Nemotron via Nebius Token Factory** for the NanoClaw agent and memory extraction | Confirmed | 2026-09-17 | Hackathon requirement |
+| D-03 | Model: **NVIDIA Nemotron via Nebius Token Factory**, routed per purpose — Super for interactive turns with `reasoning_effort: "none"`, Ultra with thinking on for the nightly memory job, Nano/Lightning for cheap classification | Confirmed; routing proposed | 2026-09-23 | Hackathon requirement. Thinking must be off on tool-calling turns: a reasoning model can spend `max_tokens` on thinking and return empty `content` |
 | D-04 | Web search: **Tavily**, search only (`tavily_search`) | Confirmed | 2026-09-17 | Bonus prize; replaces generic web tools; extract is an exfiltration risk |
 | D-05 | **Keep Supabase** (Postgres, Auth, Edge Functions), the Fly.io agent service and Vercel; full infra migration deferred | Confirmed | 2026-09-17 | Migration cost doesn't fit the hackathon timeline |
 | D-06 | Auth stays on **Supabase Auth**; no custom auth service | Confirmed | 2026-09-17 | Ready-made and already in production |
@@ -98,6 +104,9 @@ As of 2026-09-17:
 | D-16 | Judges test via a **public TestFlight link + seeded demo accounts** (one per judge) | Proposed | 2026-09-17 | The App Store version for real users stays unchanged |
 | D-17 | During the hackathon, existing coaching functions and the behavior of `_shared/mod.ts` do not change (NH-14 excepted). New code lives in new functions and `_shared/assistant.ts`; `mod.ts` may only gain new exports. Migrations are additive only | Proposed | 2026-09-17 | Protects real users |
 | D-18 | Work is tracked in **Linear** (§8) | Confirmed | 2026-09-17 | Team workflow |
+| D-19 | NanoClaw is the **runtime, not the product**. The deliverable is our own software on top: the MCP tool server over real training data, the memory pipeline, per-user provisioning and the channel adapter, and the deterministic progression the agent must obey. README and video lead with those | Proposed | 2026-09-23 | Stage 1 rejects a superficial rebrand of an open-source base; "deploy NanoClaw + Nemotron + Tavily" is configuration, not a project |
+| D-20 | How NanoClaw reaches Token Factory, in this order: (1) a LiteLLM container exposing an Anthropic-compatible endpoint, with NanoClaw's built-in Claude provider pointed at it via `ANTHROPIC_BASE_URL`; (2) patch the OpenCode provider in our fork; (3) drop NanoClaw from the realtime path and keep our own agent loop | Proposed | 2026-09-23 | NanoClaw issue #1984 (open, no maintainer reply): routing OpenCode/Codex at a custom OpenAI-compatible endpoint needs patched provider source, while `ANTHROPIC_BASE_URL` is a documented path |
+| D-21 | The assistant must **act**, not just answer: Stage A ships write tools (save a note, adjust an exercise in the plan) and the proactive daily check-in is required, not a stretch | Proposed | 2026-09-23 | The Personal AI judging hint is explicitly about memory across sessions plus acting on the user's behalf |
 
 ---
 
@@ -109,7 +118,8 @@ As of 2026-09-17:
 | O-02 | Supabase project region → VM region | TBD | 2026-09-20 | `eu-north1` if latency to Supabase is acceptable (cheapest 2 vCPU preset) |
 | O-03 | License: MIT or Apache-2.0 | TBD | 2026-09-20 | MIT |
 | O-04 | Spike go/no-go thresholds | TBD | 2026-09-23 | Chat p95 ≤ 10 s; ≤ 1 GiB RAM per container; ≤ $0.05 per 10-turn conversation |
-| O-05 | How NanoClaw reaches Token Factory | Spike (NH-22) | 2026-09-30 | OpenCode provider with a custom OpenAI-compatible endpoint; fallback: Claude provider + Anthropic-compatible proxy |
+| O-05 | How NanoClaw reaches Token Factory | Spike (NH-22) | 2026-09-30 | Resolved into D-20's three-step order; the spike picks the first step that works |
+| O-08 | Scope of Stage A write tools (D-21) — how much may the assistant change in a plan without a confirmation step? | TBD | 2026-09-30 | Swapping or replacing one exercise in an active plan, echoed back in the reply; anything larger needs an explicit confirmation |
 | O-06 | Owner per milestone | TBD | 2026-09-20 | — |
 | O-07 | Git history contains personal data (the creator's phone number and personal email, in `app-store-connect-form.md` and older landing pages). How do we publish? | Creator | Before NH-92 | Publish a **new** public repository from a filtered copy of the history (`git filter-repo --replace-text`, commit dates kept) and keep the current repository private. A force-push alone doesn't clean GitHub's `refs/pull/*` for already-merged PRs |
 
@@ -146,17 +156,18 @@ Invariants:
 
 ## 7. Budget
 
-**Available credits (≈ $200 in total):**
-- Nebius Builder Program, per member and non-transferable: up to $50 AI Cloud + $50 Token Factory ($25 each at verification, $25 each ~30 days later). Credits expire 90 days after issuance.
-- Hackathon promo code: $25 Token Factory per member.
-- Tavily: Builder Program partner credits.
+**Available credits (per attending member, non-transferable):**
+- Builders & Brews Tel Aviv event: **$100 Token Factory + $100 AI Cloud**, plus Tavily credits.
+- Hackathon promo code `NEBIUS-DEVPOST-GLOBAL26`: **+$25 Token Factory**.
+- Nebius Builders Program (dev.nebius.com/builders): **+$25 Token Factory**, plus Tavily credits and Academy access.
+- Roughly **$150 Token Factory + $100 AI Cloud** per member. Credits expire 90 days after issuance, so check the dates still cover judging through 2026-12-15, and note which account holds which pot (O-01).
 
 **Estimates:**
 
 | Item | Sizing | Estimate |
 |---|---|---|
 | Nebius VM (NanoClaw host) | 2 vCPU / 8 GiB CPU VM ($0.012/vCPU-h + $0.0032/GiB-h ≈ $0.05/h), ~Oct 1 → Dec 15 | ≈ $90 compute + ≈ $5–10 disk (public IP: verify) |
-| Token Factory | Nemotron 3 Super ($0.30 in / $0.90 out per 1M tokens) for development, evals, demo, judging, and the nightly memory job for demo accounts | ≈ $60–80; depends on harness tokens per turn (measured in NH-25) |
+| Token Factory | Nemotron 3 Super ($0.30 in / $0.90 out per 1M) for interactive turns, Ultra ($1 / $3 per 1M) for the nightly memory job, Lightning ($0.06 / $0.24) for cheap calls — development, evals, demo and judging | ≈ $60–90; depends on harness tokens per turn (measured in NH-25) |
 | Tavily | Builder Program credits + free tier | ≈ $0 |
 | Gemini via OpenRouter | Unchanged | Current spend |
 
@@ -165,7 +176,7 @@ Invariants:
 - Separate Token Factory API keys for the agent and the memory job, if supported, so spend per component is visible.
 - Billing alerts; a global daily spend cap; per-account message caps for demo and judge accounts; a kill-switch flag.
 - If credits run low: move extraction and simple turns to Nemotron 3.5 Lightning ($0.06 / $0.24 per 1M tokens), after an eval.
-- A 4 vCPU / 16 GiB VM (≈ $72/month) does not fit the budget.
+- A 4 vCPU / 16 GiB VM (≈ $72/month) now fits within one member's $100 AI Cloud credits for the final stretch — worth it only if the spike shows memory pressure from concurrent agent containers plus the LiteLLM proxy (D-20).
 
 ---
 
@@ -216,25 +227,26 @@ Invariants:
 |---|---|---|---|---|
 | M0 | Credits, compliance, safety net | 2026-09-20 | NH-01 … NH-08 | 14 |
 | M1 | Foundations | 2026-09-24 | NH-10 … NH-15 | 14 |
-| M2 | NanoClaw spike go/no-go | 2026-09-30 | NH-20 … NH-27 | 18 |
+| M2 | NanoClaw spike go/no-go | 2026-09-30 | NH-20 … NH-28 | 20 |
 | M3 | Nebius VM | 2026-10-03 | NH-30 … NH-35 | 14 |
-| M4 | Coach template and tools | 2026-10-07 | NH-40 … NH-45 | 19 |
+| M4 | Coach template and tools | 2026-10-07 | NH-40 … NH-45 | 20 |
 | M5 | Channel and delivery | 2026-10-09 | NH-50 … NH-57 | 27 |
-| M6 | Personalization memory | 2026-10-12 | NH-60 … NH-66 | 18 (+5 stretch) |
+| M6 | Personalization memory | 2026-10-12 | NH-60 … NH-66 | 23 |
 | M7 | TestFlight demo build | 2026-10-14 (build submitted to Beta App Review by 10-12) | NH-70 … NH-73 | 12 |
 | M8 | Stretch: in-workout coaching on NanoClaw | 2026-10-21 | NH-80 … NH-82 | 16 (stretch) |
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | NH-90 … NH-93 | 9 |
 | M10 | Judging support | 2026-12-15 | NH-95 | 1 |
 
-Required scope: **146 points ≈ 50 person-days** on the §8 scale. Stretch: 21 points.
+Required scope: **154 points ≈ 54 person-days** on the §8 scale. Stretch: 16 points.
 
 If capacity is lower, cut in this order:
 1. M8
-2. NH-66
-3. NH-65 (replace with manual checks)
-4. NH-08
-5. NH-34 (provider snapshots only)
-6. NH-35 (billing alerts and an uptime ping only)
+2. NH-65 (replace with manual checks)
+3. NH-08
+4. NH-34 (provider snapshots only)
+5. NH-35 (billing alerts and an uptime ping only)
+
+Don't cut NH-66 or NH-44 to save time: without them the submission is a chatbot, which is what the track's judging hint rules out (D-21).
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32.
 
@@ -374,6 +386,17 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 
 ### M2 — NanoClaw spike go/no-go · target 2026-09-30
 
+#### NH-28 · Raw Token Factory smoke test: Nemotron tool calling
+**Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-01
+
+Runs **first**, before any NanoClaw wiring, so a model problem can't be mistaken for a harness problem. Two known failure modes to rule out: a reasoning model spending `max_tokens` on thinking and returning empty `content`, and tool calls breaking on reasoning models.
+
+- [ ] `GET /v1/models` lists the Nemotron IDs we plan to use (Super, Ultra, Nano/Lightning)
+- [ ] A full two-step tool call (request → `tool_calls` → tool result → final answer) succeeds on the interactive model with `reasoning_effort: "none"`
+- [ ] `tool_choice: "required"` and a `response_format: json_schema` call both succeed — the memory job depends on schema output
+- [ ] Recorded per model: latency, tokens, and whether `reasoning_content` ever arrives instead of `content`
+- [ ] If every Nemotron fails at tool calling: decide between a translation layer (LiteLLM), a different Nemotron variant, or keeping tool calling in our own loop, and ask in the Nebius Discord
+
 #### NH-20 · Agree spike go/no-go thresholds
 **Priority:** High · **Estimate:** 1 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** —
 
@@ -387,12 +410,16 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 - [ ] NanoClaw license checked for the fork
 
 #### NH-22 · Connect Nemotron via Nebius Token Factory
-**Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-01, NH-21
+**Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-21, NH-28
 
-- [ ] Actual model IDs listed via `GET https://api.tokenfactory.nebius.com/v1/models`
-- [ ] Agent replies with Nemotron 3 Super through OpenCode using a custom OpenAI-compatible provider; fallback (Claude provider + Anthropic-compatible proxy) documented if needed
-- [ ] Tool calling works end to end (an MCP tool is called and its result used in the reply)
-- [ ] O-05 resolved
+Work D-20's order and stop at the first step that works. Step 1 is the documented path on both sides; NanoClaw issue #1984 is why step 2 exists.
+
+- [ ] Step 1: a LiteLLM container exposes an Anthropic-compatible endpoint over Token Factory, and NanoClaw's Claude provider reaches it via `ANTHROPIC_BASE_URL` with the real key held in the vault
+- [ ] Step 2 if step 1 fails: patch the OpenCode provider in our fork to accept a custom OpenAI-compatible base URL
+- [ ] The agent answers with Nemotron and calls an MCP tool end to end (the tool's result is used in the reply)
+- [ ] Interactive turns run with thinking off; the setting that achieves it is written down
+- [ ] Confirmed that nothing silently falls back to Claude at runtime — the requests reach Token Factory
+- [ ] O-05 resolved and recorded in §4
 
 #### NH-23 · Tavily search via MCP
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-03, NH-21
@@ -414,8 +441,9 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 - [ ] Cold start and p50/p95 reply latency recorded
 - [ ] Input/output tokens per turn recorded; source of usage data identified (agent runner, `outbound.db`, vault gateway or Token Factory key)
 - [ ] RAM per container recorded with 3 concurrent sessions
-- [ ] Cost per 10-turn conversation estimated
+- [ ] Cost per 10-turn conversation estimated, at the routing from D-03
 - [ ] Sample replies in Hebrew, Arabic and Portuguese collected (informational)
+- [ ] Confirmed over a longer session that `content` is never empty because of reasoning (the NH-28 failure mode, but through the harness)
 
 #### NH-26 · Verify NanoClaw security controls
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Security, Type/Spike · **Blocked by:** NH-21
@@ -505,11 +533,14 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 - [ ] Every query filtered by the resolved `user_id`
 - [ ] Weights returned in the user's unit system
 
-#### NH-44 · Stage A write tool: save note
-**Priority:** Medium · **Estimate:** 2 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-42
+#### NH-44 · Stage A write tools: save note and plan tweak
+**Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-42
 
-- [ ] `save_note` writes to `coach_notes` (general or exercise-scoped) with the same validation as the current coach
-- [ ] Length limits enforced
+D-21: acting on the user's behalf is what the track is judged on, so Stage A isn't read-only.
+
+- [ ] `save_note` writes to `coach_notes` (general or exercise-scoped) with the same validation as the current coach; length limits enforced
+- [ ] `adjust_plan_exercise` swaps or replaces one exercise in an active plan through the existing validated write path, within the scope agreed in O-08
+- [ ] Both tools re-check ownership server-side, and the reply states exactly what changed
 
 #### NH-45 · Agent instructions and policies
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-40
@@ -631,10 +662,13 @@ Eviction, with a cap of 15 facts per user:
 - [ ] Running the job twice on unchanged input changes nothing
 
 #### NH-66 · Proactive daily check-in
-**Priority:** Low · **Estimate:** 5 · **Labels:** Area/Agent, Type/Feature, Stretch · **Blocked by:** NH-55, NH-64
+**Priority:** High · **Estimate:** 5 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-55, NH-64
 
-- [ ] NanoClaw scheduled task (paused in the template, enabled for demo accounts) sends a daily message with today's workout and one relevant fact
+Required, not a stretch (D-21): "always-on" is half of what the Personal AI track asks for, and a message the user didn't trigger is the clearest demo of it.
+
+- [ ] NanoClaw scheduled task (paused in the template, enabled per account) sends a daily message with today's workout and one relevant fact
 - [ ] Delivered through `assistant-deliver` with a push notification; within spend caps
+- [ ] Skips silently when there's nothing to say, so it never becomes noise
 
 ### M7 — TestFlight demo build · target 2026-10-14
 
@@ -703,15 +737,18 @@ EAS build and submit commands need explicit team approval and `--non-interactive
 
 - [ ] Architecture diagram and a component overview
 - [ ] Setup instructions for the mobile app, Supabase functions, agent service, NanoClaw fork and template, and the VM, with every environment variable listed
-- [ ] How NanoClaw, Nemotron on Token Factory and Tavily are used
+- [ ] How NanoClaw, Nemotron on Token Factory and Tavily are used, including the model routing and why each model is used where
+- [ ] A clear split of what comes from upstream NanoClaw and what we wrote (D-19), with the fork's license preserved
 - [ ] Section "What changed during the submission period (after 2026-08-26)"
 - [ ] License and demo instructions
 
 #### NH-91 · Demo video
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** NH-73
 
-- [ ] Under 3 minutes, uploaded to YouTube
-- [ ] Shows the Coach chat, a Tavily answer with sources, memory (facts screen and a personalized reply), and the isolation/security story
+- [ ] Under 3 minutes, public on YouTube, no third-party music or trademarks
+- [ ] Voiceover explicitly explains how Token Factory and the Nemotron models are used (a scored requirement, not a nicety)
+- [ ] Shows memory across sessions and the assistant acting — a proactive check-in and a tool-driven change — not just chat
+- [ ] Shows a Tavily answer with sources, and names what is ours versus upstream NanoClaw (D-19)
 
 #### NH-92 · Make the repositories public
 **Priority:** Urgent · **Estimate:** 1 · **Labels:** Area/Security, Area/Docs, Type/Chore · **Blocked by:** NH-04, NH-05, NH-06
@@ -723,8 +760,9 @@ EAS build and submit commands need explicit team approval and `--non-interactive
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** NH-72, NH-90, NH-91, NH-92
 
 - [ ] Description covers features, NVIDIA model usage and the Nebius tools used
-- [ ] Track: Personal AI; repo and video links; TestFlight link and demo credentials in the testing instructions
-- [ ] Nebius feedback form completed
+- [ ] Track: Personal AI; city: **Tel Aviv** (City Winner); repo and video links; TestFlight link and demo credentials in the testing instructions
+- [ ] License visible in the repository's GitHub **About** panel
+- [ ] Feedback on Token Factory, AI Cloud and the NVIDIA tools submitted
 - [ ] Submitted by 2026-10-26
 
 ### M10 — Judging support · 2026-12-01 → 2026-12-15
@@ -741,12 +779,16 @@ EAS build and submit commands need explicit team approval and `--non-interactive
 
 | Risk | Impact | Mitigation | Related |
 |---|---|---|---|
-| AI Cloud credits don't cover the VM through Dec 15 | Demo offline during judging | 2 vCPU / 8 GiB from Oct 1; billing alerts; stop the VM in November only as a last resort | NH-01, NH-30, NH-95 |
+| AI Cloud credits don't cover the VM through Dec 15 | Demo offline during judging | ~$100 AI Cloud per member covers a 2 vCPU / 8 GiB VM from Oct 1 with headroom; billing alerts; watch the 90-day credit expiry | NH-01, NH-30, NH-95 |
 | Harness tokens per turn higher than expected | Token Factory credits run out | Measure in the spike; daily caps; Nemotron 3.5 Lightning fallback | NH-25, NH-51 |
 | Public repo and judge accounts invite abuse | Spend spikes | Allowlists from secrets, per-account and global caps, kill switch | NH-06, NH-51, NH-57 |
 | Prompt injection or memory poisoning | Data leakage, bad advice | Agent group per user, no `agent-browser`, search-only Tavily, egress allowlist, server-side validation | NH-26, NH-32, NH-45 |
 | Changes to shared code break the current coach for real users | Outage for real users | D-17; additive migrations; `verify` skill and live smoke tests | NH-14 |
 | Spike is a no-go (latency, cost or tool calling) | Stage A at risk | Decide by Sep 30; fallback to a smaller model, fewer tools or reduced scope | NH-27 |
+| Stage 1 rejects the entry as a superficial rebrand | Never reaches scoring | D-19: our tools, memory, provisioning and adapter are the deliverable, and the README and video lead with them rather than with NanoClaw | NH-90, NH-91 |
+| Nemotron returns reasoning instead of content, or breaks on tool calls | The assistant can't act at all | NH-28 before any wiring; `reasoning_effort: "none"` on interactive turns; LiteLLM translation or a different Nemotron as fallback | NH-28, NH-22 |
+| NanoClaw can't reach a custom OpenAI-compatible endpoint (issue #1984, open) | Runtime blocked | D-20's three steps, decided by Sep 30; step 1 uses documented paths on both sides | NH-22, NH-27 |
+| The runtime quietly falls back to Claude | Disqualifying: no Nebius runtime call | Assert in NH-22 that requests reach Token Factory; check again after every NanoClaw upgrade | NH-22, NH-33 |
 | Beta App Review delay; judges without an iPhone | Judges can't test | Submit the build by Oct 12; video and screenshots in the README | NH-72, NH-91 |
 | NanoClaw upgrade breaks the custom adapter | Assistant unavailable | Pinned version, fork, staged upgrades | NH-21, NH-33 |
 | Nemotron reply quality in Hebrew, Arabic, Portuguese | Poor replies for those users after rollout | Demo in English; quality gate before rollout | PH-04 |
