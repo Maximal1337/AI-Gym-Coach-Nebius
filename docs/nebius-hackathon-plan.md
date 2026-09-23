@@ -11,8 +11,28 @@ How to use this document:
 
 ---
 
+## 0. Status — 2026-09-23
+
+**Done and committed** (not deployed anywhere yet):
+- M1 in full: feature flags (`feature_flags` / `user_flags`, `my_feature_flags()`, `isFlagEnabled`), `_shared/assistant.ts`, the app's `FlagsProvider`, dead code removed. NH-14 closed as won't-fix: the composer already caps input at 200 characters.
+- NH-13: `private.seed_demo_account()` seeds two weeks of realistic history whose weights follow `progression.ts`.
+- M0 partly: LICENSE (MIT, holder to confirm), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
+- All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
+
+**Blocked, waiting on us:**
+- NH-01/02/03 — Nebius credits and keys, Devpost registration, Tavily key. They block the whole critical path.
+- NH-06 rollout — secret, `db push`, function deploy. Until then the old instant-sign-in addresses, which are public in git history, still work in production.
+- O-07 — the repository has been public since 2026-09-16 with personal data in its history.
+
+**Critical path:** NH-01 → NH-28 (raw Token Factory tool-calling test) → NH-22 (provider path, D-20) → NH-27 (go/no-go, 2026-09-30). Everything after M2 depends on that answer, so nothing else is worth starting before it.
+
+**Not yet agreed:** team capacity per week, milestone owners (O-06), and the six decisions still marked Proposed in §4.
+
+---
+
 ## Contents
 
+0. [Status](#0-status--2026-09-23)
 1. [Summary](#1-summary)
 2. [Hackathon constraints](#2-hackathon-constraints)
 3. [Current architecture](#3-current-architecture)
@@ -68,13 +88,13 @@ Source: [Nebius x NVIDIA Global AI Hackathon rules](https://nebiusglobalaihackat
 
 ## 3. Current architecture
 
-As of 2026-09-17:
+As of 2026-09-23:
 
 | Component | Runs on | Notes |
 |---|---|---|
-| Database | Supabase Postgres | 26 migrations, RLS on every table |
+| Database | Supabase Postgres | 29 migrations, RLS on every table |
 | Auth | Supabase Auth | Email OTP, Sign in with Apple |
-| API layer | Supabase Edge Functions (Deno) | 12 functions + `_shared/mod.ts` (workout orchestration, rate limits, entitlement, usage accounting) |
+| API layer | Supabase Edge Functions (Deno) | 11 functions + `_shared/mod.ts` (workout orchestration, rate limits, entitlement, usage accounting) and `_shared/assistant.ts` (flags, caps, CORS for the new endpoints) |
 | LLM agent service | Fly.io app `gymcoach-agent` (fra) | `services/agent`; OpenRouter → Gemini 3.1 Flash-Lite; called only by Edge Functions with a shared secret |
 | Landing & legal pages | Vercel | `apps/web` (Next.js) |
 | iOS app | App Store (EAS builds) | Reads its own rows directly via RLS; mutations go through Edge Functions |
@@ -107,7 +127,7 @@ As of 2026-09-17:
 | D-19 | NanoClaw is the **runtime, not the product**. The deliverable is our own software on top: the MCP tool server over real training data, the memory pipeline, per-user provisioning and the channel adapter, and the deterministic progression the agent must obey. README and video lead with those | Confirmed | 2026-09-23 | Stage 1 rejects a superficial rebrand of an open-source base; "deploy NanoClaw + Nemotron + Tavily" is configuration, not a project |
 | D-20 | How NanoClaw reaches Token Factory, in this order: (1) a LiteLLM container exposing an Anthropic-compatible endpoint, with NanoClaw's built-in Claude provider pointed at it via `ANTHROPIC_BASE_URL`; (2) patch the OpenCode provider in our fork; (3) drop NanoClaw from the realtime path and keep our own agent loop | Confirmed | 2026-09-23 | NanoClaw issue #1984 (open, no maintainer reply): routing OpenCode/Codex at a custom OpenAI-compatible endpoint needs patched provider source, while `ANTHROPIC_BASE_URL` is a documented path |
 | D-21 | The assistant must **act**, not just answer: Stage A ships write tools (save a note, adjust an exercise in the plan) and the proactive daily check-in is required, not a stretch | Confirmed | 2026-09-23 | The Personal AI judging hint is explicitly about memory across sessions plus acting on the user's behalf |
-| D-22 | Write scope (resolves O-08): without a confirmation step the assistant may save a note and swap or replace **one exercise in one active plan**. Everything else — creating or archiving plans, bulk edits, touching history, account or subscription settings — stays out of Stage A. Every write is recorded in `assistant_actions` and reversible with an `undo_last_change` tool for 24 hours, and the reply states exactly what changed | Confirmed | 2026-09-23 | A "are you sure?" round trip defeats the point of an assistant that acts; an audit trail plus undo gives the same safety without it, and doubles as the trust story in the demo |
+| D-22 | Stage A write scope: without a confirmation step the assistant may save a note and swap or replace **one exercise in one active plan**. Everything else — creating or archiving plans, bulk edits, touching history, account or subscription settings — stays out of Stage A. Every write is recorded in `assistant_actions` and reversible with an `undo_last_change` tool for 24 hours, and the reply states exactly what changed | Confirmed | 2026-09-23 | A "are you sure?" round trip defeats the point of an assistant that acts; an audit trail plus undo gives the same safety without it, and doubles as the trust story in the demo |
 | D-23 | The nightly memory job stays on **Supabase Cron + an Edge Function**. A Nebius Serverless Job only if the job outgrows Edge Function time limits | Confirmed | 2026-09-23 | Nebius is already used honestly twice — Token Factory for inference, an AI Cloud VM for the agent runtime. A Serverless Job purely to name a third service is box-ticking, and it would add an image build, secrets and scheduling for no product gain |
 | D-24 | Both members have event credits, so: the VM runs on member A's AI Cloud credits, the agent uses member A's Token Factory key, and the nightly memory job uses member B's key | Confirmed | 2026-09-23 | Credits are non-transferable; separate keys double the usable Token Factory budget and make spend per component visible |
 
@@ -118,12 +138,22 @@ As of 2026-09-17:
 | ID | Question | Owner | Due | Default if not decided |
 |---|---|---|---|---|
 | O-01 | Which member is "A" in D-24 (hosts the VM and the agent key)? | TBD | 2026-09-30 | Whoever will operate the VM day to day |
-| O-02 | Supabase project region → VM region | TBD | 2026-09-20 | `eu-north1` if latency to Supabase is acceptable (cheapest 2 vCPU preset) |
-| O-03 | License: MIT or Apache-2.0 | TBD | 2026-09-20 | MIT |
-| O-04 | Spike go/no-go thresholds | TBD | 2026-09-23 | Chat p95 ≤ 10 s; ≤ 1 GiB RAM per container; ≤ $0.05 per 10-turn conversation |
+| O-02 | Supabase project region → VM region | TBD | 2026-09-25 | `eu-north1` if latency to Supabase is acceptable (cheapest 2 vCPU preset) |
+| O-03 | License: MIT or Apache-2.0, and the copyright holder in `LICENSE` | TBD | 2026-09-25 | MIT, as already written in the file; holder currently "The Notch authors" |
+| O-04 | Spike go/no-go thresholds | TBD | 2026-09-25 | Chat p95 ≤ 10 s; ≤ 1 GiB RAM per container; ≤ $0.05 per 10-turn conversation |
 | O-05 | How NanoClaw reaches Token Factory | Spike (NH-22) | 2026-09-30 | Resolved into D-20's three-step order; the spike picks the first step that works |
-| O-06 | Owner per milestone | TBD | 2026-09-20 | — |
-| O-07 | Git history contains personal data (the creator's phone number and personal email, in `app-store-connect-form.md` and older landing pages). How do we publish? | Creator | Before NH-92 | Publish a **new** public repository from a filtered copy of the history (`git filter-repo --replace-text`, commit dates kept) and keep the current repository private. A force-push alone doesn't clean GitHub's `refs/pull/*` for already-merged PRs |
+| O-06 | Owner per milestone | TBD | 2026-09-25 | — |
+| O-09 | Hours per week each member can give, and therefore which scope line we commit to | TBD | 2026-09-25 | The full 156 points only fit at close to full time for two people; otherwise commit to the minimum viable submission in §9 |
+| O-07 | The repository **has been public since 2026-09-16** with personal data in its history (the creator's phone number and personal email, in `app-store-connect-form.md` and older landing pages), and the old instant-sign-in addresses are public while still valid in production. What do we do? | Creator | 2026-09-25 | Make it private now; roll out NH-06 so the old addresses die; move `app-store-connect-form.md` into the git-ignored `secrets/`; at submission publish a **new** public repository from a filtered copy of the history (`git filter-repo --replace-text`, commit dates kept). A force-push alone doesn't clean GitHub's `refs/pull/*` for already-merged PRs |
+
+### Needs the partner's sign-off before M2 starts
+
+These are not mine to close:
+- **Capacity (O-09)** — everything below depends on it.
+- **Six decisions still Proposed in §4:** D-12 (JSONB instead of MongoDB), D-13 (an agent group per user), D-14 (the VM pulls work, no inbound), D-15 (VM size and dates), D-16 (judges via TestFlight and demo accounts), D-17 (freeze on existing coaching functions and `_shared/mod.ts`).
+- **O-07** — the repository is public right now; this is the only item with a clock on it that isn't about the hackathon at all.
+- **Access and accounts:** Nebius credits and keys (NH-01), Devpost registration (NH-02), Tavily key (NH-03), the NH-06 rollout to Supabase, the rotated App Store review account, and who runs `eas build`/`eas submit` — the repo requires explicit approval for those.
+- **O-01, O-02, O-03, O-06.**
 
 ---
 
@@ -239,6 +269,8 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | NH-90 … NH-93 | 9 |
 | M10 | Judging support | 2026-12-15 | NH-95 | 1 |
 
+M1 is done, M0 is partly done, M2 hasn't started (§0).
+
 Required scope: **156 points ≈ 55 person-days** on the §8 scale. Stretch: 16 points.
 
 If capacity is lower, cut in this order:
@@ -252,15 +284,29 @@ Don't cut NH-66 or NH-44 to save time: without them the submission is a chatbot,
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32.
 
+Re-based on 2026-09-23. M1 and NH-13 are done, M0 is partly done, and M2 hasn't started because it waits on credits and keys (§0).
+
 | Week | Dates | Focus |
 |---|---|---|
-| 1 | Sep 17–23 | M0, M1, local spike starts |
-| 2 | Sep 24–30 | M1 wrap-up, M2 go/no-go |
+| 1 | Sep 17–23 | ✅ M1 and NH-13 done, M0 mostly done. The spike didn't start: no credits or keys yet |
+| 2 | Sep 24–30 | M0 finished (accounts, keys, NH-06 rollout, O-07), then M2 — NH-28 first, go/no-go by Sep 30 |
 | 3 | Oct 1–7 | M3 (VM), M4 |
 | 4 | Oct 8–14 | M5, M6, M7 (TestFlight submitted by Oct 12) |
 | 5 | Oct 15–21 | Demo polish, M8 stretch |
 | 6 | Oct 22–30 | M9: video, README, submission (target Oct 26) |
 | — | Dec 1–15 | M10: judging, stack frozen and monitored |
+
+### Minimum viable submission
+
+If capacity (O-09) doesn't cover 156 points, commit to this line instead — it still satisfies every mandatory rule, the track's judging hint and the Tavily bonus:
+
+- M0 finished, plus NH-28 / NH-22 / NH-27 — without the spike there is no project.
+- M3 (VM), M4 minus NH-45, M5 minus NH-56 and NH-57.
+- M6 core: NH-60, NH-61, NH-62, NH-63, NH-64, NH-66. Memory and the proactive check-in are the track.
+- M7: NH-70, NH-72, NH-73 — judges need a build. NH-71 (the "what the coach remembers" screen) can become a section of the chat instead of its own screen.
+- M9 in full — the submission itself is never the place to save time.
+
+That's roughly 110 points. Everything else — Stage B, the memory eval, extra monitoring, backups, the `deno check` CI job — moves to the post-hackathon backlog.
 
 ---
 
