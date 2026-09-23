@@ -104,9 +104,12 @@ As of 2026-09-17:
 | D-16 | Judges test via a **public TestFlight link + seeded demo accounts** (one per judge) | Proposed | 2026-09-17 | The App Store version for real users stays unchanged |
 | D-17 | During the hackathon, existing coaching functions and the behavior of `_shared/mod.ts` do not change (NH-14 excepted). New code lives in new functions and `_shared/assistant.ts`; `mod.ts` may only gain new exports. Migrations are additive only | Proposed | 2026-09-17 | Protects real users |
 | D-18 | Work is tracked in **Linear** (§8) | Confirmed | 2026-09-17 | Team workflow |
-| D-19 | NanoClaw is the **runtime, not the product**. The deliverable is our own software on top: the MCP tool server over real training data, the memory pipeline, per-user provisioning and the channel adapter, and the deterministic progression the agent must obey. README and video lead with those | Proposed | 2026-09-23 | Stage 1 rejects a superficial rebrand of an open-source base; "deploy NanoClaw + Nemotron + Tavily" is configuration, not a project |
-| D-20 | How NanoClaw reaches Token Factory, in this order: (1) a LiteLLM container exposing an Anthropic-compatible endpoint, with NanoClaw's built-in Claude provider pointed at it via `ANTHROPIC_BASE_URL`; (2) patch the OpenCode provider in our fork; (3) drop NanoClaw from the realtime path and keep our own agent loop | Proposed | 2026-09-23 | NanoClaw issue #1984 (open, no maintainer reply): routing OpenCode/Codex at a custom OpenAI-compatible endpoint needs patched provider source, while `ANTHROPIC_BASE_URL` is a documented path |
-| D-21 | The assistant must **act**, not just answer: Stage A ships write tools (save a note, adjust an exercise in the plan) and the proactive daily check-in is required, not a stretch | Proposed | 2026-09-23 | The Personal AI judging hint is explicitly about memory across sessions plus acting on the user's behalf |
+| D-19 | NanoClaw is the **runtime, not the product**. The deliverable is our own software on top: the MCP tool server over real training data, the memory pipeline, per-user provisioning and the channel adapter, and the deterministic progression the agent must obey. README and video lead with those | Confirmed | 2026-09-23 | Stage 1 rejects a superficial rebrand of an open-source base; "deploy NanoClaw + Nemotron + Tavily" is configuration, not a project |
+| D-20 | How NanoClaw reaches Token Factory, in this order: (1) a LiteLLM container exposing an Anthropic-compatible endpoint, with NanoClaw's built-in Claude provider pointed at it via `ANTHROPIC_BASE_URL`; (2) patch the OpenCode provider in our fork; (3) drop NanoClaw from the realtime path and keep our own agent loop | Confirmed | 2026-09-23 | NanoClaw issue #1984 (open, no maintainer reply): routing OpenCode/Codex at a custom OpenAI-compatible endpoint needs patched provider source, while `ANTHROPIC_BASE_URL` is a documented path |
+| D-21 | The assistant must **act**, not just answer: Stage A ships write tools (save a note, adjust an exercise in the plan) and the proactive daily check-in is required, not a stretch | Confirmed | 2026-09-23 | The Personal AI judging hint is explicitly about memory across sessions plus acting on the user's behalf |
+| D-22 | Write scope (resolves O-08): without a confirmation step the assistant may save a note and swap or replace **one exercise in one active plan**. Everything else — creating or archiving plans, bulk edits, touching history, account or subscription settings — stays out of Stage A. Every write is recorded in `assistant_actions` and reversible with an `undo_last_change` tool for 24 hours, and the reply states exactly what changed | Confirmed | 2026-09-23 | A "are you sure?" round trip defeats the point of an assistant that acts; an audit trail plus undo gives the same safety without it, and doubles as the trust story in the demo |
+| D-23 | The nightly memory job stays on **Supabase Cron + an Edge Function**. A Nebius Serverless Job only if the job outgrows Edge Function time limits | Confirmed | 2026-09-23 | Nebius is already used honestly twice — Token Factory for inference, an AI Cloud VM for the agent runtime. A Serverless Job purely to name a third service is box-ticking, and it would add an image build, secrets and scheduling for no product gain |
+| D-24 | Both members have event credits, so: the VM runs on member A's AI Cloud credits, the agent uses member A's Token Factory key, and the nightly memory job uses member B's key | Confirmed | 2026-09-23 | Credits are non-transferable; separate keys double the usable Token Factory budget and make spend per component visible |
 
 ---
 
@@ -114,12 +117,11 @@ As of 2026-09-17:
 
 | ID | Question | Owner | Due | Default if not decided |
 |---|---|---|---|---|
-| O-01 | Which member's Nebius account hosts the VM, and which provides Token Factory keys? | TBD | 2026-09-20 | VM on the account with AI Cloud credits; Token Factory keys from the other account |
+| O-01 | Which member is "A" in D-24 (hosts the VM and the agent key)? | TBD | 2026-09-30 | Whoever will operate the VM day to day |
 | O-02 | Supabase project region → VM region | TBD | 2026-09-20 | `eu-north1` if latency to Supabase is acceptable (cheapest 2 vCPU preset) |
 | O-03 | License: MIT or Apache-2.0 | TBD | 2026-09-20 | MIT |
 | O-04 | Spike go/no-go thresholds | TBD | 2026-09-23 | Chat p95 ≤ 10 s; ≤ 1 GiB RAM per container; ≤ $0.05 per 10-turn conversation |
 | O-05 | How NanoClaw reaches Token Factory | Spike (NH-22) | 2026-09-30 | Resolved into D-20's three-step order; the spike picks the first step that works |
-| O-08 | Scope of Stage A write tools (D-21) — how much may the assistant change in a plan without a confirmation step? | TBD | 2026-09-30 | Swapping or replacing one exercise in an active plan, echoed back in the reply; anything larger needs an explicit confirmation |
 | O-06 | Owner per milestone | TBD | 2026-09-20 | — |
 | O-07 | Git history contains personal data (the creator's phone number and personal email, in `app-store-connect-form.md` and older landing pages). How do we publish? | Creator | Before NH-92 | Publish a **new** public repository from a filtered copy of the history (`git filter-repo --replace-text`, commit dates kept) and keep the current repository private. A force-push alone doesn't clean GitHub's `refs/pull/*` for already-merged PRs |
 
@@ -173,7 +175,7 @@ Invariants:
 
 **Guardrails:**
 - Run the NanoClaw spike locally (WSL2 + Docker Desktop) before provisioning the VM.
-- Separate Token Factory API keys for the agent and the memory job, if supported, so spend per component is visible.
+- Two Token Factory keys from the two members' accounts (D-24): the agent on member A's, the nightly memory job on member B's. That doubles the usable budget and makes spend per component visible.
 - Billing alerts; a global daily spend cap; per-account message caps for demo and judge accounts; a kill-switch flag.
 - If credits run low: move extraction and simple turns to Nemotron 3.5 Lightning ($0.06 / $0.24 per 1M tokens), after an eval.
 - A 4 vCPU / 16 GiB VM (≈ $72/month) now fits within one member's $100 AI Cloud credits for the final stretch — worth it only if the spike shows memory pressure from concurrent agent containers plus the LiteLLM proxy (D-20).
@@ -229,7 +231,7 @@ Invariants:
 | M1 | Foundations | 2026-09-24 | NH-10 … NH-15 | 14 |
 | M2 | NanoClaw spike go/no-go | 2026-09-30 | NH-20 … NH-28 | 20 |
 | M3 | Nebius VM | 2026-10-03 | NH-30 … NH-35 | 14 |
-| M4 | Coach template and tools | 2026-10-07 | NH-40 … NH-45 | 20 |
+| M4 | Coach template and tools | 2026-10-07 | NH-40 … NH-45 | 22 |
 | M5 | Channel and delivery | 2026-10-09 | NH-50 … NH-57 | 27 |
 | M6 | Personalization memory | 2026-10-12 | NH-60 … NH-66 | 23 |
 | M7 | TestFlight demo build | 2026-10-14 (build submitted to Beta App Review by 10-12) | NH-70 … NH-73 | 12 |
@@ -237,7 +239,7 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | NH-90 … NH-93 | 9 |
 | M10 | Judging support | 2026-12-15 | NH-95 | 1 |
 
-Required scope: **154 points ≈ 54 person-days** on the §8 scale. Stretch: 16 points.
+Required scope: **156 points ≈ 55 person-days** on the §8 scale. Stretch: 16 points.
 
 If capacity is lower, cut in this order:
 1. M8
@@ -533,14 +535,16 @@ Work D-20's order and stop at the first step that works. Step 1 is the documente
 - [ ] Every query filtered by the resolved `user_id`
 - [ ] Weights returned in the user's unit system
 
-#### NH-44 · Stage A write tools: save note and plan tweak
-**Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-42
+#### NH-44 · Stage A write tools: save note, plan tweak, undo
+**Priority:** High · **Estimate:** 5 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-42
 
-D-21: acting on the user's behalf is what the track is judged on, so Stage A isn't read-only.
+D-21: acting on the user's behalf is what the track is judged on, so Stage A isn't read-only. D-22 keeps that safe without a confirmation round trip: act now, record it, allow undo.
 
 - [ ] `save_note` writes to `coach_notes` (general or exercise-scoped) with the same validation as the current coach; length limits enforced
-- [ ] `adjust_plan_exercise` swaps or replaces one exercise in an active plan through the existing validated write path, within the scope agreed in O-08
-- [ ] Both tools re-check ownership server-side, and the reply states exactly what changed
+- [ ] `adjust_plan_exercise` swaps or replaces one exercise in one active plan through the existing validated write path; sets, reps and rest carry over unless the user named new ones
+- [ ] Additive migration `assistant_actions(id, user_id, kind, before jsonb, after jsonb, created_at, undone_at)`; every write tool records one row
+- [ ] `undo_last_change` reverts the user's most recent action within 24 hours and is itself recorded
+- [ ] Tools refuse anything outside D-22's scope, re-check ownership server-side, and the reply states exactly what changed and that it can be undone
 
 #### NH-45 · Agent instructions and policies
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-40
@@ -647,6 +651,8 @@ Eviction, with a cap of 15 facts per user:
 - [ ] Worker Edge Function processes users in batches that fit Edge Function time limits
 - [ ] Applies NH-61 operations through NH-62; bumps `facts_version` on any change; advances the watermark
 - [ ] Idempotent (re-running a batch changes nothing); retries with backoff; per-user token cap; run summary logged
+- [ ] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, since nothing here is latency-sensitive
+- [ ] Stays on Supabase Cron per D-23; record the measured batch duration so "it outgrew the Edge Function limit" stays a checkable trigger
 
 #### NH-64 · Facts injection into the agent
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Memory, Area/Agent, Type/Feature · **Blocked by:** NH-54, NH-63
@@ -783,6 +789,7 @@ EAS build and submit commands need explicit team approval and `--non-interactive
 | Harness tokens per turn higher than expected | Token Factory credits run out | Measure in the spike; daily caps; Nemotron 3.5 Lightning fallback | NH-25, NH-51 |
 | Public repo and judge accounts invite abuse | Spend spikes | Allowlists from secrets, per-account and global caps, kill switch | NH-06, NH-51, NH-57 |
 | Prompt injection or memory poisoning | Data leakage, bad advice | Agent group per user, no `agent-browser`, search-only Tavily, egress allowlist, server-side validation | NH-26, NH-32, NH-45 |
+| The assistant makes a change the user didn't want | Lost trust, damaged training plan | D-22's narrow write scope, the `assistant_actions` audit trail and `undo_last_change`; the reply always states what changed | NH-44 |
 | Changes to shared code break the current coach for real users | Outage for real users | D-17; additive migrations; `verify` skill and live smoke tests | NH-14 |
 | Spike is a no-go (latency, cost or tool calling) | Stage A at risk | Decide by Sep 30; fallback to a smaller model, fewer tools or reduced scope | NH-27 |
 | Stage 1 rejects the entry as a superficial rebrand | Never reaches scoring | D-19: our tools, memory, provisioning and adapter are the deliverable, and the README and video lead with them rather than with NanoClaw | NH-90, NH-91 |
