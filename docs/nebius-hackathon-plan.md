@@ -830,8 +830,9 @@ Eviction, with a cap of 15 facts per user:
 #### NH-65 · Memory evaluation
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Memory, Area/QA, Type/Feature · **Blocked by:** NH-63
 
-- [ ] Golden set of at least 10 English chats with expected facts; precision and recall recorded
-- [ ] Running the job twice on unchanged input changes nothing
+- [x] Golden set of at least 10 English chats with expected facts — 12 in `supabase/eval/memory/golden.json`, including refusals: a coach-only statement, an injection attempt, small talk
+- [ ] Precision and recall recorded: run `supabase/eval/memory/run.ts` once keys exist (NH-01) and paste its table here
+- [x] Running the job twice on unchanged input changes nothing — structurally: a user already run today isn't due, and a user with nothing new gets no model call; the eval's second pass also measures model churn on the same messages
 
 #### NH-66 · Proactive daily check-in
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-55, NH-64
