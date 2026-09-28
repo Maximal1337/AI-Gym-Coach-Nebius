@@ -368,7 +368,7 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 35 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-38, NH-41, NH-50, NH-60, NH-62) — **144 remaining ≈ 51 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
+**Scope:** **179 points** in total, 37 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **142 remaining ≈ 50 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
@@ -759,15 +759,15 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 #### NH-56 · Account deletion cleanup
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Backend, Area/Agent, Type/Feature · **Blocked by:** NH-55
 
-- [ ] Deleting an account destroys the user's sandbox, its volume and its credentials
-- [ ] The user's database rows are removed by cascade (`assistant_messages` via NH-50, `user_facts` and `user_memory_state` via NH-60)
-- [ ] `assistant_agents` mapping row removed
+- [ ] Deleting an account destroys the user's sandbox, its volume and its credentials — the sandbox manager (NH-55) destroys every sandbox that no longer has an `assistant_agents` row
+- [x] The user's database rows are removed by cascade (`assistant_messages` via NH-50, `user_facts` and `user_memory_state` via NH-60) — also jobs, actions and the mapping; tested, including the QA "fresh" reset
+- [x] `assistant_agents` mapping row removed
 
-#### NH-57 · Kill switch and usage queries
+#### NH-57 · Kill switch and usage queries ✅
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-51
 
-- [ ] Kill switch tested: `update public.feature_flags set enabled = false where flag like 'assistant_%'` hides the assistant for everyone
-- [ ] Saved SQL queries: messages per day, tokens and spend per day, errors per day
+- [x] Kill switch tested: `update public.feature_flags set enabled = false where flag like 'assistant_%'` hides the assistant for everyone — server checks included, per-user flags untouched, switching back restores the previous state
+- [x] Saved SQL queries: messages per day, tokens and spend per day, errors per day, plus stuck work — [`assistant-ops.md`](./assistant-ops.md)
 
 ### M6 — Personalization memory · target 2026-10-18
 
