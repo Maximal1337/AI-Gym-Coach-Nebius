@@ -66,6 +66,11 @@ which is the closest thing to actually running the app that's available here.
    With `--no-config` there's no lockfile, so `npm:` imports resolve to the
    latest matching version at check time — a new upstream release of
    supabase-js can move the counts without any change in this repo.
+4. Unit tests for pure shared modules (`_shared/*.test.ts`, e.g. the memory
+   scoring module) run with Deno; CI runs the same command:
+   ```bash
+   DENO_NO_PACKAGE_JSON=1 deno test --no-config supabase/functions/
+   ```
 
 ## Backend — agent service (Node)
 

@@ -30,3 +30,7 @@ jobs:
         with:
           deno-version: v2.x
       - run: node scripts/check-edge-functions.mjs
+      # Unit tests for shared Edge Function modules (e.g. _shared/memory-scoring.ts).
+      - run: deno test --no-config supabase/functions/
+        env:
+          DENO_NO_PACKAGE_JSON: "1"

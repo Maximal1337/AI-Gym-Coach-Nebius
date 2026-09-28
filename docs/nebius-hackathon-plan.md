@@ -25,6 +25,7 @@ How to use this document:
 - NH-13: `private.seed_demo_account()` seeds two weeks of realistic history whose weights follow `progression.ts`.
 - M0 partly: LICENSE (MIT, "The Notch authors"), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
+- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -367,11 +368,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 23 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20) — **156 remaining ≈ 55 person-days** on the §8 scale.
+**Scope:** **179 points** in total, 33 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-41, NH-50, NH-60, NH-62) — **146 remaining ≈ 51 person-days** on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 144 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 134 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -485,7 +486,7 @@ Memory only shows up with history, so demo accounts need realistic data. Follow 
 
 - [x] One team demo account plus five judge accounts (one per judge), with instant login from the secret allowlist
 - [x] Each account seeded with a coach profile, active plans, ~2 weeks of workouts and chat messages
-- [ ] Facts seeded once NH-60 lands
+- [ ] Facts come from the first nightly run over the seeded chat (NH-63), the same path real users take — no hand-written facts in the seed
 - [x] Flags enabled only for these accounts; per-account daily caps apply
 
 **Implementation (2026-09-18):** migration `20260918140000_demo_accounts.sql` adds `private.demo_accounts` (the registry) and `private.seed_demo_account(email)`. The `private` schema isn't exposed through the API, so the seed runs only from the SQL editor or `supabase db query`. It seeds an English persona: Upper/Lower plan, 8 workouts / 128 sets whose weights follow `progression.ts`, 32 workout-chat messages rich in personal context for the memory job, 2 saved notes and both assistant flags. It refuses unregistered and QA-scenario addresses because it wipes the account first. Re-run it right before judging. Runbook: `dev-test-scenario-accounts` skill, "Demo and judge accounts". Facts get added to the seed with NH-60.
@@ -665,11 +666,11 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 - [ ] Config with the D-29 tool whitelist: `notch-tools` MCP, web search (Tavily), memory, skills; everything else disabled
 - [ ] The profile lives in the repo and is baked into, or mounted by, every user's sandbox
 
-#### NH-41 · `assistant_agents` mapping and tool tokens
+#### NH-41 · `assistant_agents` mapping and tool tokens ✅
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** —
 
-- [ ] Additive migration `assistant_agents(user_id, environment, sandbox_name, token_hash, created_at)` with no client access
-- [ ] Helper resolves a bearer token to a `user_id` by hash comparison; tokens never grant database access
+- [x] Additive migration `assistant_agents(user_id, environment, sandbox_name, tool_token_hash, provisioned_at, …)` with no client access; a row created ahead of the first message routes a team account to `notch-dev`, no row means `notch-prod` (`assistant_environment()`)
+- [x] Helper resolves a bearer token to a `user_id` by hash comparison; tokens never grant database access (`assistant_user_for_tool_token()`, service_role only; the TypeScript side lands with NH-42)
 
 #### NH-42 · `notch-tools` MCP Edge Function skeleton
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-10, NH-11, NH-41
@@ -693,7 +694,8 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 
 - [ ] `save_note` writes to `coach_notes` (general or exercise-scoped) with the same validation as the current coach; length limits enforced
 - [ ] `adjust_plan_exercise` swaps or replaces one exercise in one active plan through the existing validated write path; sets, reps and rest carry over unless the user named new ones
-- [ ] Additive migration `assistant_actions(id, user_id, kind, before jsonb, after jsonb, created_at, undone_at)`; every write tool records one row
+- [x] Additive migration `assistant_actions(id, user_id, kind, before jsonb, after jsonb, undoes, created_at, undone_at)`; kinds limited to D-22's scope, an action can be undone once
+- [ ] Every write tool records one row
 - [ ] `undo_last_change` reverts the user's most recent action within 24 hours and is itself recorded
 - [ ] Tools refuse anything outside D-22's scope, re-check ownership server-side, and the reply states exactly what changed and that it can be undone
 
@@ -706,12 +708,12 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 
 ### M5 — Channel, relay and sandbox lifecycle · target 2026-10-14
 
-#### NH-50 · Assistant message store and inbound queue
+#### NH-50 · Assistant message store and inbound queue ✅
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** —
 
-- [ ] Additive migration `assistant_messages(id, user_id, role, doc jsonb, created_at)`; users can read their own rows via RLS
-- [ ] Inbound work queue (Supabase Queues/pgmq or a table) with lease and ack, per environment
-- [ ] Deleting a user removes their rows from both
+- [x] Additive migration `assistant_messages(id, user_id, role, doc jsonb, client_message_id, created_at)`; users can read their own rows via RLS; a retried `client_message_id` is rejected
+- [x] Inbound work queue with lease and ack, per environment: the `assistant_jobs` table with `assistant_claim_jobs()` / `assistant_ack_job()` — at most one job per user in flight, expired leases reclaimed, retries up to `max_attempts`; check-ins deduplicated per day
+- [x] Deleting a user removes their rows from both
 
 #### NH-51 · `assistant-send` Edge Function
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-10, NH-11, NH-50
@@ -762,13 +764,13 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 
 ### M6 — Personalization memory · target 2026-10-18
 
-#### NH-60 · Facts tables
+#### NH-60 · Facts tables ✅
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Memory, Type/Feature · **Blocked by:** —
 
-- [ ] Additive migration `user_facts(id, user_id, doc jsonb, score, pinned, created_at, updated_at)`; `doc` holds `text, category, importance, stability, evidence, expires_at, first_seen_at, last_seen_at, mention_count, source_message_ids`
-- [ ] Additive migration `user_memory_state(user_id, facts_version, last_run_at, watermark)`
-- [ ] RLS: users can read and delete their own facts; deleting a fact bumps `facts_version` (trigger)
-- [ ] Rows in both tables cascade-delete with the user
+- [x] Additive migration `user_facts(id, user_id, doc jsonb, score, pinned, created_at, updated_at)`; the database enforces 15 facts and 3 pins per user as a safety net; `doc` holds `text, category, importance, stability, evidence, expires_at, first_seen_at, last_seen_at, mention_count, source_message_ids`
+- [x] Additive migration `user_memory_state(user_id, facts_version, last_run_at, watermark)`
+- [x] RLS: users can read and delete their own facts; deleting a fact bumps `facts_version` (trigger)
+- [x] Rows in both tables cascade-delete with the user
 
 #### NH-61 · Fact extraction on Nemotron
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Memory, Type/Feature · **Blocked by:** NH-22
@@ -777,7 +779,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [ ] Invalid JSON or unknown fact IDs are rejected, never applied
 - [ ] Facts stored as short neutral statements (≤ 140 characters) that never contain instructions
 
-#### NH-62 · Scoring and eviction module
+#### NH-62 · Scoring and eviction module ✅
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Memory, Type/Feature · **Blocked by:** —
 
 Score is computed in code, never by the LLM:
@@ -793,8 +795,8 @@ Eviction, with a cap of 15 facts per user:
 3. Otherwise insert only if the new fact scores higher than the lowest-scoring unpinned fact; that fact is evicted.
 4. Health/injury facts are pinned (max 3) until contradicted or expired.
 
-- [ ] Pure module with unit tests for every rule and boundary (15th and 16th fact, pinned limit, expiry, ties)
-- [ ] Deterministic: the same input always gives the same output
+- [x] Pure module with unit tests for every rule and boundary (15th and 16th fact, pinned limit, expiry, ties): `supabase/functions/_shared/memory-scoring.ts`, 26 Deno tests including 500 randomized runs
+- [x] Deterministic: the same input always gives the same output, whatever the input order
 
 #### NH-63 · Nightly memory job
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Memory, Type/Feature · **Blocked by:** NH-60, NH-61, NH-62
@@ -805,6 +807,7 @@ Eviction, with a cap of 15 facts per user:
 - [ ] Idempotent (re-running a batch changes nothing); retries with backoff; per-user token cap; run summary logged
 - [ ] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34)
 - [ ] Stays on Supabase Cron per D-23; record the measured batch duration so "it outgrew the Edge Function limit" stays a checkable trigger
+- [ ] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean
 
 #### NH-64 · Facts injection into the agent
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Memory, Area/Agent, Type/Feature · **Blocked by:** NH-54, NH-63
