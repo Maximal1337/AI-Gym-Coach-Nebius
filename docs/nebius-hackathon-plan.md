@@ -25,7 +25,7 @@ How to use this document:
 - NH-13: `private.seed_demo_account()` seeds two weeks of realistic history whose weights follow `progression.ts`.
 - M0 partly: LICENSE (MIT, "The Notch authors"), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
-- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI.
+- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md).
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -368,11 +368,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 33 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-41, NH-50, NH-60, NH-62) — **146 remaining ≈ 51 person-days** on the §8 scale.
+**Scope:** **179 points** in total, 35 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-38, NH-41, NH-50, NH-60, NH-62) — **144 remaining ≈ 51 person-days** on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 134 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 132 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -635,13 +635,13 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 - [ ] Separate Token Factory keys per environment (D-34), injected by the gateway
 - [ ] Everything comes back after a VPS reboot
 
-#### NH-38 · Budget controls
+#### NH-38 · Budget controls ✅
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Backend, Area/Infra, Type/Feature · **Blocked by:** NH-01
 
-- [ ] D-34 ceilings enforced in `_shared/assistant.ts` from actual token spend: prod $1/day, dev $0.5/day, nightly memory $0.5/run
-- [ ] At the ceiling the assistant replies that today's limit is reached; nothing is sent to Token Factory
-- [ ] Monday spend check written down as a runbook: both accounts' AI Cloud and Token Factory balances against the forecast in §7
-- [ ] Rule written down: forecast > 90% of credits → `notch-dev` off first, then lower ceilings
+- [x] D-34 ceilings in `_shared/assistant.ts` from actual token spend: prod $1/day, dev $0.5/day, nightly memory $0.5/run — `spendCeilingsCents`, `checkSpend` (fails closed), `recordSpend`; per-day totals in `public.assistant_spend`. Unknown models are priced as the most expensive known one and unreported usage is charged a conservative fallback, so neither can switch the ceiling off. A unit test fails if the default ceilings stop fitting the credits
+- [x] At the ceiling the assistant replies that today's limit is reached; nothing is sent to Token Factory — the `daily_limit_reached` code and helpers are ready; the checks themselves are wired in NH-51, NH-52, NH-53 and NH-63
+- [x] Monday spend check written down as a runbook: [`budget-runbook.md`](./budget-runbook.md)
+- [x] Rule written down: forecast > 90% of credits → `notch-dev` off first, then lower ceilings
 
 #### NH-34 · Backups and restore drill
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
@@ -718,7 +718,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 #### NH-51 · `assistant-send` Edge Function
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-10, NH-11, NH-50
 
-- [ ] JWT auth, flag check, rate limit, per-account caps and the D-34 ceilings
+- [ ] JWT auth, flag check, rate limit, per-account caps and the D-34 ceilings: `checkSpend` for the user's environment, refusing with `daily_limit_reached`
 - [ ] Idempotency key: a retried send never duplicates a message
 - [ ] Stores the user message and enqueues work for the user's environment
 
@@ -727,12 +727,14 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 
 - [ ] Shared-secret auth per environment, usable only by that environment's relay
 - [ ] Returns pending work under a lease; ack endpoint; expired leases return to the queue
+- [ ] Hands out no work for an environment at its D-34 ceiling (`checkSpend`)
 
 #### NH-53 · `assistant-deliver` Edge Function
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-50
 
 - [ ] HMAC-verified requests with replay protection (timestamp + dedup)
 - [ ] Stores the reply in `assistant_messages` and sends a push notification
+- [ ] Records the turn's spend with `recordSpend` — the usage the relay reports, or the fallback
 
 #### NH-54 · The relay
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-24, NH-33, NH-52, NH-53
@@ -805,7 +807,7 @@ Eviction, with a cap of 15 facts per user:
 - [ ] Worker Edge Function processes users in batches that fit Edge Function time limits
 - [ ] Applies NH-61 operations through NH-62; bumps `facts_version` on any change; advances the watermark
 - [ ] Idempotent (re-running a batch changes nothing); retries with backoff; per-user token cap; run summary logged
-- [ ] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34)
+- [ ] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34): `checkSpend('memory')` before each user, `recordSpend` after each call
 - [ ] Stays on Supabase Cron per D-23; record the measured batch duration so "it outgrew the Edge Function limit" stays a checkable trigger
 - [ ] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean
 
