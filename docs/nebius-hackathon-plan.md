@@ -811,13 +811,14 @@ Eviction, with a cap of 15 facts per user:
 #### NH-63 · Nightly memory job
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Memory, Type/Feature · **Blocked by:** NH-60, NH-61, NH-62
 
-- [ ] Supabase Cron at 00:00 UTC queues flagged users with new messages since their watermark; sources: `assistant_messages` and workout `messages` from the last 14 days
-- [ ] Worker Edge Function processes users in batches that fit Edge Function time limits
-- [ ] Applies NH-61 operations through NH-62; bumps `facts_version` on any change; advances the watermark
-- [ ] Idempotent (re-running a batch changes nothing); retries with backoff; per-user token cap; run summary logged
-- [ ] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34): `checkSpend('memory')` before each user, `recordSpend` after each call
-- [ ] Stays on Supabase Cron per D-23; record the measured batch duration so "it outgrew the Edge Function limit" stays a checkable trigger
-- [ ] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean
+- [x] Supabase Cron at 00:00 UTC queues flagged users with new messages since their watermark; sources: `assistant_messages` and workout `messages` from the last 14 days — the cron calls `memory-nightly` every 10 minutes from 00:00 to 02:59 UTC (`supabase/cron/assistant.sql`, applied by hand after deploy); `assistant_memory_due` picks the users; the oldest unread messages are read first, so a backlog is never skipped; users with facts but nothing new get the daily score and expiry refresh without a model call
+- [x] Worker Edge Function processes users in batches that fit Edge Function time limits — stops starting users after 100 s; the next call continues
+- [x] Applies NH-61 operations through NH-62; bumps `facts_version` on any change; advances the watermark — one transaction (`assistant_memory_apply`), ordered so the fact and pin caps never trip; a fact the user deleted mid-run stays deleted
+- [x] Idempotent (re-running a batch changes nothing); retries with backoff; per-user token cap; run summary logged — one run per user per day, a failure counts as that run (no retry storm) and keeps the watermark; Token Factory retries 429/5xx; at most 200 messages and 8,000 output tokens per user
+- [x] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34): `checkSpend('memory')` before each user, `recordSpend` after each call
+- [x] Stays on Supabase Cron per D-23; every call logs a `memory_run` summary with its duration
+- [ ] First real run on Token Factory (needs keys); record the measured duration here so "it outgrew the Edge Function limit" stays a checkable trigger
+- [x] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean — the original seed is wrapped, not copied; the first run then builds facts from the seeded history
 
 #### NH-64 · Facts injection into the agent
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Memory, Area/Agent, Type/Feature · **Blocked by:** NH-54, NH-63

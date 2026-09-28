@@ -428,6 +428,11 @@ verify_jwt = false
 [functions.assistant-deliver]
 verify_jwt = false
 
+# Supabase Cron calls the nightly memory job with its own secret header
+# (supabase/cron/assistant.sql), not a JWT. Deploy with --no-verify-jwt.
+[functions.memory-nightly]
+verify_jwt = false
+
 # pg-delta is the schema diff engine for db diff / db pull / db remote commit.
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]

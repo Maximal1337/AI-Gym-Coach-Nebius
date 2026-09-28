@@ -70,3 +70,42 @@ where (status = 'pending' and created_at < now() - interval '5 minutes')
    or (status = 'leased' and leased_until < now())
 group by 1, 2;
 ```
+
+## Nightly memory job
+
+`memory-nightly` (NH-63) turns each flagged user's new messages into scored facts. Supabase Cron calls it every 10 minutes between 00:00 and 02:59 UTC; each call works through the users due today until its time budget runs out.
+
+**Setup, once:** deploy the function with `--no-verify-jwt`, set `MEMORY_CRON_SECRET`, `MEMORY_TOKEN_FACTORY_API_KEY` (member B's key) and `MEMORY_MODEL`, then follow [`supabase/cron/assistant.sql`](../supabase/cron/assistant.sql) in the SQL editor.
+
+**Run it now** — for example, right after re-seeding a demo account, so its facts are built from the seeded history:
+
+```bash
+curl -s -X POST "https://<project-ref>.supabase.co/functions/v1/memory-nightly" \
+  -H "x-cron-secret: <MEMORY_CRON_SECRET>"
+```
+
+A user already processed today is skipped until tomorrow. To force another run for one account:
+
+```sql
+update public.user_memory_state set last_run_at = null where user_id = '<uuid>';
+```
+
+**Per-user state and the last error:**
+
+```sql
+select u.email, s.last_run_at, s.watermark, s.facts_version, s.last_error,
+       (select count(*) from public.user_facts f where f.user_id = s.user_id) as facts
+from public.user_memory_state s
+join auth.users u on u.id = s.user_id
+order by s.last_run_at desc nulls last;
+```
+
+**Recent cron calls** (Supabase's `cron` schema; the function logs a `memory_run` summary with its duration for each call):
+
+```sql
+select j.jobname, d.status, d.return_message, d.start_time
+from cron.job_run_details d
+join cron.job j using (jobid)
+order by d.start_time desc
+limit 20;
+```
