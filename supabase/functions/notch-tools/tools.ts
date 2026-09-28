@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import type { ToolDefinition } from "../_shared/mcp.ts";
+import { READ_TOOLS } from "./read-tools.ts";
 
 /**
  * The tools a user's Hermes agent can call (NH-42…NH-44). Each handler gets
@@ -26,4 +27,4 @@ const ping: ToolDefinition<ToolContext> = {
   handler: (_args, ctx) => Promise.resolve({ ok: true, server_time: ctx.now().toISOString() }),
 };
 
-export const TOOLS: readonly ToolDefinition<ToolContext>[] = [ping];
+export const TOOLS: readonly ToolDefinition<ToolContext>[] = [ping, ...READ_TOOLS];

@@ -25,7 +25,7 @@ How to use this document:
 - NH-13: `private.seed_demo_account()` seeds two weeks of realistic history whose weights follow `progression.ts`.
 - M0 partly: LICENSE (MIT, "The Notch authors"), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
-- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left.
+- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests — only a live smoke test is left.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -683,9 +683,10 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 #### NH-43 · Stage A read tools
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-42
 
-- [ ] Tools: `get_profile`, `get_active_plans` (with exercises), `get_workout_history` (recent sessions and progression summary), `get_user_facts`
-- [ ] Every query filtered by the resolved `user_id`
-- [ ] Weights returned in the user's unit system
+- [x] Tools: `get_profile`, `get_active_plans` (with exercises), `get_workout_history` (recent sessions and progression summary), `get_user_facts` — `notch-tools/read-tools.ts`; the progression summary is computed in code, recent studio classes are listed too
+- [x] Every query filtered by the resolved `user_id` — a test records every query and fails if one isn't; `set_logs` is read only by session ids from a user-scoped query
+- [x] Weights returned in the user's unit system, rounded to 0.5 like the app
+- [ ] Live smoke test of the PostgREST queries against the deployed function (after the NH-06 rollout)
 
 #### NH-44 · Stage A write tools: save note, plan tweak, undo
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-42
