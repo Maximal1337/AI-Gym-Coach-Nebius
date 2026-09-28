@@ -2,16 +2,20 @@
 import { assert, assertAlmostEquals, assertEquals, assertFalse } from "jsr:@std/assert@1";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import {
+  allowedOrigins,
   checkSpend,
   costCents,
   dailyCaps,
   FALLBACK_TURN_USAGE,
+  isWellFormedToolToken,
   priceFor,
   recordSpend,
+  sha256Hex,
   spendBucketFor,
   spendCeilingsCents,
   TOKEN_FACTORY_PRICES,
   usageOrFallback,
+  userForToolToken,
 } from "./assistant.ts";
 
 const noEnv = () => undefined;
@@ -150,4 +154,45 @@ Deno.test("recordSpend: missing usage is charged the fallback", async () => {
 
 Deno.test("recordSpend: a failed write returns null", async () => {
   assertEquals(await recordSpend(fakeDb({ data: null, error: { message: "boom" } }).db, "prod", "x", { tokensInput: 1, tokensOutput: 1 }), null);
+});
+
+// ------------------------------------------------------------ tool tokens
+
+Deno.test("sha256Hex: standard test vector", async () => {
+  assertEquals(await sha256Hex("abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+});
+
+Deno.test("isWellFormedToolToken: base64url, 32 to 200 characters", () => {
+  assert(isWellFormedToolToken("A".repeat(43)));
+  assert(isWellFormedToolToken("abc_DEF-123".padEnd(32, "x")));
+  assertFalse(isWellFormedToolToken("short"));
+  assertFalse(isWellFormedToolToken("x".repeat(201)));
+  assertFalse(isWellFormedToolToken("has space".padEnd(40, "x")));
+  assertFalse(isWellFormedToolToken("' or 1=1 --".padEnd(40, "x")));
+});
+
+Deno.test("userForToolToken: looks the digest up, never the token itself", async () => {
+  const token = "k".repeat(43);
+  const { db, calls } = fakeDb({ data: "user-1", error: null });
+  assertEquals(await userForToolToken(db, token), "user-1");
+  assertEquals(calls, [{ fn: "assistant_user_for_tool_token", args: { p_token_hash: await sha256Hex(token) } }]);
+});
+
+Deno.test("userForToolToken: a malformed token is rejected without a lookup", async () => {
+  const { db, calls } = fakeDb({ data: "user-1", error: null });
+  assertEquals(await userForToolToken(db, "nope"), null);
+  assertEquals(calls.length, 0);
+});
+
+Deno.test("userForToolToken: unknown token or a failed lookup gives no user", async () => {
+  assertEquals(await userForToolToken(fakeDb({ data: null, error: null }).db, "k".repeat(43)), null);
+  assertEquals(await userForToolToken(fakeDb({ data: null, error: { message: "boom" } }).db, "k".repeat(43)), null);
+});
+
+Deno.test("allowedOrigins: comma-separated, trimmed, empty by default", () => {
+  assertEquals(allowedOrigins(noEnv), []);
+  assertEquals(allowedOrigins(env({ ASSISTANT_ALLOWED_ORIGINS: " https://a.example , ,https://b.example" })), [
+    "https://a.example",
+    "https://b.example",
+  ]);
 });

@@ -412,6 +412,13 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 [functions.revenuecat-webhook]
 verify_jwt = false
 
+# Each user's Hermes sandbox calls notch-tools with its own tool token (NH-42),
+# not a Supabase user JWT, and the function authenticates that token itself.
+# Same rule as above: keep verify_jwt off here and deploy with
+# `supabase functions deploy notch-tools --no-verify-jwt`.
+[functions.notch-tools]
+verify_jwt = false
+
 # pg-delta is the schema diff engine for db diff / db pull / db remote commit.
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]

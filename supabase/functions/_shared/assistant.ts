@@ -29,6 +29,38 @@ export async function isFlagEnabled(db: SupabaseClient, userId: string, flag: Fe
   return data === true;
 }
 
+// ---------------------------------------------------------- tool tokens
+
+/**
+ * A user's sandbox authenticates to notch-tools with its own bearer token,
+ * injected by the OpenShell gateway so the agent never sees it (D-28). The
+ * database stores only the SHA-256 digest (assistant_agents.tool_token_hash,
+ * migration 20260928120000), and a token resolves to a user id — nothing
+ * else. Tokens are minted by the sandbox manager (NH-55) as 32 random bytes,
+ * base64url-encoded.
+ */
+const TOOL_TOKEN_RE = /^[A-Za-z0-9_-]{32,200}$/;
+
+export function isWellFormedToolToken(token: string): boolean {
+  return TOOL_TOKEN_RE.test(token);
+}
+
+export async function sha256Hex(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+/** The user a tool token belongs to, or null (malformed, unknown, or lookup failed). */
+export async function userForToolToken(db: Pick<SupabaseClient, "rpc">, token: string): Promise<string | null> {
+  if (!isWellFormedToolToken(token)) return null;
+  const { data, error } = await db.rpc("assistant_user_for_tool_token", { p_token_hash: await sha256Hex(token) });
+  if (error) {
+    console.error("assistant_user_for_tool_token failed", { error: error.message });
+    return null;
+  }
+  return typeof data === "string" ? data : null;
+}
+
 // --------------------------------------------------------------- limits
 
 /** Per-user fixed-window rate limits for the new endpoints, applied with mod.ts's allowRate(). */
@@ -214,12 +246,16 @@ export function corsHeadersFor(req: Request): Record<string, string> {
     "Vary": "Origin",
   };
   const origin = req.headers.get("origin");
-  const allowed = (Deno.env.get("ASSISTANT_ALLOWED_ORIGINS") ?? "")
+  if (origin && allowedOrigins().includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
+}
+
+/** Browser origins allowed to call the new endpoints (ASSISTANT_ALLOWED_ORIGINS, comma-separated). */
+export function allowedOrigins(get: EnvGetter = denoEnv): string[] {
+  return (get("ASSISTANT_ALLOWED_ORIGINS") ?? "")
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean);
-  if (origin && allowed.includes(origin)) headers["Access-Control-Allow-Origin"] = origin;
-  return headers;
 }
 
 /** JSON response with corsHeadersFor() — the new functions' counterpart to mod.ts's json(). */
