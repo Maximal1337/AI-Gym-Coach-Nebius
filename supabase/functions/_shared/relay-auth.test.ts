@@ -59,3 +59,10 @@ Deno.test("relaySecrets ignores short placeholder secrets", () => {
   assertEquals(relaySecrets(get({ ASSISTANT_RELAY_SECRET_PROD: PROD, ASSISTANT_RELAY_SECRET_DEV: "changeme" })), { prod: PROD });
   assertEquals(relaySecrets(get({})), {});
 });
+
+Deno.test("contract: the signature matches the relay's reference vector (services/relay/src/signing.test.ts)", async () => {
+  assertEquals(
+    await relaySignature("k".repeat(32), "prod", 1790000000, JSON.stringify({ action: "claim", limit: 2 })),
+    "325657353be7e5649e69ebaa369bf56a036b24cc984e1354f143a9be80e66710",
+  );
+});

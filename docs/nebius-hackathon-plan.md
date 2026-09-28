@@ -25,7 +25,7 @@ How to use this document:
 - NH-13: `private.seed_demo_account()` seeds two weeks of realistic history whose weights follow `progression.ts`.
 - M0 partly: LICENSE (MIT, "The Notch authors"), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
-- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests and the three write tools (NH-44) with 11 more TypeScript tests and 47 SQL checks — for both, only a live smoke test is left; the chat channel — `assistant-send`, `assistant-outbox`, `assistant-deliver` (NH-51…53) — with 32 more tests and 32 SQL checks.
+- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests and the three write tools (NH-44) with 11 more TypeScript tests and 47 SQL checks — for both, only a live smoke test is left; the chat channel — `assistant-send`, `assistant-outbox`, `assistant-deliver` (NH-51…53) — with 32 more tests and 32 SQL checks; the relay core (NH-54, `services/relay`) with 25 tests and a signing contract shared with the Edge Functions.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -744,9 +744,11 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 #### NH-54 · The relay
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-24, NH-33, NH-52, NH-53
 
-- [ ] Polls `assistant-outbox`, routes each message to the user's sandbox Hermes API with that sandbox's key, posts the reply to `assistant-deliver`
-- [ ] Attaches the facts block to every request (NH-64)
-- [ ] Recovers from network errors; deployed per environment through Argo CD
+- [x] Polls `assistant-outbox`, routes each message to the user's sandbox Hermes API with that sandbox's key, posts the reply to `assistant-deliver` — `services/relay`; a user without a ready sandbox waits in the queue, never served elsewhere; sandbox addresses come from a static map until NH-55
+- [x] Attaches the facts block to every request (NH-64)
+- [x] Recovers from network errors: exponential backoff, idempotent delivery retries, a lost lease drops the result
+- [ ] Deployed per environment through Argo CD (NH-36, NH-37)
+- [ ] Verified against a real Hermes sandbox: reply text, `usage` across the tool loop, `x-hermes-session-key` (NH-24, NH-25)
 
 #### NH-55 · Sandbox manager: provisioning and lifecycle
 **Priority:** Urgent · **Estimate:** 8 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-29, NH-40, NH-41, NH-54
@@ -819,8 +821,8 @@ Eviction, with a cap of 15 facts per user:
 #### NH-64 · Facts injection into the agent
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Memory, Area/Agent, Type/Feature · **Blocked by:** NH-54, NH-63
 
-- [ ] The relay attaches the facts block to every request as a system message that Hermes layers on top of its own prompt
-- [ ] Block explicitly marked as data, never instructions; at most 15 lines
+- [x] The relay attaches the facts block to every request as a system message that Hermes layers on top of its own prompt (`services/relay/src/prompt.ts`)
+- [x] Block explicitly marked as data, never instructions; at most 15 lines; each fact flattened to one line so it can't inject extra ones
 - [ ] The agent's reply references a relevant fact in a scripted test
 
 #### NH-65 · Memory evaluation
