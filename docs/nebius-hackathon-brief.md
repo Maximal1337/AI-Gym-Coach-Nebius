@@ -11,7 +11,7 @@ The short version of the plan, as agreed on 2026-09-27. Full detail: [`nebius-ha
 Notch gets a personal coach that **remembers between sessions and acts on your behalf** — exactly what the track is judged on:
 
 - **Every user gets their own Hermes agent in their own OpenShell sandbox.** Memory, skills and files are never shared; when capacity runs out, requests wait in a queue instead.
-- **Our MCP tool server over the real training data:** it reads the plan and history, saves notes, swaps an exercise — every write validated server-side, logged, and undoable for 24 hours.
+- **Our MCP tool server over the real training data:** it reads the plan and history, saves notes, adjusts an exercise's sets, reps or rest — every write validated server-side, logged, and undoable for 24 hours.
 - **Memory:** a nightly job turns chats into typed facts, scored in code, capped at 15, passed with every request and visible to the user.
 - **Tavily** for grounded answers (nutrition labels, exercise substitutions) — worth a $3,000 bonus.
 - **A proactive daily check-in**, so it isn't only reactive.
