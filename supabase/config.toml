@@ -419,6 +419,15 @@ verify_jwt = false
 [functions.notch-tools]
 verify_jwt = false
 
+# The relay on the VPS signs its requests with a per-environment HMAC secret
+# (_shared/relay-auth.ts) instead of sending a Supabase JWT (NH-52, NH-53).
+# Deploy both with --no-verify-jwt.
+[functions.assistant-outbox]
+verify_jwt = false
+
+[functions.assistant-deliver]
+verify_jwt = false
+
 # pg-delta is the schema diff engine for db diff / db pull / db remote commit.
 # Set enabled = false to fall back to the legacy migra engine.
 [experimental.pgdelta]

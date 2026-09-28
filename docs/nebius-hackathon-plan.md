@@ -25,7 +25,7 @@ How to use this document:
 - NH-13: `private.seed_demo_account()` seeds two weeks of realistic history whose weights follow `progression.ts`.
 - M0 partly: LICENSE (MIT, "The Notch authors"), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
-- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests and the three write tools (NH-44) with 11 more TypeScript tests and 47 SQL checks — for both, only a live smoke test is left.
+- 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests and the three write tools (NH-44) with 11 more TypeScript tests and 47 SQL checks — for both, only a live smoke test is left; the chat channel — `assistant-send`, `assistant-outbox`, `assistant-deliver` (NH-51…53) — with 32 more tests and 32 SQL checks.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -368,7 +368,7 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 35 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-38, NH-41, NH-50, NH-60, NH-62) — **144 remaining ≈ 51 person-days** on the §8 scale.
+**Scope:** **179 points** in total, 35 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-38, NH-41, NH-50, NH-60, NH-62) — **144 remaining ≈ 51 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
@@ -720,23 +720,26 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 #### NH-51 · `assistant-send` Edge Function
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-10, NH-11, NH-50
 
-- [ ] JWT auth, flag check, rate limit, per-account caps and the D-34 ceilings: `checkSpend` for the user's environment, refusing with `daily_limit_reached`
-- [ ] Idempotency key: a retried send never duplicates a message
-- [ ] Stores the user message and enqueues work for the user's environment
+- [x] JWT auth, flag check, entitlement (402 like coach-turn), rate limit, per-account and global daily caps and the D-34 ceilings: `checkSpend` for the user's environment, refusing with `daily_limit_reached` and a reason
+- [x] Idempotency key: a retried send never duplicates a message — it returns the original, even after a limit has been reached since
+- [x] Stores the user message and enqueues work for the user's environment, in one transaction (`assistant_enqueue_message`, migration `20260928150000_assistant_channel.sql`)
+- [ ] Live smoke test against the deployed function (after the NH-06 rollout)
 
 #### NH-52 · `assistant-outbox` Edge Function
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-50
 
-- [ ] Shared-secret auth per environment, usable only by that environment's relay
-- [ ] Returns pending work under a lease; ack endpoint; expired leases return to the queue
-- [ ] Hands out no work for an environment at its D-34 ceiling (`checkSpend`)
+- [x] Shared-secret auth per environment, usable only by that environment's relay: HMAC-SHA256 over environment, timestamp and body, ±5 minutes (`_shared/relay-auth.ts`); `verify_jwt` off
+- [x] Returns pending work under a lease with its context — message, last 20 messages, facts, language, units, sandbox mapping (`assistant_job_context`); a `fail` action returns the job to the queue and records the tokens it spent; expired leases return to the queue
+- [x] Hands out no work for an environment at its D-34 ceiling (`checkSpend`)
+- [ ] Live smoke test against the deployed function (after the NH-06 rollout)
 
 #### NH-53 · `assistant-deliver` Edge Function
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-50
 
-- [ ] HMAC-verified requests with replay protection (timestamp + dedup)
-- [ ] Stores the reply in `assistant_messages` and sends a push notification
-- [ ] Records the turn's spend with `recordSpend` — the usage the relay reports, or the fallback
+- [x] HMAC-verified requests with replay protection (timestamp + dedup): a retried delivery returns the stored reply — one reply per job, enforced by a unique `job_id`
+- [x] Stores the reply in `assistant_messages` and finishes the job in one transaction (`assistant_complete_job`), then sends a push notification; a check-in can be finished with `skip` and no message
+- [x] Records the turn's spend with `recordSpend` — the usage the relay reports, or the fallback
+- [ ] Live smoke test against the deployed function (after the NH-06 rollout)
 
 #### NH-54 · The relay
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-24, NH-33, NH-52, NH-53
