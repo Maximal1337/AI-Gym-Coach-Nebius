@@ -838,9 +838,10 @@ Eviction, with a cap of 15 facts per user:
 
 Required (D-21): "always-on" is half of what the Personal AI track asks for, and a message the user didn't trigger is the clearest demo of it.
 
-- [ ] Supabase Cron enqueues a daily check-in turn per opted-in account; the relay runs it in the user's sandbox, starting it if stopped
-- [ ] The message covers today's workout and one relevant fact; delivered through `assistant-deliver` with a push notification; within the D-34 ceilings
-- [ ] Skips silently when there's nothing to say, so it never becomes noise
+- [x] Supabase Cron enqueues a daily check-in turn per opted-in account (flag `assistant_checkin` on top of `assistant_chat`, 06:00 UTC, `assistant_enqueue_checkins`); a check-in that didn't go out on its day is failed as stale, never sent late; the relay runs it in the user's sandbox — starting a stopped sandbox comes with NH-55
+- [x] The message covers today's workout and one relevant fact; delivered through `assistant-deliver` with a push notification; within the D-34 ceilings — the relay's check-in instruction; the outbox hands out nothing at the ceiling
+- [x] Skips silently when there's nothing to say, so it never becomes noise — the agent answers `SKIP` and the job is finished with no message
+- [ ] Verified end to end on a real sandbox (after NH-55)
 
 ### M7 — TestFlight demo build · target 2026-10-20
 

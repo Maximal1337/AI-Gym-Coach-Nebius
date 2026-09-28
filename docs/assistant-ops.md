@@ -10,10 +10,10 @@ Hides the assistant for everyone at once — the app, `assistant-send` and `notc
 update public.feature_flags set enabled = false where flag like 'assistant_%';
 ```
 
-Back on (Stage B's `assistant_workout` stays off):
+Back on — every assistant flag except Stage B's `assistant_workout`, which stays off:
 
 ```sql
-update public.feature_flags set enabled = true where flag in ('assistant_chat', 'assistant_memory');
+update public.feature_flags set enabled = true where flag like 'assistant_%' and flag <> 'assistant_workout';
 ```
 
 To stop one environment's model spend without hiding anything, set its ceiling to 0 instead:
@@ -108,4 +108,20 @@ from cron.job_run_details d
 join cron.job j using (jobid)
 order by d.start_time desc
 limit 20;
+```
+
+## Daily check-in
+
+At 06:00 UTC Supabase Cron queues one check-in per user with both `assistant_chat` and `assistant_checkin` ([`supabase/cron/assistant.sql`](../supabase/cron/assistant.sql)). The relay runs it in the user's sandbox; when there's nothing worth saying the agent answers `SKIP` and nothing is sent. A check-in that didn't go out on its day is marked stale the next morning rather than sent late.
+
+Opt an account in:
+
+```sql
+insert into public.user_flags (user_id, flag) values ('<uuid>', 'assistant_checkin');
+```
+
+Queue today's check-ins now, e.g. for a demo — safe to repeat, it never queues the same day twice:
+
+```sql
+select public.assistant_enqueue_checkins();
 ```
