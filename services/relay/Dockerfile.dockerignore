@@ -1,0 +1,11 @@
+# BuildKit reads this for services/relay/Dockerfile only; the context is the
+# repository root, so keep it to what the relay image needs.
+*
+!pnpm-workspace.yaml
+!package.json
+!pnpm-lock.yaml
+!.npmrc
+!services/relay/package.json
+!services/relay/tsconfig.json
+!services/relay/src/**
+services/relay/src/**/*.test.ts

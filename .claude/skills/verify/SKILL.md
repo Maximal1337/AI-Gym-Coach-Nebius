@@ -79,6 +79,21 @@ cd services/agent && npm run typecheck   # tsc --noEmit
 npm test                                  # node:test, src/*.test.ts
 ```
 
+## Cluster manifests (`deploy/`) and the image workflow
+
+No cluster here either; these catch what can be caught offline. CI runs the
+first one.
+
+```bash
+node --test scripts/*.test.mjs                # the Images workflow's tag bump
+kubectl kustomize deploy/notch/overlays/prod  # renders; also dev and deploy/platform/agent-sandbox
+for f in deploy/bootstrap/*.sh; do bash -n "$f"; done   # shell syntax
+```
+
+Anything that needs k3s, Argo CD or OpenShell (sync, NetworkPolicy
+enforcement, the gateway's Helm hooks) is verified on the VPS — see
+`deploy/README.md`, "Checked only on the VPS".
+
 ## End-to-end smoke test against the live deployed backend
 
 There's no local Supabase/agent stack running in this environment — testing

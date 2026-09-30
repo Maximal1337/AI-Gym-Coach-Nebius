@@ -27,6 +27,7 @@ How to use this document:
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
 - 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests and the three write tools (NH-44) with 11 more TypeScript tests and 47 SQL checks — for both, only a live smoke test is left; the chat channel — `assistant-send`, `assistant-outbox`, `assistant-deliver` (NH-51…53) — with 32 more tests and 32 SQL checks; the relay core (NH-54, `services/relay`) with 25 tests and a signing contract shared with the Edge Functions.
 - 2026-09-28 … 30, local code, not deployed: M6 — fact extraction on Nemotron with per-operation validation and a Token Factory client (NH-61), the nightly memory job and its Supabase Cron schedule (NH-63), the daily check-in (NH-66), the memory evaluation's golden set and runner (NH-65) — what's left needs keys or a sandbox; M7's two screens — the coach assistant chat (NH-70) and "What the coach remembers" (NH-71) — behind the flags and in all 8 languages, checked by typecheck, 8 unit tests and a full Metro bundle. Test counts now: 177 Deno, 222 SQL checks on PGlite, 39 mobile, 25 relay.
+- 2026-09-30, written, not yet run on a VPS: the cluster in [`deploy/`](../deploy/README.md) (NH-36) — bootstrap script, Argo CD app of apps, NetworkPolicies, secrets script, prod sync window — rendered offline with `kubectl kustomize`; the Images workflow (NH-37) that builds the relay image after green CI and commits its tag, with 6 tests for the tag bump. Pinned: k3s v1.36.4+k3s1, Argo CD v3.5.3, Agent Sandbox v1.0.4, OpenShell chart 0.1.2.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -215,7 +216,7 @@ As of 2026-09-27:
 |---|---|---|---|---|
 | O-02 | Supabase project region → Nebius region | @Maximal1337 | 2026-09-29 | The privacy page says Asia-Pacific; pick the Nebius region with the lowest measured latency to the Supabase project |
 | O-10 | Extra AI Cloud credits from the organizers | @Maximal1337 | 2026-10-01 | Ask in the Nebius Discord (draft in §0). The plan doesn't count on it; if granted, keep 4 vCPU / 16 GiB for the whole run |
-| O-11 | Can two OpenShell gateways (dev and prod) share one cluster, given the Agent Sandbox controller is cluster-wide? | @Maximal1337 | 2026-10-04 (NH-21) | One gateway with separate sandbox namespaces, providers and policies per environment |
+| O-11 | Can two OpenShell gateways (dev and prod) share one cluster, given the Agent Sandbox controller is cluster-wide? As objects, yes: the chart's cluster-scoped names carry the release namespace (checked in chart 0.1.2); `deploy/` is laid out that way. What's left is runtime behaviour | @Maximal1337 | 2026-10-04 (NH-21) | One gateway with separate sandbox namespaces, providers and policies per environment |
 | O-12 | Does 2 vCPU / 8 GiB hold 4 running prod sandboxes plus 2 dev? | @Maximal1337 | 2026-10-04 (NH-25) | Shorter idle timeout first, then 4 vCPU / 16 GiB within the credits (D-31) |
 
 **Resolved on 2026-09-27:**
@@ -607,20 +608,22 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 #### NH-36 · Argo CD and cluster layout
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Infra, Type/Feature · **Blocked by:** NH-27
 
-- [ ] A bash bootstrap script in the repo installs k3s and Argo CD core on a fresh Ubuntu 24.04 host — the same script is used for the move (NH-96)
-- [ ] App-of-apps in the repo: the platform (Agent Sandbox controller, OpenShell), `notch-dev` and `notch-prod`
-- [ ] NetworkPolicy isolates `notch-dev` and `notch-prod` from each other
-- [ ] Secrets never in Git: Sealed Secrets, or `kubectl create secret` documented step by step
-- [ ] Sync window blocks `notch-prod` syncs from 2026-12-01 to 2026-12-15 (D-32)
-- [ ] Argo CD UI and API not exposed; the CLI works over SSH
+- [x] A bash bootstrap script in the repo installs k3s and Argo CD core on a fresh Ubuntu 24.04 host — the same script is used for the move (NH-96) — `deploy/bootstrap/bootstrap.sh`: pinned versions, k3s without traefik, servicelb and metrics-server, secrets encrypted at rest; refuses to run without an active ufw, because k3s listens on 6443 everywhere (D-27)
+- [x] App-of-apps in the repo: the platform (Agent Sandbox controller, OpenShell), `notch-dev` and `notch-prod` — `deploy/argocd`, ordered by sync waves; two AppProjects, and only `platform` may create cluster-scoped objects
+- [x] NetworkPolicy isolates `notch-dev` and `notch-prod` from each other — from the ingress side, without ever widening OpenShell's own sandbox policies (NetworkPolicies add up)
+- [x] Secrets never in Git: Sealed Secrets, or `kubectl create secret` documented step by step — `deploy/bootstrap/secrets.sh` from a root-only env file on the VPS; no Sealed Secrets controller, which saves RAM
+- [x] Sync window blocks `notch-prod` syncs from 2026-12-01 to 2026-12-15 (D-32) — on `notch-prod` and `openshell-prod`; a manual sync stays possible for incidents
+- [x] Argo CD UI and API not exposed; the CLI works over SSH — core install; `argocd --core`, and `argocd admin dashboard` through an SSH tunnel when a UI is needed
+- [ ] Bootstrapped on the VPS, both environments synced and healthy, the isolation checked (NH-26)
 
 #### NH-37 · CI: images to GHCR and tag updates
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Feature · **Blocked by:** NH-21
 
-- [ ] After green tests on `main`, CI builds the relay and Hermes sandbox images for `linux/amd64` and pushes them to GHCR
-- [ ] CI commits the new image tags to the manifests; nothing else changes a tag
-- [ ] No self-hosted runner; the workflow uses only GitHub-hosted `ubuntu-latest`
-- [ ] A red test leaves the cluster on the previous version
+- [x] After green tests on `main`, CI builds the relay and Hermes sandbox images for `linux/amd64` and pushes them to GHCR — `.github/workflows/images.yml`, triggered by a successful CI run on a push to this repository's `main` (never a fork's pull request); the Hermes image builds as soon as NH-21 adds `deploy/images/hermes-sandbox/Dockerfile`
+- [x] CI commits the new image tags to the manifests; nothing else changes a tag — `scripts/bump-image-tag.mjs` rewrites lines marked `# image-tag: <image>`, never moving a tag backwards when runs finish out of order; the commit carries `[skip ci]`
+- [x] No self-hosted runner; the workflow uses only GitHub-hosted `ubuntu-latest`
+- [x] A red test leaves the cluster on the previous version — a failed CI run never reaches the Images workflow
+- [ ] First run on GitHub: the images pushed, the GHCR packages set to public, the tag commit lands
 
 #### NH-32 · Egress allowlist
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Security, Type/Chore · **Blocked by:** NH-26, NH-36
@@ -647,7 +650,7 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 #### NH-34 · Backups and restore drill
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
 
-- [ ] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase)
+- [ ] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase) — and, found while writing NH-36, each gateway's own volume (its SQLite database of sandboxes and encrypted provider credentials) plus its `openshell-credential-kek` Secret, without which the restored credentials can't be decrypted (`secrets.sh --restore-kek`)
 - [ ] Restore tested once on a fresh host with the NH-36 bootstrap script — the rehearsal for NH-96
 
 #### NH-35 · Monitoring and alerts
@@ -917,7 +920,7 @@ In-workout coaching on the new runtime moved to the post-hackathon backlog: PH-1
 **Priority:** Urgent · **Estimate:** 1 · **Labels:** Area/Security, Area/Docs, Type/Chore · **Blocked by:** NH-04, NH-05, NH-06
 
 - [ ] Final gitleaks run over the full history is clean
-- [ ] Branch protection enabled on `main`; CI required before merge
+- [ ] Branch protection enabled on `main`; CI required before merge — it must still let the Images workflow push its tag commit (NH-37), e.g. through a deploy key allowed to bypass it, or deploys stop
 - [ ] License visible in the GitHub **About** panel
 
 #### NH-93 · Devpost submission

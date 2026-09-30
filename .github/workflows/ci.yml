@@ -21,6 +21,8 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: node scripts/check-locales.mjs
+      # The Images workflow's tag bump (NH-37).
+      - run: node --test scripts/*.test.mjs
 
   edge-functions:
     runs-on: ubuntu-latest
