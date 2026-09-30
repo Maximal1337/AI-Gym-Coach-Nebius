@@ -30,6 +30,7 @@ How to use this document:
 - 2026-09-30, written, not yet run on a VPS: the cluster in [`deploy/`](../deploy/README.md) (NH-36) — bootstrap script, Argo CD app of apps, NetworkPolicies, secrets script, prod sync window — rendered offline with `kubectl kustomize`; the Images workflow (NH-37) that builds the relay image after green CI and commits its tag, with 6 tests for the tag bump. Pinned: k3s v1.36.4+k3s1, Argo CD v3.5.3, Agent Sandbox v1.0.4, OpenShell chart 0.1.2.
 - 2026-09-30, written, not yet run in a sandbox: the Hermes coach profile (NH-40, NH-45) in [`deploy/images/hermes-sandbox`](../deploy/images/hermes-sandbox/README.md) — SOUL.md with the rules ported from today's coach, config.yaml with the D-29 allowlist — pinned by 9 tests; the relay now sends the coach's name, tone, accountability style and the user's style notes with every request, and turns cited links into sources the app can show.
 - 2026-09-30, written, off until the spike proves it on the cluster: the sandbox manager (NH-55, NH-56) — per-user sandboxes created, started, stopped when idle and deleted with the account, at most 4 running in prod and 2 in dev with everyone else waiting in order — driving the `openshell` CLI; the queue's deferral and the sandbox mapping in SQL (25 SQL checks, 5 Deno tests); 27 relay tests; the OpenShell provider profiles for `notch-tools`, Token Factory and Tavily.
+- 2026-09-30: the English README (NH-90) — what the assistant does, how Nemotron and Token Factory are used, architecture, ours versus upstream with licenses, setup with every variable, the submission-period changes. Writing it caught the Hermes profile contradicting D-03 and D-04: Tavily is now search only and thinking is off on assistant turns.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -907,13 +908,14 @@ In-workout coaching on the new runtime moved to the post-hackathon backlog: PH-1
 #### NH-90 · English README
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** —
 
-- [ ] Architecture diagram and a component overview
-- [ ] Setup instructions for the mobile app, Supabase functions, the agent service, and the cluster (bootstrap script, Argo CD, OpenShell, Hermes image), with every environment variable and secret listed
-- [ ] How Nemotron on Token Factory, OpenShell, Hermes and Tavily are used, including the model routing and why each model is used where
-- [ ] A clear split of what comes from upstream (OpenShell, Hermes, NemoClaw's Hermes blueprint) and what we wrote (D-19), with upstream licenses preserved
-- [ ] The glossary from §1, so nobody reads OpenShell as PowerShell
-- [ ] Section "What changed during the submission period (after 2026-08-26)"
-- [ ] License and demo instructions
+- [x] Architecture diagram and a component overview — the root `README.md`, written 2026-09-30; a Mermaid diagram checked to render with Mermaid 11
+- [x] Setup instructions for the mobile app, Supabase functions, the agent service, and the cluster (bootstrap script, Argo CD, OpenShell, Hermes image), with every environment variable and secret listed — the cluster part points to `deploy/README.md` for the full runbook
+- [x] How Nemotron on Token Factory, OpenShell, Hermes and Tavily are used, including the model routing and why each model is used where — only the two uses that exist in code (Super for assistant turns, Ultra for the nightly job), and what stays on Gemini
+- [x] A clear split of what comes from upstream (OpenShell, Hermes, NemoClaw's Hermes blueprint) and what we wrote (D-19), with upstream licenses preserved — no upstream source is vendored; the relay image ships OpenShell's LICENSE and THIRD-PARTY-NOTICES with the CLI binary
+- [x] The glossary from §1, so nobody reads OpenShell as PowerShell
+- [x] Section "What changed during the submission period (after 2026-08-26)"
+- [ ] License and demo instructions — the license is in; the TestFlight link and the video link wait for NH-72 and NH-91 (judge accounts go in the Devpost testing instructions, never in the public README)
+- [ ] Final pass before submission: the status note replaced by what's live, the model ids and numbers refreshed
 
 #### NH-91 · Demo video
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** NH-73
