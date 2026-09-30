@@ -286,8 +286,8 @@ export interface Target {
   userId: string;
 }
 
-/** Where to send turns, resolved the way the relay itself would. */
-export function resolveTarget(args: Args, env: NodeJS.ProcessEnv, serviceUrl: (name: string, port: number) => Promise<string>): Target {
+/** Where to send turns, resolved the way the relay itself would. Also used by agent-probe.ts. */
+export function resolveTarget(args: Pick<Args, "sandbox" | "user" | "baseUrl">, env: NodeJS.ProcessEnv, serviceUrl: (name: string, port: number) => Promise<string>): Target {
   const userId = args.user ?? "bench";
   if (args.baseUrl) {
     const apiKey = env.BENCH_API_KEY?.trim();

@@ -87,15 +87,22 @@ first one.
 ```bash
 node --test scripts/*.test.mjs                # the tag bump (NH-37), the Token Factory smoke test (NH-28)
 kubectl kustomize deploy/notch/overlays/prod  # renders; also dev and deploy/platform/agent-sandbox
-for f in deploy/bootstrap/*.sh deploy/ops/*.sh deploy/ops/test/*.sh; do bash -n "$f"; done   # shell syntax
+for f in deploy/bootstrap/*.sh deploy/ops/*.sh deploy/ops/test/*.sh deploy/spike/*.sh deploy/spike/test/*.sh; do bash -n "$f"; done   # shell syntax
 ```
 
 `deploy/ops` (backups, restore, health check) has an end-to-end test on real
 files with a fake `kubectl`: `bash deploy/ops/test/ops.test.sh`. It needs
 Linux with GNU tools plus `jq`, `sqlite3` and `age`, none of which this Windows
 checkout has; the "Ops scripts" workflow runs it and shellcheck on every push
-that touches `deploy/ops` or `deploy/bootstrap`. Say it hasn't run when it
-hasn't.
+that touches `deploy/ops`, `deploy/spike` or `deploy/bootstrap`. Say it hasn't
+run when it hasn't.
+
+`deploy/spike/sandbox-probe.sh` (NH-26) is plain bash with `/dev/tcp`, so it
+also runs on Git Bash here: stand up local listeners for a peer and a proxy
+that answers CONNECT with 403, and read its lines. Its CI test,
+`deploy/spike/test/sandbox-probe.test.sh`, needs `nc` from netcat-openbsd.
+The relay's spike tools (`src/bench.ts`, `src/agent-probe.ts`) are covered by
+`npm test` in `services/relay`.
 
 Anything that needs k3s, Argo CD or OpenShell (sync, NetworkPolicy
 enforcement, the gateway's Helm hooks) is verified on the VPS — see
