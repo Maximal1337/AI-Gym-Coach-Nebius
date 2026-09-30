@@ -558,7 +558,7 @@ node scripts/token-factory-smoke.mjs    # or --model <id>, repeatable
 
 - [ ] k3s installed without traefik, servicelb and metrics-server; versions pinned
 - [ ] Agent Sandbox controller and the OpenShell Helm chart installed per the OpenShell Kubernetes setup guide; versions pinned
-- [ ] Hermes sandbox image built for `linux/amd64` from NemoClaw's Hermes blueprint plus our config; a test sandbox answers through the Hermes API
+- [ ] Hermes sandbox image built for `linux/amd64` from NemoClaw's Hermes blueprint plus our config; a test sandbox answers through the Hermes API — prepared 2026-09-30 from NemoClaw's own Dockerfile and start script ([the image README](../deploy/images/hermes-sandbox/README.md#for-the-dockerfile-nh-21)). Their start script refuses a config that doesn't match a hash pinned at build time, and it also runs a dashboard. So the first option is their image as the base with our own start command: install the profile, then `hermes gateway run` in the foreground. The relay's default command said `hermes gateway` and now says that.
 - [ ] O-11 answered: two gateways in one cluster, or one gateway with per-environment namespaces
 - [ ] Upstream licenses (OpenShell, NemoClaw, Hermes) recorded for the README
 

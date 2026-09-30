@@ -27,7 +27,7 @@ import type { RelayEnvironment } from "./signing.js";
  *                             the environment's Token Factory and Tavily providers (NH-33)
  *   SANDBOX_TOOLS_PROFILE (notch-tools), SANDBOX_MAX_RUNNING (prod 4, dev 2),
  *   SANDBOX_IDLE_MINUTES (10), SANDBOX_HERMES_HOME (/sandbox/.hermes),
- *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway`),
+ *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground),
  *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
  * The CLI finds its gateway through its own configuration (OPENSHELL_GATEWAY).
@@ -35,7 +35,7 @@ import type { RelayEnvironment } from "./signing.js";
  *   RELAY_STATIC_SANDBOXES    {"<user id>": {"baseUrl": "...", "apiKey": "..."}}
  */
 
-const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec hermes gateway"];
+const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec hermes gateway run"];
 const IDLE_SWEEP_MS = 60_000;
 const ORPHAN_SWEEP_MS = 15 * 60_000;
 

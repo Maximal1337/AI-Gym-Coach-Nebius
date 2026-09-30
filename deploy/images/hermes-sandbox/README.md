@@ -38,14 +38,55 @@ that system message on top of SOUL.md.
 
 ## For the Dockerfile (NH-21)
 
-- Build from NemoClaw's Hermes blueprint layers — its docs say a custom image
-  must keep them, not just start from the base image.
-- `COPY profile/ /opt/notch/hermes-profile/` and run
-  `/opt/notch/hermes-profile/install-profile.sh` before Hermes starts, on every
-  start: `$HERMES_HOME` is on the persistent volume, so a profile baked into it
-  once would go stale after the next image.
-- Start Hermes' gateway so the API server (port 8642) is up; `config.yaml`
-  enables it.
+**What NemoClaw's Hermes image does** — read on 2026-09-30 from
+`agents/hermes/Dockerfile` and `start.sh` in
+[NVIDIA/NemoClaw](https://github.com/NVIDIA/NemoClaw/tree/main/agents/hermes)
+(Apache-2.0):
+
+- It builds `FROM ghcr.io/nvidia/nemoclaw/hermes-sandbox-base`, pinned by
+  digest, then patches Hermes for life inside OpenShell. The patches cover MCP
+  over HTTP through the sandbox proxy, SQLite's temp store, the gateway's
+  process identity and supervisor restarts. It also replaces `hermes` with a
+  wrapper that enforces a boundary on secrets in the environment.
+- User `sandbox`, working directory `/sandbox`, `HERMES_HOME=/sandbox/.hermes`:
+  the same as the relay's `SANDBOX_HERMES_HOME` default.
+- It generates `config.yaml` from build arguments and pins its hash in
+  `/etc/nemoclaw/hermes.config-hash`. Its start script (`nemoclaw-start`)
+  checks the config against that hash before starting the gateway, so a
+  config replaced at start is refused.
+- `nemoclaw-start` runs Hermes' API server on `127.0.0.1:18642` and forwards
+  `0.0.0.0:8642` to it with socat. It sets the proxy to
+  `http://10.200.0.1:3128`, and it also starts Hermes' dashboard.
+- There's no ENTRYPOINT; OpenShell runs the start command.
+
+**The options for our image**, in order of preference. The spike picks one:
+
+1. **Their image as the base, our start command.** `FROM` NemoClaw's built
+   Hermes image: their Dockerfile built by our CI, or a published tag if one
+   exists. Add the profile and start with the relay's default command, which
+   installs the profile and then runs `hermes gateway run` in the foreground.
+   This keeps every NemoClaw patch, and it skips `nemoclaw-start`'s hash check
+   (our profile *is* the config) and its dashboard (RAM, D-31). To check:
+   - whether the `hermes` wrapper accepts `API_SERVER_KEY` in the environment;
+   - how OpenShell's `--expose` reaches the port. If it needs a non-loopback
+     listener, set `API_SERVER_HOST=0.0.0.0` (the key still guards it), or use
+     socat like theirs.
+2. **Their start script with our config.** Bake our `config.yaml` in and
+   rewrite the pinned hash in our layer. This keeps their guard, but what the
+   hash covers has to be read from `runtime-config-guard.py`, and the
+   dashboard stays unless it can be turned off.
+3. **`hermes-sandbox-base` alone.** This loses the patches, and the
+   MCP-over-proxy one likely matters for `notch-tools`. Last resort.
+
+Whichever it is:
+
+- `COPY profile/ /opt/notch/hermes-profile/`. The profile is installed on
+  every start, because the workspace volume mounted at `/sandbox` hides
+  whatever the image put under it, and a profile baked in once would go
+  stale after the next image.
+- `@HERMES_BINARY@` in the provider profiles is the executable OpenShell sees
+  making Hermes' requests. Behind their wrapper that's likely Hermes'
+  virtualenv Python: check with `ps` inside a sandbox.
 - Then point the gateways at the image (see ../../README.md, "Adding the
   Hermes sandbox image").
 

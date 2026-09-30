@@ -77,7 +77,7 @@ class FakeStore implements AgentStore {
 const CONFIG: ManagerConfig = {
   env: "prod",
   image: "ghcr.io/maximal1337/notch-hermes-sandbox:sha-1",
-  command: ["sh", "-c", "install-profile.sh && exec hermes gateway"],
+  command: ["sh", "-c", "install-profile.sh && exec hermes gateway run"],
   maxRunning: 2,
   idleStopMs: 10 * MIN,
   apiKeySecret: "k".repeat(40),
