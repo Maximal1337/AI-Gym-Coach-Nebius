@@ -25,6 +25,17 @@ server:
   # budget per account, out of a 60 GiB disk shared by all of them.
   workspaceStorageClass: local-path
   workspaceDefaultStorageSize: 1Gi
+  auth:
+    # The relay's calls — its openshell CLI and its requests to sandbox ports —
+    # carry no OIDC token: on Kubernetes the alternative is an identity
+    # provider. It holds here because TLS still requires the chart's client
+    # certificate (server.tls.enableMtls, on by default), which only the relay
+    # and the sandbox supervisors have; only pods in the environment's own
+    # namespace can reach the gateway (deploy/notch/base/network-policies.yaml);
+    # and nothing outside the VPS can (D-27). Supervisors keep their own
+    # gateway-minted tokens. NH-26 checks that a caller without the
+    # certificate is refused (services/relay/src/gateway.ts).
+    allowUnauthenticatedUsers: true
 
 # The gateway pod's role label. deploy/notch/base/network-policies.yaml keys on
 # it; sandbox pods, which the gateway creates itself, never carry it.

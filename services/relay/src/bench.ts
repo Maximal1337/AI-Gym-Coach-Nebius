@@ -32,6 +32,7 @@
  * the sandbox mid-run.
  */
 import { pathToFileURL } from "node:url";
+import { gatewayConfigFromEnv, gatewayFetch } from "./gateway.js";
 import { chat as hermesChat, type ChatResult, type SandboxEndpoint } from "./hermes.js";
 import { OpenShellCli, execOpenShell } from "./openshell-cli.js";
 import type { JobContext } from "./outbox.js";
@@ -311,10 +312,15 @@ export function resolveTarget(args: Pick<Args, "sandbox" | "user" | "baseUrl">, 
 
 async function cli(argv: string[]): Promise<void> {
   const args = parseArgs(argv);
+  // The relay's own route to its gateway, as main.ts sets it up.
+  const gateway = gatewayConfigFromEnv(process.env);
+  if (gateway) process.env.OPENSHELL_GATEWAY = gateway.name;
+  const sandboxFetch = gateway ? gatewayFetch(gateway.route) : undefined;
   const openshell = new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell"));
   const target = resolveTarget(args, process.env, (name, port) => openshell.serviceUrl(name, port));
   const deps: BenchDeps = {
-    chat: (endpoint, job, sessionKey) => hermesChat(endpoint, buildMessages(job, new Date()), { sessionKey, timeoutMs: TURN_TIMEOUT_MS }),
+    chat: (endpoint, job, sessionKey) =>
+      hermesChat(endpoint, buildMessages(job, new Date()), { sessionKey, timeoutMs: TURN_TIMEOUT_MS, ...(sandboxFetch ? { fetch: sandboxFetch } : {}) }),
     now: () => Date.now(),
     sleep: (ms) => new Promise((r) => setTimeout(r, ms)),
   };

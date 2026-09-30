@@ -18,6 +18,7 @@
  */
 import { pathToFileURL } from "node:url";
 import { jobFor, resolveTarget } from "./bench.js";
+import { gatewayConfigFromEnv, gatewayFetch } from "./gateway.js";
 import { chat as hermesChat, type ChatResult, type SandboxEndpoint } from "./hermes.js";
 import { OpenShellCli, execOpenShell } from "./openshell-cli.js";
 import type { JobContext } from "./outbox.js";
@@ -180,14 +181,18 @@ export function parseProbeArgs(argv: string[]): { sandbox?: string; user?: strin
 
 async function cli(argv: string[]): Promise<number> {
   const args = parseProbeArgs(argv);
+  // The relay's own route to its gateway, as main.ts sets it up.
+  const gateway = gatewayConfigFromEnv(process.env);
+  if (gateway) process.env.OPENSHELL_GATEWAY = gateway.name;
+  const sandboxFetch = gateway ? gatewayFetch(gateway.route) : globalThis.fetch;
   const openshell = new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell"));
   const target = resolveTarget(args, process.env, (name, port) => openshell.serviceUrl(name, port));
   const endpoint = await target.endpoint();
   const secrets = [process.env.SANDBOX_KEY_SECRET, process.env.RELAY_SECRET].filter((v): v is string => Boolean(v));
   const result = await runProbe(
     {
-      chat: (ep, job, sessionKey) => hermesChat(ep, buildMessages(job, new Date()), { sessionKey, timeoutMs: 180_000 }),
-      fetch: globalThis.fetch,
+      chat: (ep, job, sessionKey) => hermesChat(ep, buildMessages(job, new Date()), { sessionKey, timeoutMs: 180_000, fetch: sandboxFetch }),
+      fetch: sandboxFetch,
       now: () => Date.now(),
     },
     endpoint,

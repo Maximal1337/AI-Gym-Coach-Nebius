@@ -125,6 +125,10 @@ Written and reviewed on a laptop; these need the real cluster (NH-21, NH-26):
   drill); otherwise the fallback under "Restoring onto a new host".
 - `k3s crictl stats -o json` gives per-container memory in the shape
   `ops/health.sh` reads.
+- The gateway refuses a caller without the client certificate even with
+  `allowUnauthenticatedUsers` (NH-26), and the relay's `gateway_unavailable`
+  / `gateway` log lines show it registered after the chart created the
+  certificate (restart the relay once after the first sync).
 
 ## Sandboxes: one per user (NH-55, NH-56)
 
@@ -165,9 +169,21 @@ first. Before that, per environment:
    Back it up with the gateway key (NH-34): losing it locks the relay out of
    every existing sandbox.
 
-Settled in the spike (NH-29), not guessed here: how the relay authenticates
-to its gateway and reaches a sandbox's exposed Hermes port (the gateway's
-service URL); the command that starts Hermes in the image; and how an image
+**How the relay reaches its gateway** (NH-29, `services/relay/src/gateway.ts`):
+on Kubernetes, OpenShell authenticates users with OIDC or not at all, and we
+have no identity provider. So the gateway accepts user calls without a token
+(`server.auth.allowUnauthenticatedUsers` in `platform/openshell/values.yaml`),
+while TLS still requires the chart's client certificate. The relay mounts it
+from the `openshell-client-tls` Secret. At startup it registers the CLI with
+the gateway at `OPENSHELL_GATEWAY_ENDPOINT`
+(`https://openshell.notch-<env>.svc:8080`). A sandbox's Hermes port comes back
+as a service URL on `<sandbox>.openshell.localhost`, which cluster DNS doesn't
+know. The relay sends those requests to the gateway's own address with the
+service hostname as SNI and Host, and presents the certificate; a real TLS
+test covers that.
+
+Settled in the spike, not guessed here: the service URL's exact form, that
+`openshell gateway add --local` accepts the mounted bundle, and how an image
 update reaches sandboxes that already exist.
 
 ## Backups and restore (NH-34)

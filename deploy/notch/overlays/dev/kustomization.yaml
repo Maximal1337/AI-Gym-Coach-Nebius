@@ -16,6 +16,8 @@ configMapGenerator:
       - RELAY_SANDBOXES=static
       # The environment's shared OpenShell providers every sandbox gets (NH-33).
       - SANDBOX_SHARED_PROVIDERS=token-factory,tavily
+      # The environment's OpenShell gateway, in this namespace (NH-29).
+      - OPENSHELL_GATEWAY_ENDPOINT=https://openshell.notch-dev.svc:8080
       # The per-sandbox memory limit, the NH-35 watchdog: OpenShell sets it as
       # the pod's memory request and limit. Unset until NH-25 measures Hermes;
       # then e.g. SANDBOX_MEMORY=900Mi (the cap times this must fit the RAM left

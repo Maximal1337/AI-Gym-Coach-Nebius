@@ -44,6 +44,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         runAsGroup: 1000
+        # Mounted Secrets belong to this group, so the client key can stay 0440.
+        fsGroup: 1000
         seccompProfile:
           type: RuntimeDefault
       containers:
@@ -90,10 +92,15 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            # The OpenShell CLI keeps its gateway registration here. How the
-            # relay authenticates to its gateway is settled in the spike (NH-29).
+            # The OpenShell CLI keeps its gateway registration here; the relay
+            # writes it at startup (src/gateway.ts).
             - name: openshell-config
               mountPath: /home/node/.config/openshell
+            # The gateway's client certificate (NH-29): the CLI's and the relay's
+            # own requests to sandbox ports present it.
+            - name: openshell-client-tls
+              mountPath: /etc/openshell-tls
+              readOnly: true
       volumes:
         - name: tmp
           emptyDir:
@@ -101,3 +108,18 @@ spec:
         - name: openshell-config
           emptyDir:
             sizeLimit: 16Mi
+        # Created by the OpenShell chart's certificate hook, which syncs after
+        # the relay (sync waves): optional, so the relay starts without it and
+        # picks it up on its next restart.
+        - name: openshell-client-tls
+          secret:
+            secretName: openshell-client-tls
+            optional: true
+            defaultMode: 0440
+            items:
+              - key: ca.crt
+                path: ca.crt
+              - key: tls.crt
+                path: tls.crt
+              - key: tls.key
+                path: tls.key

@@ -259,10 +259,14 @@ sudo deploy/ops/install.sh
 The first installs pinned k3s and Argo CD core and hands everything else to
 Argo CD; the second loads one environment's secrets from a root-only file on
 the host; the third sets up nightly encrypted backups and a health check every
-5 minutes (`/etc/notch/ops.env`: `HEALTHCHECK_URL`, optionally `BACKUP_S3_*`). The relay reads `RELAY_SECRET`, `SUPABASE_FUNCTIONS_URL`,
-`TOKEN_FACTORY_MODEL` and `SANDBOX_KEY_SECRET` from there, and `RELAY_ENV`,
-`RELAY_SANDBOXES` and `SANDBOX_SHARED_PROVIDERS` from its manifest; the sandbox
-manager's optional settings (capacity, idle time, CPU and memory) are listed in
+5 minutes (`/etc/notch/ops.env`: `HEALTHCHECK_URL`, optionally `BACKUP_S3_*`).
+
+The relay reads `RELAY_SECRET`, `SUPABASE_FUNCTIONS_URL`, `TOKEN_FACTORY_MODEL`
+and `SANDBOX_KEY_SECRET` from the environment's secrets file, and `RELAY_ENV`,
+`RELAY_SANDBOXES`, `SANDBOX_SHARED_PROVIDERS` and `OPENSHELL_GATEWAY_ENDPOINT`
+from its manifest. It reaches its gateway with the chart's client certificate
+(`openshell-client-tls`, mounted from a Secret). The sandbox manager's
+optional settings (capacity, idle time, CPU and memory) are listed in
 [`services/relay/src/main.ts`](services/relay/src/main.ts). Each
 environment's OpenShell gateway holds the Token Factory and Tavily keys as
 providers, and each user's `notch-tools` token as a per-user provider the

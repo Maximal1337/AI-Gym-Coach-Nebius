@@ -1,4 +1,7 @@
 import { writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { type GatewayConfig, gatewayConfigFromEnv, gatewayFetch, registerGateway } from "./gateway.js";
 import { chat } from "./hermes.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
@@ -30,7 +33,12 @@ import type { RelayEnvironment } from "./signing.js";
  *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground),
  *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
- * The CLI finds its gateway through its own configuration (OPENSHELL_GATEWAY).
+ * The environment's OpenShell gateway (NH-29, src/gateway.ts):
+ *   OPENSHELL_GATEWAY_ENDPOINT  https://openshell.notch-<env>.svc:8080; with it, the
+ *                             CLI is registered against the gateway at startup and
+ *                             HTTPS calls to sandboxes go through the gateway with
+ *                             the client certificate
+ *   OPENSHELL_TLS_DIR (/etc/openshell-tls), OPENSHELL_GATEWAY_NAME (notch)
  * The static map:
  *   RELAY_STATIC_SANDBOXES    {"<user id>": {"baseUrl": "...", "apiKey": "..."}}
  */
@@ -64,11 +72,27 @@ async function main(): Promise<void> {
   let acquireSandbox: RelayDeps["acquireSandbox"];
   const mode = process.env.RELAY_SANDBOXES?.trim() || "static";
   if (mode !== "static" && mode !== "manager") throw new Error("RELAY_SANDBOXES must be static or manager");
+
+  // The gateway's client bundle comes from a Secret the OpenShell chart creates
+  // after the relay first starts (sync waves). The manager can't work without
+  // it; a static map of plain-HTTP sandboxes can.
+  let gateway: GatewayConfig | undefined;
+  try {
+    gateway = gatewayConfigFromEnv(process.env);
+  } catch (e) {
+    if (mode === "manager") throw e;
+    log("gateway_unavailable", { error: String(e) });
+  }
+  if (gateway) process.env.OPENSHELL_GATEWAY = gateway.name;
+
   if (mode === "manager") {
     const keySecret = required("SANDBOX_KEY_SECRET");
     if (keySecret.length < 32) throw new Error("SANDBOX_KEY_SECRET must be at least 32 characters");
+    if (!gateway) throw new Error("RELAY_SANDBOXES=manager needs OPENSHELL_GATEWAY_ENDPOINT");
+    const exec = execOpenShell(process.env.OPENSHELL_BIN || "openshell");
+    log("gateway", { name: gateway.name, endpoint: gateway.endpoint, status: await registerGateway(gateway, join(homedir(), ".config", "openshell"), exec) });
     const manager = new SandboxManager(
-      new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell")),
+      new OpenShellCli(exec),
       { record: (userId, sandboxName, tokenHash) => outbox.recordAgent({ user_id: userId, sandbox_name: sandboxName, tool_token_hash: tokenHash }), list: () => outbox.listAgents() },
       {
         env: env as RelayEnvironment,
@@ -107,11 +131,13 @@ async function main(): Promise<void> {
   const leaseSeconds = number("RELAY_LEASE_SECONDS", 180);
   const idlePollMs = number("RELAY_IDLE_POLL_MS", 2_000);
   const heartbeat = process.env.RELAY_HEARTBEAT_FILE ?? "/tmp/relay-heartbeat";
+  // HTTPS sandbox URLs are the gateway's service URLs: through the gateway, with its client certificate.
+  const sandboxFetch = gateway ? gatewayFetch(gateway.route) : undefined;
 
   const deps: RelayDeps = {
     outbox,
     acquireSandbox,
-    chat: (endpoint, messages, options) => chat(endpoint, messages, { ...options, timeoutMs }),
+    chat: (endpoint, messages, options) => chat(endpoint, messages, { ...options, timeoutMs, ...(sandboxFetch ? { fetch: sandboxFetch } : {}) }),
     model,
     now: () => new Date(),
     log,
