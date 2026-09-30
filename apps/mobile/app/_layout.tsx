@@ -14,6 +14,7 @@ import { UnitsProvider } from '../src/lib/units';
 import { UnreadProvider, useUnread } from '../src/lib/unread';
 import { FlagsProvider } from '../src/lib/flags';
 import { RestTimerProvider, REST_NOTIFICATION_TYPE } from '../src/lib/restTimer';
+import { ASSISTANT_REPLY_NOTIFICATION, isAssistantChatFocused } from '../src/lib/assistant';
 import '../src/i18n';
 
 // GYM-14: crash/error reporting. An empty DSN leaves the SDK disabled
@@ -47,6 +48,18 @@ Notifications.setNotificationHandler({
       };
     }
     const foregrounded = AppState.currentState === 'active';
+    // A coach assistant reply (NH-70) has no unread badge: it shows a banner
+    // everywhere except on the assistant chat itself, which fetches it at once.
+    if (notification.request.content.data?.type === ASSISTANT_REPLY_NOTIFICATION) {
+      const hidden = foregrounded && isAssistantChatFocused();
+      return {
+        shouldShowAlert: !hidden,
+        shouldShowBanner: !hidden,
+        shouldShowList: !hidden,
+        shouldPlaySound: false,
+        shouldSetBadge: false,
+      };
+    }
     return {
       shouldShowAlert: !foregrounded,
       shouldShowBanner: !foregrounded,
@@ -72,15 +85,20 @@ function NotificationBridge() {
   // it's there. Chat lives at "/train" now that Plans is the app's
   // index/default tab (app/(tabs)/index.tsx).
   useEffect(() => {
-    const responseSub = Notifications.addNotificationResponseReceivedListener(() => {
-      router.push('/(tabs)/train');
+    const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
+      // A coach assistant reply or check-in opens its own chat, which
+      // catches up on focus the same way.
+      const type = response.notification.request.content.data?.type;
+      router.push(type === ASSISTANT_REPLY_NOTIFICATION ? '/(tabs)/coach' : '/(tabs)/train');
     });
     // Foreground receipt: setNotificationHandler above already suppressed
     // the native banner for this case — this is what shows the "+1" on
     // the chat tab instead. Doesn't fetch/apply anything itself; the chat
     // screen's own catch-up (or just opening it) does that, this is only
     // the "something happened" signal for whichever tab isn't chat.
-    const receivedSub = Notifications.addNotificationReceivedListener(() => {
+    const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
+      // The "+1" belongs to the workout chat's tab; an assistant reply isn't one.
+      if (notification.request.content.data?.type === ASSISTANT_REPLY_NOTIFICATION) return;
       if (AppState.currentState === 'active') increment();
     });
     return () => {

@@ -26,6 +26,7 @@ How to use this document:
 - M0 partly: LICENSE (MIT, "The Notch authors"), gitleaks in CI, CI running tests, locale checks and `deno check` against a baseline, the instant-sign-in allowlist moved out of the repo into a secret.
 - All migrations and the seed verified end to end against a real Postgres 17 (PGlite) — 29 migrations apply, 38 checks pass.
 - 2026-09-28, local code, not deployed: migrations for the coach chat, the job queue, the action trail and the facts (NH-41, NH-50, NH-60, the `assistant_actions` table from NH-44), verified on PGlite with 81 checks including account-deletion cascades; the scoring and eviction module NH-62 with 26 Deno tests, now run in CI; the D-34 spend ceilings and ledger (NH-38) with 16 more tests and the Monday [budget runbook](./budget-runbook.md); `notch-tools` (NH-42) with its MCP core and HTTP boundary under 34 more tests — only the call from a real sandbox is left; the four read tools (NH-43) with 14 more tests and the three write tools (NH-44) with 11 more TypeScript tests and 47 SQL checks — for both, only a live smoke test is left; the chat channel — `assistant-send`, `assistant-outbox`, `assistant-deliver` (NH-51…53) — with 32 more tests and 32 SQL checks; the relay core (NH-54, `services/relay`) with 25 tests and a signing contract shared with the Edge Functions.
+- 2026-09-28 … 30, local code, not deployed: M6 — fact extraction on Nemotron with per-operation validation and a Token Factory client (NH-61), the nightly memory job and its Supabase Cron schedule (NH-63), the daily check-in (NH-66), the memory evaluation's golden set and runner (NH-65) — what's left needs keys or a sandbox; M7's two screens — the coach assistant chat (NH-70) and "What the coach remembers" (NH-71) — behind the flags and in all 8 languages, checked by typecheck, 8 unit tests and a full Metro bundle. Test counts now: 177 Deno, 222 SQL checks on PGlite, 39 mobile, 25 relay.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -705,6 +706,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-40
 
 - [ ] `user_facts` is canonical memory (D-30); Hermes' own memory and skills never store keys, tokens or anyone else's data
+- [ ] Hermes' own memory keeps coaching know-how, not personal facts about the user: a fact deleted in "What the coach remembers" (NH-71) must stop being used, and our delete can't reach inside Hermes' memory. Checked in NH-73: delete a fact, and the next reply doesn't use it
 - [ ] Tavily only for knowledge questions (nutrition labels, exercise substitutions, equipment), no personal data in queries, sources cited
 - [ ] Medical safety rule preserved: pain or injury → stop the exercise and consult a professional
 
@@ -849,17 +851,19 @@ Required (D-21): "always-on" is half of what the Personal AI track asks for, and
 #### NH-70 · Mobile: Coach chat screen
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Mobile, Type/Feature · **Blocked by:** NH-12, NH-51, NH-53
 
-- [ ] Sends through `assistant-send` and renders `assistant_messages`, with pending and typing states
-- [ ] Catches up on missed replies when the app returns to the foreground or a push is tapped (same pattern as the workout chat)
-- [ ] Clear states for rate limit, daily limit reached and assistant disabled
-- [ ] New strings added to all 8 locale files (English fallback is acceptable for the demo)
+- [x] Sends through `assistant-send` and renders `assistant_messages`, with pending and typing states — `app/(tabs)/coach.tsx`, a tab only flagged accounts see. "Waiting" until the relay picks the message up, "typing" while the agent works, "taking longer than usual" after 2 minutes, "couldn't answer — send again" once every attempt failed; the statuses come from `assistant_my_open_jobs()` (own chat jobs only, no error text; 9 SQL checks). Check-ins are labelled, and Tavily sources are tappable https links
+- [x] Catches up on missed replies when the app returns to the foreground or a push is tapped (same pattern as the workout chat) — also on a reply's push while open, and by polling every 3 s only while a reply is expected; a reply's push opens this chat, not the workout chat, and adds no "+1" to the workout tab
+- [x] Clear states for rate limit, daily limit reached and assistant disabled — a refused message goes back into the composer with the reason (per-account and spend or global limits worded differently); a network or server failure keeps it as "not sent — tap to retry" with the same client id, which the server never stores twice
+- [x] New strings added to all 8 locale files — 37 strings, translated
+- [ ] Checked on a device against a real reply (NH-73)
 
 #### NH-71 · Mobile: "What the coach remembers" screen
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Mobile, Type/Feature · **Blocked by:** NH-12, NH-60
 
-- [ ] Lists facts with their category; the user can delete any fact
-- [ ] Empty state when there are no facts
-- [ ] If this doesn't make the build, facts are listed and deleted from a section of the chat screen instead
+- [x] Lists facts with their category; the user can delete any fact — `app/coach-memory.tsx`, opened from the chat's header when `assistant_memory` is on; pinned health facts first, then by category and score; a delete asks first, is optimistic and comes back with an alert if it fails
+- [x] Empty state when there are no facts
+- [x] ~~If this doesn't make the build, facts are listed and deleted from a section of the chat screen instead~~ — not needed, the screen is ready for the first build
+- [ ] Checked on a device (NH-73)
 
 #### NH-72 · TestFlight build and public link
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Mobile, Type/Chore · **Blocked by:** NH-70
@@ -880,7 +884,7 @@ EAS build and submit commands need explicit team approval and `--non-interactive
   - Tavily answer with sources
   - personalized reply using facts
   - a write tool changes the plan, and undo reverts it
-  - delete a fact
+  - delete a fact, and the next reply doesn't use it
   - push notification received
 - [ ] Every issue found is filed in Linear
 

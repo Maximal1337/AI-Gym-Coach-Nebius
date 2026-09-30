@@ -5,6 +5,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useTranslation } from 'react-i18next';
 import { useUnread } from '../../src/lib/unread';
 import { useUpdateNudge } from '../../src/lib/appUpdate';
+import { useFlag } from '../../src/lib/flags';
 import { RestTimer } from '../../src/components/RestTimer';
 import { useTheme, spacing, TAB_BAR_HEIGHT, TAB_BAR_BOTTOM_MARGIN } from '../../src/theme';
 
@@ -53,6 +54,10 @@ export default function TabsLayout() {
   const { t } = useTranslation();
   const { count: unread } = useUnread();
   const pathname = usePathname();
+  // The coach assistant tab (NH-70) exists only for accounts with the flag —
+  // real users keep today's three tabs. href: null hides it without
+  // unmounting the route, so a flag turned off mid-use just shows its notice.
+  const assistantChat = useFlag('assistant_chat');
   // Soft, dismissible "update available" nudge (once per version). The hard
   // update gate lives in the entry router (app/index.tsx); this is the
   // non-blocking counterpart for optional updates.
@@ -110,7 +115,7 @@ export default function TabsLayout() {
           the app's default/cold-start tab, which in Expo Router means
           whichever file is literally named index.tsx, not a navigator-level
           setting. Chat lives at "train" instead. Tab bar visual order
-          (Train, Progress, Plans) is independent of this and just follows
+          (Train, the flag-gated Assistant, Progress, Plans) is independent of this and just follows
           the order these are declared below. */}
       <Tabs.Screen
         name="train"
@@ -123,6 +128,16 @@ export default function TabsLayout() {
               focused={focused}
               badge={unread}
             />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="coach"
+        options={{
+          href: assistantChat ? undefined : null,
+          title: t('assistantTab'),
+          tabBarIcon: ({ focused }) => (
+            <TabIcon name={focused ? 'sparkles' : 'sparkles-outline'} label={t('assistantTab')} focused={focused} />
           ),
         }}
       />

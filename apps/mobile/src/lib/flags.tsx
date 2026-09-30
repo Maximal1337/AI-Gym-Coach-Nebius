@@ -2,8 +2,8 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { AppState } from 'react-native';
 import { supabase } from './supabase';
 
-/** Mirrors public.feature_flags (supabase/migrations/20260918130000_feature_flags.sql). */
-export type FeatureFlag = 'assistant_chat' | 'assistant_memory' | 'assistant_workout';
+/** Mirrors public.feature_flags (supabase/migrations/20260918130000_feature_flags.sql; assistant_checkin from 20260928170000). */
+export type FeatureFlag = 'assistant_chat' | 'assistant_memory' | 'assistant_workout' | 'assistant_checkin';
 
 const NO_FLAGS: ReadonlySet<FeatureFlag> = new Set();
 const FlagsContext = createContext<ReadonlySet<FeatureFlag>>(NO_FLAGS);

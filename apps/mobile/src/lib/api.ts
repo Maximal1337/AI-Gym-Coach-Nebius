@@ -4,6 +4,8 @@ export class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
+    /** The whole error body, for the fields next to `error` (e.g. assistant-send's `reason`). */
+    public body: Record<string, unknown> = {},
   ) {
     super(code);
   }
@@ -28,6 +30,6 @@ export async function callFn<T = Record<string, unknown>>(
     body: JSON.stringify(body),
   });
   const json = (await res.json().catch(() => ({}))) as Record<string, unknown>;
-  if (!res.ok) throw new ApiError(res.status, (json.error as string) ?? 'unknown');
+  if (!res.ok) throw new ApiError(res.status, (json.error as string) ?? 'unknown', json);
   return json as T;
 }
