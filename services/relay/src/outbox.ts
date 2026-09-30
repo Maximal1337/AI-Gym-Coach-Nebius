@@ -14,7 +14,16 @@ export interface JobContext {
   message: { id: string; text: string; created_at: string } | null;
   history: Array<{ role: "user" | "assistant"; text: string; created_at: string }>;
   facts: Array<{ text: string; category: string; pinned: boolean }>;
-  user: { language: string | null; units: "metric" | "imperial" | null; coach_name: string | null; tone: string | null } | null;
+  user: {
+    language: string | null;
+    units: "metric" | "imperial" | null;
+    coach_name: string | null;
+    tone: string | null;
+    /** From 20260928190000_assistant_context_persona.sql on. */
+    accountability?: string | null;
+    /** The user's own style notes, at most 500 characters. */
+    persona?: string | null;
+  } | null;
   agent: { sandbox_name: string | null; provisioned: boolean } | null;
 }
 

@@ -58,7 +58,8 @@ test("a chat turn runs in the user's own sandbox and is delivered with usage and
     lease_token: "lease-7",
     model: "nvidia/nemotron-3-super",
     usage: { tokensInput: 900, tokensOutput: 60 },
-    reply: { text: "Rest 2 min. [Guide](https://example.org/rest)", sources: [{ title: "Guide", url: "https://example.org/rest" }] },
+    // The app shows plain text: the link becomes its title, and a tappable source.
+    reply: { text: "Rest 2 min. Guide", sources: [{ title: "Guide", url: "https://example.org/rest" }] },
   }]);
 });
 

@@ -1,6 +1,6 @@
 import { type ChatOptions, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
 import type { DeliverRequest, FailRequest, JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, type ChatMessage, extractSources } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, type ChatMessage, extractSources, replyText } from "./prompt.js";
 
 /**
  * The relay (NH-54): pulls jobs from Supabase, runs each one in its user's own
@@ -66,7 +66,7 @@ export async function processJob(job: JobContext, deps: RelayDeps): Promise<Outc
     ...base,
     model: deps.model,
     ...(result.usage ? { usage: result.usage } : {}),
-    ...(skip ? { skip: true } : { reply: { text: result.text, sources: extractSources(result.text) } }),
+    ...(skip ? { skip: true } : { reply: { text: replyText(result.text), sources: extractSources(result.text) } }),
   };
   const status = await deliverWithRetry(deps, request);
   if (status !== 200) {
