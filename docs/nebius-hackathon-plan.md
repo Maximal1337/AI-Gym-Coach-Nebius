@@ -33,6 +33,7 @@ How to use this document:
 - 2026-09-30: the English README (NH-90) — what the assistant does, how Nemotron and Token Factory are used, architecture, ours versus upstream with licenses, setup with every variable, the submission-period changes. Writing it caught the Hermes profile contradicting D-03 and D-04: Tavily is now search only and thinking is off on assistant turns.
 - 2026-09-30, written, not yet run on a VPS: backups, restore and monitoring (NH-34, NH-35) in [`deploy/ops`](../deploy/README.md#backups-and-restore-nh-34) — nightly encrypted backups of every gateway and sandbox volume with SQLite copied consistently, the restore that is also the move to member B's credits (NH-96), and a health check every 5 minutes reporting to a dead man's switch; billing alerts in the budget runbook. A test runs all three scripts on real files against a fake kubectl in a separate "Ops scripts" workflow, so it can't hold up a deploy; it first runs on the next push.
 - 2026-09-30, ready to run on the VPS's first day: NH-28's Token Factory smoke test, [`scripts/token-factory-smoke.mjs`](../scripts/token-factory-smoke.mjs) — the tool round trip, `tool_choice: "required"` and JSON schema output with thinking off, per Nemotron model, as a table to paste into NH-28; 8 tests against a fake Token Factory.
+- 2026-09-30, drafts: the Devpost submission, the judges' testing instructions, the feedback, the video script and the judging-period checklist in [`submission.md`](./submission.md) (NH-91, NH-93, NH-95), with placeholders for links and live numbers.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -932,6 +933,8 @@ In-workout coaching on the new runtime moved to the post-hackathon backlog: PH-1
 #### NH-91 · Demo video
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** NH-73
 
+Script, shot list and recording rules drafted in [`submission.md`](./submission.md#the-demo-video-nh-91) (2026-09-30).
+
 - [ ] Under 3 minutes, public on YouTube, no third-party music or trademarks
 - [ ] Voiceover explicitly explains how Token Factory and the Nemotron models are used (a scored requirement, not a nicety)
 - [ ] Shows memory across sessions and the assistant acting — a proactive check-in and a tool-driven change — not just chat
@@ -946,6 +949,8 @@ In-workout coaching on the new runtime moved to the post-hackathon backlog: PH-1
 
 #### NH-93 · Devpost submission
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** NH-72, NH-90, NH-91, NH-92
+
+Every field drafted in [`submission.md`](./submission.md) (2026-09-30): pitch, story, built-with, the changes since 2026-08-26, the judges' testing instructions (addresses only in Devpost, after checking the field is private) and the feedback. The ⟨…⟩ placeholders wait for links and live measurements.
 
 - [ ] Description covers features, NVIDIA model usage and the Nebius and NVIDIA tools used
 - [ ] Track: Personal AI; city: **Tel Aviv** (City Winner); repo and video links; TestFlight link and demo credentials in the testing instructions
@@ -965,6 +970,8 @@ In-workout coaching on the new runtime moved to the post-hackathon backlog: PH-1
 
 #### NH-95 · Keep the demo alive through judging
 **Priority:** High · **Estimate:** 1 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-93
+
+The weekly checklist and the fixed dates are in [`submission.md`](./submission.md#keeping-the-demo-alive-through-judging-nh-95); among them, never re-seed a judge account during judging.
 
 - [ ] Weekly check from 2026-10-30 to 2026-12-15: VPS up, TestFlight build valid, credits balance and expiry, spend within the D-34 ceilings
 - [ ] Prod sync window active from 2026-12-01 to 2026-12-15; incident contact assigned
