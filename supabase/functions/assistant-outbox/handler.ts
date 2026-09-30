@@ -16,6 +16,16 @@ import { LIMIT_REACHED_ERROR, type TokenUsage } from "../_shared/assistant.ts";
  *     → {"ok":true|false}. A failed attempt still spent tokens, so usage is
  *       recorded; the job goes back to the queue until its attempts run out.
  * Success is reported to assistant-deliver, which stores the reply.
+ *
+ * The sandbox manager in the relay (NH-55, NH-56) uses three more:
+ *   {"action":"defer","job_id":1,"lease_token":"…","seconds":20,"reason":"capacity"}
+ *     → {"ok":true|false}. The user's sandbox can't run the job yet (no free
+ *       slot, still starting): back to the queue without spending the attempt.
+ *   {"action":"record_agent","user_id":"…","sandbox_name":"notch-prod-…","tool_token_hash":"<sha256 hex>"}
+ *     → {"status":"recorded"|"user_gone"|"wrong_environment"}, before the
+ *       sandbox is created, so a sandbox never exists without its row.
+ *   {"action":"list_agents"} → {"agents":[{"user_id":"…","sandbox_name":"…"}]}
+ *     for the environment; the sweep deletes every sandbox not on it.
  */
 export interface OutboxDeps {
   verify: (req: Request, body: string) => Promise<RelayEnvironment | null>;
@@ -24,6 +34,9 @@ export interface OutboxDeps {
   context: (jobId: number) => Promise<Record<string, unknown>>;
   fail: (jobId: number, leaseToken: string, error: string) => Promise<boolean>;
   recordSpend: (env: RelayEnvironment, model: string, usage: Partial<TokenUsage> | undefined) => Promise<unknown>;
+  defer: (env: RelayEnvironment, jobId: number, leaseToken: string, seconds: number, reason: string | null) => Promise<boolean>;
+  recordAgent: (env: RelayEnvironment, userId: string, sandboxName: string, tokenHash: string) => Promise<string>;
+  listAgents: (env: RelayEnvironment) => Promise<Array<{ user_id: string; sandbox_name: string }>>;
 }
 
 const USAGE: JsonSchema = {
@@ -55,6 +68,38 @@ export const FAIL_SCHEMA: JsonSchema = {
     usage: USAGE,
   },
   required: ["action", "job_id", "lease_token", "error"],
+  additionalProperties: false,
+};
+
+export const DEFER_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: ["defer"] },
+    job_id: { type: "integer", minimum: 1 },
+    lease_token: { type: "string", format: "uuid" },
+    seconds: { type: "integer", minimum: 1, maximum: 3600 },
+    reason: { type: "string", maxLength: 200 },
+  },
+  required: ["action", "job_id", "lease_token", "seconds"],
+  additionalProperties: false,
+};
+
+export const RECORD_AGENT_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: {
+    action: { type: "string", enum: ["record_agent"] },
+    user_id: { type: "string", format: "uuid" },
+    sandbox_name: { type: "string", pattern: "^notch-(dev|prod)-[a-z0-9-]{1,50}$" },
+    tool_token_hash: { type: "string", pattern: "^[0-9a-f]{64}$" },
+  },
+  required: ["action", "user_id", "sandbox_name", "tool_token_hash"],
+  additionalProperties: false,
+};
+
+export const LIST_AGENTS_SCHEMA: JsonSchema = {
+  type: "object",
+  properties: { action: { type: "string", enum: ["list_agents"] } },
+  required: ["action"],
   additionalProperties: false,
 };
 
@@ -101,5 +146,35 @@ export async function handleOutbox(req: Request, deps: OutboxDeps): Promise<Resp
     return reply(200, { ok });
   }
 
-  return reply(400, { error: "invalid_input", detail: "body.action must be claim or fail" });
+  if (body?.action === "defer") {
+    const invalid = validate(DEFER_SCHEMA, body, "body");
+    if (invalid) return reply(400, { error: "invalid_input", detail: invalid });
+    const ok = await deps.defer(
+      env,
+      body.job_id as number,
+      body.lease_token as string,
+      body.seconds as number,
+      (body.reason as string | undefined) ?? null,
+    );
+    return reply(200, { ok });
+  }
+
+  if (body?.action === "record_agent") {
+    const invalid = validate(RECORD_AGENT_SCHEMA, body, "body");
+    if (invalid) return reply(400, { error: "invalid_input", detail: invalid });
+    // The name must belong to the signing environment; the SQL function checks it too.
+    if (!(body.sandbox_name as string).startsWith(`notch-${env}-`)) {
+      return reply(400, { error: "invalid_input", detail: "sandbox_name is for another environment" });
+    }
+    const status = await deps.recordAgent(env, body.user_id as string, body.sandbox_name as string, body.tool_token_hash as string);
+    return reply(200, { status });
+  }
+
+  if (body?.action === "list_agents") {
+    const invalid = validate(LIST_AGENTS_SCHEMA, body, "body");
+    if (invalid) return reply(400, { error: "invalid_input", detail: invalid });
+    return reply(200, { agents: await deps.listAgents(env) });
+  }
+
+  return reply(400, { error: "invalid_input", detail: "body.action must be claim, fail, defer, record_agent or list_agents" });
 }

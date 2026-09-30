@@ -36,6 +36,8 @@ export interface JsonSchema {
   minimum?: number;
   maximum?: number;
   format?: "uuid";
+  /** A full-match regular expression (anchor it with ^…$). */
+  pattern?: string;
   items?: JsonSchema;
   maxItems?: number;
 }
@@ -122,6 +124,7 @@ export function validate(schema: JsonSchema, value: unknown, path = "arguments")
       if (schema.minLength !== undefined && value.length < schema.minLength) return `${path} must be at least ${schema.minLength} characters`;
       if (schema.maxLength !== undefined && value.length > schema.maxLength) return `${path} must be at most ${schema.maxLength} characters`;
       if (schema.format === "uuid" && !UUID_RE.test(value)) return `${path} must be a UUID`;
+      if (schema.pattern !== undefined && !new RegExp(schema.pattern).test(value)) return `${path} has an invalid format`;
       break;
     }
     case "integer":

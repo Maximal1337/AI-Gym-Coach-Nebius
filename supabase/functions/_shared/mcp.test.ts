@@ -221,3 +221,10 @@ Deno.test("validate: types, bounds, enums and formats", () => {
   assertEquals(validate(schema, null), "arguments must be an object");
   assertEquals(validate(schema, { sets: 3 }), "arguments.id is required");
 });
+
+Deno.test("validate: pattern", () => {
+  const schema: JsonSchema = { type: "string", pattern: "^[0-9a-f]{4}$" };
+  assertEquals(validate(schema, "0a9f", "hash"), null);
+  assertEquals(validate(schema, "0A9F", "hash"), "hash has an invalid format");
+  assertEquals(validate(schema, "0a9f0", "hash"), "hash has an invalid format");
+});
