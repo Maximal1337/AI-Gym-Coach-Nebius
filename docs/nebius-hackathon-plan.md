@@ -562,7 +562,7 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 **Priority:** High · **Estimate:** 1 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-03, NH-21
 
 - [ ] `web.backend: tavily` with the key injected by the gateway
-- [ ] `web_extract` disabled; if Hermes can't disable it on its own, egress policy allows only Tavily's search endpoint
+- [ ] `web_extract` disabled; if Hermes can't disable it on its own, egress policy allows only Tavily's search endpoint — both are written: the Hermes config offers the `search` toolset (web_search alone) and disables `web`, and the `tavily` provider profile allows only `POST /search`; checked live in the spike
 - [ ] A test question produces an answer that cites its sources
 
 #### NH-24 · Prototype the relay
@@ -670,7 +670,7 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-27
 
 - [x] Persona and rules ported from `services/agent/src/prompt.ts` (safety rules, formatting, reply language) into the Hermes persona file — `deploy/images/hermes-sandbox/profile/SOUL.md`: the safety and nutrition rules, D-22's plan scope, numbers only from tools, honest progress, formatting for the chat screen. What's personal comes with each request instead: the relay sends the reply language, the coach's name, tone and accountability style and the user's own style notes, framed as preferences under the rules (migration `20260928190000_assistant_context_persona.sql`, 5 SQL checks, 4 relay tests)
-- [x] Config with the D-29 tool whitelist: `notch-tools` MCP, web search (Tavily), memory, skills; everything else disabled — `profile/config.yaml`: the API server gets exactly those four toolsets, terminal, files, code, browser and 12 more are off everywhere, the MCP allowlist is checked against `notch-tools`' own code, Tavily has no fallback vendors, one run at a time per sandbox
+- [x] Config with the D-29 tool whitelist: `notch-tools` MCP, web search (Tavily), memory, skills; everything else disabled — `profile/config.yaml`: the API server gets exactly those four toolsets, terminal, files, code, browser and 12 more are off everywhere, the MCP allowlist is checked against `notch-tools`' own code, Tavily is search only (D-04) with no fallback vendors, thinking is off (D-03), one run at a time per sandbox
 - [x] Found while writing the config: Hermes by default makes model calls the relay never sees — a memory/skill review after each turn, and a title for every new session (each relay request is one). D-34 couldn't count them, so both are off; memory and skills are still written in the turn, through the tools
 - [ ] The profile lives in the repo and is baked into, or mounted by, every user's sandbox — in the repo with `install-profile.sh`, which the image runs on every start (the volume keeps memories, and would keep a stale profile too); the image itself is NH-21
 

@@ -1,5 +1,6 @@
 # OpenShell provider profile for Tavily, Hermes' web search backend (NH-23,
-# NH-33). One provider per environment, named `tavily`.
+# NH-33). One provider per environment, named `tavily`. Search only (D-04):
+# no extract endpoint, so the agent can't have Tavily fetch an arbitrary URL.
 #
 # The request-body rewrite covers a client that sends the key in the JSON body
 # rather than a header; the spike (NH-23) checks which one Hermes uses and the
@@ -26,6 +27,5 @@ endpoints:
     request_body_credential_rewrite: true
     rules:
       - allow: { method: POST, path: /search }
-      - allow: { method: POST, path: /extract }
 binaries:
   - "@HERMES_BINARY@"

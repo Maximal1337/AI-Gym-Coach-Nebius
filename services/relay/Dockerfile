@@ -15,9 +15,17 @@ ARG OPENSHELL_VERSION=v0.1.2
 ADD --checksum=sha256:7eb6917285331a09e3300266a0558616481a5e9927cae2612ea07c4045b6dd6f \
   https://github.com/NVIDIA/OpenShell/releases/download/${OPENSHELL_VERSION}/openshell-x86_64-unknown-linux-musl.tar.gz \
   /tmp/openshell.tar.gz
+# Apache-2.0: the binary ships with its license and third-party notices.
+ADD --checksum=sha256:c4be3acebe12527d7de689933d98329b4065f8c50cd929d0365584eafe6c20dd \
+  https://raw.githubusercontent.com/NVIDIA/OpenShell/${OPENSHELL_VERSION}/LICENSE \
+  /usr/share/doc/openshell/LICENSE
+ADD --checksum=sha256:38553317c4658e42d36b5a59ec7a580a03efe830842eab84cefa2bf35234ac05 \
+  https://raw.githubusercontent.com/NVIDIA/OpenShell/${OPENSHELL_VERSION}/THIRD-PARTY-NOTICES \
+  /usr/share/doc/openshell/THIRD-PARTY-NOTICES
 RUN tar -xzf /tmp/openshell.tar.gz -C /usr/local/bin openshell \
   && rm /tmp/openshell.tar.gz \
   && chmod 0755 /usr/local/bin/openshell \
+  && chmod 0644 /usr/share/doc/openshell/* \
   && openshell --version
 
 ENV COREPACK_HOME=/opt/corepack

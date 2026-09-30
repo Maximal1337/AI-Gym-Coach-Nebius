@@ -20,9 +20,10 @@ const configText = readFileSync(join(profileDir, "config.yaml"), "utf8");
 const config = parse(configText) as any;
 
 test("D-29: the API server gets exactly the Notch tools, web search, memory and skills", () => {
-  assert.deepEqual([...config.platform_toolsets.api_server].sort(), ["mcp-notch", "memory", "skills", "web"]);
+  assert.deepEqual([...config.platform_toolsets.api_server].sort(), ["mcp-notch", "memory", "search", "skills"]);
   const off = new Set(config.agent.disabled_toolsets as string[]);
-  for (const t of ["terminal", "file", "code_execution", "browser", "computer_use", "delegation", "cronjob"]) {
+  // `web` also carries web_extract; D-04 allows search only.
+  for (const t of ["terminal", "file", "code_execution", "browser", "computer_use", "delegation", "cronjob", "web"]) {
     assert.ok(off.has(t), `${t} must be disabled`);
   }
   for (const t of config.platform_toolsets.api_server) assert.ok(!off.has(t), `${t} is both enabled and disabled`);
@@ -59,6 +60,7 @@ test("D-30 / NH-45: no user profile inside Hermes, and no hidden model calls out
 
 test("inference and search go only where the egress policy allows", () => {
   assert.equal(config.model.provider, "nebius-token-factory");
+  assert.equal(config.agent.reasoning_effort, "none", "D-03: no thinking on tool-calling turns");
   assert.equal(config.model.default, "${TOKEN_FACTORY_MODEL}");
   assert.equal(config.web.backend, "tavily");
   assert.equal(config.web.keyless_fallback, false);

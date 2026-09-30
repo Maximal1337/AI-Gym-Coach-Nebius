@@ -8,7 +8,7 @@ Images workflow starts building it as soon as it exists (NH-37).
 ```
 profile/
   SOUL.md             who the coach is and the rules it never breaks — slot #1 of Hermes' system prompt
-  config.yaml         model, the D-29 tool allowlist, the Notch MCP server, Tavily, memory, API server
+  config.yaml         model, the D-29 tool allowlist, the Notch MCP server, Tavily search, memory, API server
   install-profile.sh  copies the two files into $HERMES_HOME on every start
 ```
 

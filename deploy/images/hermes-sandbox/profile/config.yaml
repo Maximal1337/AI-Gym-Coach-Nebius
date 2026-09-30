@@ -16,10 +16,10 @@ model:
   default: "${TOKEN_FACTORY_MODEL}"
 
 agent:
-  # Short coaching answers don't need long reasoning, and every reasoning token
-  # counts against the D-34 ceilings. NH-25 measures quality and cost; raise
-  # it only if answers suffer.
-  reasoning_effort: "low"
+  # D-03: no thinking on interactive, tool-calling turns — a reasoning model
+  # can spend its whole token budget thinking and return an empty answer, and
+  # every reasoning token counts against the D-34 ceilings.
+  reasoning_effort: "none"
   # D-29: off everywhere, whatever a platform default would include.
   disabled_toolsets:
     - terminal
@@ -35,14 +35,17 @@ agent:
     - connections
     - homeassistant
     - vision
+    - web
     - image_gen
     - video_gen
     - tts
 
 # D-29: exactly these four for the API server the relay talks to — the Notch
 # tools, web search (Tavily), and Hermes' own memory and skills (D-30).
+# `search` is web_search alone: D-04 keeps web_extract out, since fetching an
+# arbitrary URL is a way to send data somewhere.
 platform_toolsets:
-  api_server: [mcp-notch, web, memory, skills]
+  api_server: [mcp-notch, search, memory, skills]
 
 mcp_servers:
   notch:
@@ -72,7 +75,7 @@ mcp_servers:
       prompts: false
 
 web:
-  backend: tavily                  # key: TAVILY_API_KEY (placeholder)
+  backend: tavily                  # key: TAVILY_API_KEY (placeholder); search only (D-04)
   # No silent fallback to other search vendors: every query goes to Tavily,
   # the one search host the sandbox's egress policy allows (NH-32).
   keyless_fallback: false
