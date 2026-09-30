@@ -1,0 +1,10 @@
+[Unit]
+Description=Notch: back up the gateway and sandbox volumes (NH-34)
+Wants=network-online.target
+After=network-online.target k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/notch-ops/backup.sh
+Nice=10
+IOSchedulingClass=idle

@@ -87,8 +87,15 @@ first one.
 ```bash
 node --test scripts/*.test.mjs                # the Images workflow's tag bump
 kubectl kustomize deploy/notch/overlays/prod  # renders; also dev and deploy/platform/agent-sandbox
-for f in deploy/bootstrap/*.sh; do bash -n "$f"; done   # shell syntax
+for f in deploy/bootstrap/*.sh deploy/ops/*.sh deploy/ops/test/*.sh; do bash -n "$f"; done   # shell syntax
 ```
+
+`deploy/ops` (backups, restore, health check) has an end-to-end test on real
+files with a fake `kubectl`: `bash deploy/ops/test/ops.test.sh`. It needs
+Linux with GNU tools plus `jq`, `sqlite3` and `age`, none of which this Windows
+checkout has; the "Ops scripts" workflow runs it and shellcheck on every push
+that touches `deploy/ops` or `deploy/bootstrap`. Say it hasn't run when it
+hasn't.
 
 Anything that needs k3s, Argo CD or OpenShell (sync, NetworkPolicy
 enforcement, the gateway's Helm hooks) is verified on the VPS — see

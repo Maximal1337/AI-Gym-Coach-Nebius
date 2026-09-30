@@ -1,0 +1,24 @@
+name: Ops scripts
+
+# The VPS's backup, restore and health scripts (deploy/ops, NH-34, NH-35):
+# shellcheck, then the scripts end to end against a fake kubectl. Its own
+# workflow, not part of CI, so it never holds up a deploy: the Images workflow
+# waits for CI only.
+on:
+  push:
+    branches: [main]
+    paths: ["deploy/ops/**", "deploy/bootstrap/**", ".github/workflows/ops.yml"]
+  pull_request:
+    paths: ["deploy/ops/**", "deploy/bootstrap/**", ".github/workflows/ops.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq age jq sqlite3
+      - run: shellcheck -x --severity=warning deploy/ops/*.sh deploy/ops/test/*.sh deploy/bootstrap/*.sh
+      - run: bash deploy/ops/test/ops.test.sh

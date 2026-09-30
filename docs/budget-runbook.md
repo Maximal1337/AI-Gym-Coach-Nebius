@@ -70,3 +70,17 @@ In this order, re-checking the forecast after each step:
 4. **Ask in the [Nebius Discord](https://discord.gg/eXYTGhgnhK)** for extra credits (O-10).
 
 Record the numbers and any action in the week's Linear cycle.
+
+## Billing alerts — once per account (NH-35)
+
+The Monday check is weekly; a budget alert catches a surprise in between. In each account's Nebius console, **Billing → Budgets**, create a budget:
+
+- **Scope:** all usage. **Period:** monthly.
+- **Amount:** $45 on both accounts. A month of the VPS at 2 vCPU / 8 GiB with its disk is about $41, the Object Storage backups a few cents; member B's December (4 vCPU / 16 GiB for 15 days) comes to about $38. Member A's optional October upsize (D-31) pushes that month to about $61, so the alerts at 100% then are expected.
+- **Thresholds:** 50%, 90% and 100%, emailed to both members.
+
+A budget only notifies; it never stops anything, and its numbers lag by a few hours.
+
+**Verify it** after the VPS has run for a day: the budget page should show that day's spend. If it stays at $0 while the credit balance goes down, the budget counts only what would be charged beyond the credits — then keep it anyway with one absolute threshold of $1: it becomes the alarm for the first out-of-pocket dollar, which must never happen. Write down which of the two it is here.
+
+Token Factory has its own ceilings in code (D-34); its console usage is read on Mondays.

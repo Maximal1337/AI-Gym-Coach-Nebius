@@ -5,6 +5,8 @@
 # the move to member B's credits (NH-96).
 #
 #   sudo deploy/bootstrap/bootstrap.sh
+#   sudo deploy/bootstrap/bootstrap.sh --no-root-app   (restoring a backup: everything
+#       but the root Application, which comes after deploy/ops/restore.sh)
 #
 # Then create the secrets (deploy/bootstrap/secrets.sh) — see deploy/README.md.
 #
@@ -23,6 +25,13 @@ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+
+root_app=1
+case "${1:-}" in
+  --no-root-app) root_app=0 ;;
+  "") ;;
+  *) die "usage: $0 [--no-root-app]" ;;
+esac
 
 # ------------------------------------------------------------------ preflight
 [[ $EUID -eq 0 ]] || die "run as root (sudo)"
@@ -114,6 +123,15 @@ if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then
 fi
 
 # --------------------------------------------------------------- root app
+if (( ! root_app )); then
+  cat <<EOF
+
+Done, without the root Application. Restore the volumes now (deploy/README.md,
+"Restoring onto a new host"), then apply it:
+  sudo kubectl apply -f $HERE/root-app.yaml
+EOF
+  exit 0
+fi
 log "root Application (app of apps)"
 kubectl apply -f "$HERE/root-app.yaml"
 

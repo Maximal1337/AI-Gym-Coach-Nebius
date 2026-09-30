@@ -1,0 +1,12 @@
+[Unit]
+Description=Notch: nightly backup (NH-34)
+
+[Timer]
+# After the day's last replies, before the 06:00 UTC check-ins.
+OnCalendar=*-*-* 01:30:00 UTC
+RandomizedDelaySec=10min
+# A night the VPS was off is made up at the next boot.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

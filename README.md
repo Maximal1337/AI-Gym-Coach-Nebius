@@ -140,6 +140,7 @@ license.
 | The coach's character and rules, the tool allowlist | `deploy/images/hermes-sandbox/profile` |
 | Spend ceilings, the kill switch, operations runbooks | `_shared/assistant.ts`, `docs/assistant-ops.md`, `docs/budget-runbook.md` |
 | GitOps: bootstrap, Argo CD app of apps, NetworkPolicies, image pipeline | `deploy/`, `.github/workflows/images.yml` |
+| Encrypted nightly backups, the restore onto a new host, the health check | `deploy/ops` |
 | The Assistant and memory screens | `apps/mobile/app/(tabs)/coach.tsx`, `apps/mobile/app/coach-memory.tsx` |
 | Numbers computed in code, never by the model: the history tool's progression summary, and the in-workout targets (pre-existing) | `notch-tools/read-tools.ts`, `services/agent/src/progression.ts` |
 
@@ -252,11 +253,13 @@ hardened Ubuntu 24.04 host:
 ```bash
 sudo deploy/bootstrap/bootstrap.sh
 sudo deploy/bootstrap/secrets.sh prod /etc/notch/prod.env
+sudo deploy/ops/install.sh
 ```
 
 The first installs pinned k3s and Argo CD core and hands everything else to
 Argo CD; the second loads one environment's secrets from a root-only file on
-the host. The relay reads `RELAY_SECRET`, `SUPABASE_FUNCTIONS_URL`,
+the host; the third sets up nightly encrypted backups and a health check every
+5 minutes (`/etc/notch/ops.env`: `HEALTHCHECK_URL`, optionally `BACKUP_S3_*`). The relay reads `RELAY_SECRET`, `SUPABASE_FUNCTIONS_URL`,
 `TOKEN_FACTORY_MODEL` and `SANDBOX_KEY_SECRET` from there, and `RELAY_ENV`,
 `RELAY_SANDBOXES` and `SANDBOX_SHARED_PROVIDERS` from its manifest; the sandbox
 manager's optional settings (capacity, idle time, CPU and memory) are listed in
@@ -272,7 +275,9 @@ CI runs on every push: typecheck of every workspace, the unit tests (relay,
 mobile, in-workout coach), 182 Deno tests for the Edge Functions and shared
 modules, locale checks, `deno check` against a baseline, the image-tag tests
 and a secret scan. The memory extraction has a separate evaluation set
-(`supabase/eval/memory`) that runs against Token Factory.
+(`supabase/eval/memory`) that runs against Token Factory. A separate workflow
+runs shellcheck and the backup, restore and health scripts end to end against
+a fake `kubectl` (`deploy/ops/test`).
 
 ## What changed during the submission period (after 2026-08-26)
 

@@ -1,0 +1,9 @@
+[Unit]
+Description=Notch: health check, reported to HEALTHCHECK_URL (NH-35)
+Wants=network-online.target
+After=network-online.target k3s.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/lib/notch-ops/health.sh --ping
+TimeoutStartSec=3min

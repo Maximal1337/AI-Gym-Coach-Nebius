@@ -31,6 +31,7 @@ How to use this document:
 - 2026-09-30, written, not yet run in a sandbox: the Hermes coach profile (NH-40, NH-45) in [`deploy/images/hermes-sandbox`](../deploy/images/hermes-sandbox/README.md) — SOUL.md with the rules ported from today's coach, config.yaml with the D-29 allowlist — pinned by 9 tests; the relay now sends the coach's name, tone, accountability style and the user's style notes with every request, and turns cited links into sources the app can show.
 - 2026-09-30, written, off until the spike proves it on the cluster: the sandbox manager (NH-55, NH-56) — per-user sandboxes created, started, stopped when idle and deleted with the account, at most 4 running in prod and 2 in dev with everyone else waiting in order — driving the `openshell` CLI; the queue's deferral and the sandbox mapping in SQL (25 SQL checks, 5 Deno tests); 27 relay tests; the OpenShell provider profiles for `notch-tools`, Token Factory and Tavily.
 - 2026-09-30: the English README (NH-90) — what the assistant does, how Nemotron and Token Factory are used, architecture, ours versus upstream with licenses, setup with every variable, the submission-period changes. Writing it caught the Hermes profile contradicting D-03 and D-04: Tavily is now search only and thinking is off on assistant turns.
+- 2026-09-30, written, not yet run on a VPS: backups, restore and monitoring (NH-34, NH-35) in [`deploy/ops`](../deploy/README.md#backups-and-restore-nh-34) — nightly encrypted backups of every gateway and sandbox volume with SQLite copied consistently, the restore that is also the move to member B's credits (NH-96), and a health check every 5 minutes reporting to a dead man's switch; billing alerts in the budget runbook. A test runs all three scripts on real files against a fake kubectl in a separate "Ops scripts" workflow, so it can't hold up a deploy; it first runs on the next push.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -292,6 +293,7 @@ Invariants:
 
 - The base plan leaves at least $16 on each account. The public IP price isn't on the pricing page; that headroom covers it. Check it on day one.
 - Media reports mention CPU and memory price increases; the official pricing page doesn't show them yet. The worst-case column assumes them.
+- Backups (NH-34) in Object Storage: $0.0147 per GiB-month, 14 days of nightly archives of a few hundred MB — cents, inside the headroom.
 
 **RAM on 2 vCPU / 8 GiB** (to be measured in NH-25):
 - Base: OS ≈ 0.5 GiB, k3s without extra components ≈ 0.5, Argo CD core ≈ 0.4, the sandbox controller, two OpenShell gateways and two relays ≈ 0.8. About 2.2 GiB in total, leaving ≈ 5.5 GiB for sandboxes.
@@ -312,7 +314,7 @@ Invariants:
 - Gemini via OpenRouter: unchanged, current spend.
 - If Token Factory credits run low: move extraction and simple turns to Nemotron 3.5 Lightning ($0.06 / $0.24 per 1M), after an eval.
 
-**Guardrails:** billing alerts on both accounts where Nebius supports them; the Monday spend check (NH-38); the D-34 ceilings; per-account message caps for demo and judge accounts; the kill-switch flag.
+**Guardrails:** billing alerts on both accounts (Billing → Budgets, set up per the [budget runbook](./budget-runbook.md)); the Monday spend check (NH-38); the D-34 ceilings; per-account message caps for demo and judge accounts; the kill-switch flag.
 
 ---
 
@@ -654,16 +656,18 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 #### NH-34 · Backups and restore drill
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
 
-- [ ] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase) — and, found while writing NH-36, each gateway's own volume (its SQLite database of sandboxes and encrypted provider credentials) plus its `openshell-credential-kek` Secret, without which the restored credentials can't be decrypted (`secrets.sh --restore-kek`), and the relay's `SANDBOX_KEY_SECRET` (NH-55), without which it can't call the existing sandboxes
-- [ ] Restore tested once on a fresh host with the NH-36 bootstrap script — the rehearsal for NH-96
+- [x] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase) — and, found while writing NH-36, each gateway's own volume (its SQLite database of sandboxes and encrypted provider credentials) plus its `openshell-credential-kek` Secret, without which the restored credentials can't be decrypted (`secrets.sh --restore-kek`), and the relay's `SANDBOX_KEY_SECRET` (NH-55), without which it can't call the existing sandboxes — `deploy/ops/backup.sh`, nightly at 01:30 UTC: every volume in `notch-dev` and `notch-prod`, SQLite copied through its online backup so nothing is stopped, one archive encrypted with age to the team's key, 7 kept on the VPS and optionally a copy in Nebius Object Storage. The KEKs, the env files and the backup key are kept off the VPS by the team, never in an archive (table in `deploy/README.md`)
+- [ ] Installed on the VPS (`deploy/ops/install.sh`) and the first archive opened with the team's key
+- [ ] Restore tested once on a fresh host with the NH-36 bootstrap script — the rehearsal for NH-96. Written: `bootstrap.sh --no-root-app`, then `deploy/ops/restore.sh`, which puts each volume back under its old claim, pre-bound, before Argo CD starts anything. The drill settles whether a restored gateway takes its sandboxes back; if not, the fallback in `deploy/README.md` starts it empty, and users lose only Hermes' own memories — chat and facts are in Supabase (D-30)
 
 #### NH-35 · Monitoring and alerts
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
 
-- [ ] Uptime ping and host health (CPU, RAM, disk) with alerts
-- [ ] Running sandbox count, queue length and relay errors visible
-- [ ] Per-sandbox RSS watchdog restarts a sandbox above the threshold from NH-25 (Hermes gateway memory growth)
-- [ ] Nebius billing alerts verified
+- [x] Uptime ping and host health (CPU, RAM, disk) with alerts — `deploy/ops/health.sh` every 5 minutes, reporting to a free healthchecks.io check that emails both members on a problem and when the pings stop; also k3s, workloads, Argo CD, crash loops, the sandbox cap, relay errors and backup age. A problem counts once two runs in a row see it
+- [x] Running sandbox count, queue length and relay errors visible — sandboxes, memory per pod and relay errors in the health report; the queue in Supabase ([`assistant-ops.md`](./assistant-ops.md), "Queue right now")
+- [ ] Per-sandbox RSS watchdog restarts a sandbox above the threshold from NH-25 (Hermes gateway memory growth) — the mechanism is `SANDBOX_MEMORY` (OpenShell makes it the pod's memory limit; the relay starts a killed sandbox again on the next message); the value waits for NH-25
+- [ ] Nebius billing alerts verified — set up per the [budget runbook](./budget-runbook.md), checked after the VPS's first day
+- [ ] On the VPS: the healthchecks.io check created, and stopping k3s produces an alert email
 
 ### M4 — Coach profile and tools · target 2026-10-12
 
@@ -946,7 +950,7 @@ In-workout coaching on the new runtime moved to the post-hackathon backlog: PH-1
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-34
 
 - [ ] On 2026-11-15, member B creates a 2 vCPU / 8 GiB Ubuntu 24.04 VPS with the `claude` user (§0)
-- [ ] The NH-36 bootstrap script runs; Argo CD syncs `notch-prod` only; sandbox volumes restored from the latest backup
+- [ ] The NH-36 bootstrap script runs; Argo CD syncs `notch-prod` only; sandbox volumes restored from the latest backup — step by step in `deploy/README.md`, "Restoring onto a new host"
 - [ ] The old relay stops, the new one starts; a judge account's chat works end to end
 - [ ] The old VPS and its disk deleted; member A's AI Cloud spend stops
 - [ ] On 2026-12-01 the VPS is resized to 4 vCPU / 16 GiB for judging, within member B's credits

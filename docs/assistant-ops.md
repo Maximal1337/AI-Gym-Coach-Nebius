@@ -59,6 +59,22 @@ group by 1, 2, 3
 order by 1 desc;
 ```
 
+## Queue right now
+
+What the relay has to do, per environment (NH-35: the VPS's health check can't see this, it lives here). `waiting_for_room` are jobs handed back because every sandbox slot was busy or the user's sandbox was starting (NH-55); their `last_error` says why:
+
+```sql
+select environment,
+       count(*) filter (where status = 'pending' and (not_before is null or not_before <= now())) as ready,
+       count(*) filter (where status = 'pending' and not_before > now()) as waiting_for_room,
+       count(*) filter (where status = 'leased') as running,
+       max(now() - created_at) filter (where status = 'pending') as oldest_pending,
+       string_agg(distinct last_error, ', ') filter (where status = 'pending' and not_before > now()) as why_waiting
+from public.assistant_jobs
+where status in ('pending', 'leased')
+group by 1;
+```
+
 ## Stuck work
 
 Pending jobs older than 5 minutes (the relay isn't pulling, or the environment is at its spend ceiling), and leases held past their expiry:
