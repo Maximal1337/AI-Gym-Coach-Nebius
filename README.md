@@ -167,6 +167,21 @@ license.
 | `packages/shared` | Design tokens and domain types |
 | `docs` | The hackathon plan, brief and runbooks |
 
+## Engineering rules
+
+- Clients never call a model directly: the in-workout coach goes through the
+  agent service, the Coach assistant through the queue and the relay. Usage
+  caps, prompt assembly and the kill switches live on the server.
+- All client database access is row-scoped by RLS; writes go through Edge
+  Functions. The assistant writes only through `notch-tools`, which validates
+  every change against the database and records it.
+- Numbers the user sees — targets, progress — come from code, never from
+  model prose.
+- An active workout keeps working offline; sets queue on the device and sync.
+- Replies are single complete messages in the user's language.
+- During the hackathon, real users keep today's app: new features sit behind
+  per-account flags, and migrations are additive only.
+
 ## Setup
 
 Requirements: Node 22, pnpm 9.15.9, Deno 2, the Supabase CLI; EAS for app
