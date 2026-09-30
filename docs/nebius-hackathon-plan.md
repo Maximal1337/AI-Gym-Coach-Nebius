@@ -32,6 +32,7 @@ How to use this document:
 - 2026-09-30, written, off until the spike proves it on the cluster: the sandbox manager (NH-55, NH-56) — per-user sandboxes created, started, stopped when idle and deleted with the account, at most 4 running in prod and 2 in dev with everyone else waiting in order — driving the `openshell` CLI; the queue's deferral and the sandbox mapping in SQL (25 SQL checks, 5 Deno tests); 27 relay tests; the OpenShell provider profiles for `notch-tools`, Token Factory and Tavily.
 - 2026-09-30: the English README (NH-90) — what the assistant does, how Nemotron and Token Factory are used, architecture, ours versus upstream with licenses, setup with every variable, the submission-period changes. Writing it caught the Hermes profile contradicting D-03 and D-04: Tavily is now search only and thinking is off on assistant turns.
 - 2026-09-30, written, not yet run on a VPS: backups, restore and monitoring (NH-34, NH-35) in [`deploy/ops`](../deploy/README.md#backups-and-restore-nh-34) — nightly encrypted backups of every gateway and sandbox volume with SQLite copied consistently, the restore that is also the move to member B's credits (NH-96), and a health check every 5 minutes reporting to a dead man's switch; billing alerts in the budget runbook. A test runs all three scripts on real files against a fake kubectl in a separate "Ops scripts" workflow, so it can't hold up a deploy; it first runs on the next push.
+- 2026-09-30, ready to run on the VPS's first day: NH-28's Token Factory smoke test, [`scripts/token-factory-smoke.mjs`](../scripts/token-factory-smoke.mjs) — the tool round trip, `tool_choice: "required"` and JSON schema output with thinking off, per Nemotron model, as a table to paste into NH-28; 8 tests against a fake Token Factory.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -532,6 +533,13 @@ Everything runs on the VPS; nothing is installed on a laptop (D-33). Claude runs
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-01, NH-30
 
 Runs **first**, on the VPS, before any runtime wiring, so a model problem can't be mistaken for a harness problem. Two known failure modes to rule out: a reasoning model spending `max_tokens` on thinking and returning empty `content`, and tool calls breaking on reasoning models.
+
+Ready to run (written 2026-09-30, its logic tested against a fake Token Factory): [`scripts/token-factory-smoke.mjs`](../scripts/token-factory-smoke.mjs) lists the models, runs the checks below on every Nemotron chat model the key sees, and prints a Markdown table to paste here. It reads the key from the file in §0 and never prints it:
+
+```bash
+sudo apt-get install -y nodejs          # Node 18 from Ubuntu; nothing else
+node scripts/token-factory-smoke.mjs    # or --model <id>, repeatable
+```
 
 - [ ] `GET /v1/models` lists the Nemotron IDs we plan to use (Super, Ultra, Nano/Lightning)
 - [ ] A full two-step tool call (request → `tool_calls` → tool result → final answer) succeeds on the interactive model with `reasoning_effort: "none"`

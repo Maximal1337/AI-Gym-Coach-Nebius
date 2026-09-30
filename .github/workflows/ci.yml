@@ -21,7 +21,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: node scripts/check-locales.mjs
-      # The Images workflow's tag bump (NH-37).
+      # The Images workflow's tag bump (NH-37) and the Token Factory smoke test's logic (NH-28).
       - run: node --test scripts/*.test.mjs
 
   edge-functions:

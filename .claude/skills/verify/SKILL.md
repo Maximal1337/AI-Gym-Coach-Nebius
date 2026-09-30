@@ -85,7 +85,7 @@ No cluster here either; these catch what can be caught offline. CI runs the
 first one.
 
 ```bash
-node --test scripts/*.test.mjs                # the Images workflow's tag bump
+node --test scripts/*.test.mjs                # the tag bump (NH-37), the Token Factory smoke test (NH-28)
 kubectl kustomize deploy/notch/overlays/prod  # renders; also dev and deploy/platform/agent-sandbox
 for f in deploy/bootstrap/*.sh deploy/ops/*.sh deploy/ops/test/*.sh; do bash -n "$f"; done   # shell syntax
 ```
