@@ -921,6 +921,8 @@ Required (D-21): "always-on" is half of what the Personal AI track asks for, and
 
 EAS build and submit commands need explicit team approval and `--non-interactive` (see `apps/mobile/AGENTS.md`). NH-71 ships in the same build if it's ready.
 
+Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testflight-build-nh-72) (2026-09-30). Found while writing it: `app.json` is still `1.0.2`, the version released on 2026-08-20. If that's live, the build needs `1.0.3`, because App Store Connect refuses new builds on an approved version; and `public.app_config.latest_version` must stay as it is, or App Store users are nudged toward a version they can't get.
+
 - [ ] Build submitted to Beta App Review for external testing by 2026-10-16
 - [ ] Public TestFlight link created
 - [ ] App Store version for real users unchanged

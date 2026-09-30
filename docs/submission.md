@@ -1,7 +1,7 @@
-# Submission kit — Devpost (NH-93), the demo video (NH-91), judging (NH-95)
+# Submission kit — TestFlight (NH-72), Devpost (NH-93), the video (NH-91), judging (NH-95)
 
-Drafts to paste into Devpost, the video script, and the checklist for keeping
-the demo alive through judging. Plan: [`nebius-hackathon-plan.md`](./nebius-hackathon-plan.md), §2 for the rules.
+The TestFlight runbook, drafts to paste into Devpost, the video script, and
+the checklist for keeping the demo alive through judging. Plan: [`nebius-hackathon-plan.md`](./nebius-hackathon-plan.md), §2 for the rules.
 
 - **Nothing secret goes in this file** — the repository is public. Judge
   addresses go only into Devpost's testing instructions.
@@ -9,6 +9,69 @@ the demo alive through judging. Plan: [`nebius-hackathon-plan.md`](./nebius-hack
   numbers measured on the VPS (NH-25, NH-27), and what the spike and the
   deployment actually taught us. Replace every one, or cut the sentence.
 - **Dates:** submit on **2026-10-26**; the hard deadline is 2026-10-30, 10:00 PT.
+
+## The TestFlight build (NH-72)
+
+Submitted to Beta App Review by **2026-10-16** (review usually takes a day;
+leave two). EAS build and submit need the team's go-ahead first
+(`apps/mobile/AGENTS.md`).
+
+**Before building**
+
+- [ ] **The version.** `app.json` says `1.0.2`, bumped on 2026-08-20 for the
+      App Store release. If 1.0.2 is live in App Store Connect, set
+      `"version": "1.0.3"`: App Store Connect refuses new builds on a version
+      that's already been approved. The build number increments by itself
+      (`eas.json`: `autoIncrement`, remote version source).
+- [ ] **Leave the version gate alone.** Don't change `public.app_config` for
+      this build (`app-version-gate` skill): `latest_version` set to a
+      TestFlight-only version would show every App Store user an update they
+      can't get.
+- [ ] **Checks** from the `verify` skill: typecheck, the full non-lazy Metro
+      bundle, `node scripts/check-locales.mjs`.
+- [ ] It's the production app against the production Supabase project, like
+      the App Store build. Only flagged accounts see the assistant, so anyone
+      else who installs from the public link sees today's Notch.
+
+**Build and upload** — from `apps/mobile`, the commands that already worked:
+
+```bash
+eas build --platform ios --profile production --non-interactive --no-wait
+eas submit --platform ios --id <build id> --non-interactive
+```
+
+**In App Store Connect → TestFlight**
+
+- [ ] An external group, "Hackathon judges", with this build.
+- [ ] Test information: the beta description and "What to Test" below, a
+      feedback email, and the App Review account (NH-06) for Beta App Review.
+      Decide first whether that account gets the assistant flags: with them,
+      the review covers what the build is for; without them, the reviewer sees
+      only today's app.
+- [ ] Submit for Beta App Review; once approved, turn on the **public link**
+      and put it in the README and Devpost.
+- [ ] **Never** "Submit for Review" on the App Store tab: the App Store version
+      real users have stays as it is (D-16).
+- [ ] Builds expire 90 days after upload: one uploaded on 2026-10-16 lasts to
+      2027-01-14, past judging.
+
+**Beta app description**
+
+> Notch is a strength coach: it runs your workout set by set, logs every rep
+> and plans progressive overload. This build adds the Coach assistant, built
+> for the Nebius × NVIDIA Global AI Hackathon: a personal coach you can talk
+> to between workouts, which remembers what matters about you, can change
+> your training plan when you ask (and undo it), looks things up on the web
+> with sources, and checks in each morning. It is available on the hackathon's
+> demo and judge accounts.
+
+**What to Test**
+
+> Sign in with the address from the hackathon's testing instructions, then
+> open the Assistant tab. Ask what the coach knows about you; ask it to change
+> an exercise's sets or reps, then to undo it; ask a nutrition question and tap
+> a source; open "What the coach remembers" and delete a fact. Allow
+> notifications to receive the morning check-in.
 
 ## The Devpost form
 
