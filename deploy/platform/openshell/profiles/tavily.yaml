@@ -10,7 +10,7 @@
 #   @HERMES_BINARY@   the interpreter that runs Hermes in the sandbox image (NH-21)
 id: tavily
 display_name: Tavily
-description: Web search and page extraction for the coach
+description: Web search for the coach (search only, D-04)
 category: knowledge
 credentials:
   - name: api_key
