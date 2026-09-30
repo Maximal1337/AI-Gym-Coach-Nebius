@@ -50,6 +50,23 @@ export interface FailRequest {
   usage?: Usage;
 }
 
+export interface DeferRequest {
+  job_id: number;
+  lease_token: string;
+  /** Before the job may be claimed again, 1–3600. */
+  seconds: number;
+  reason?: string;
+}
+
+export interface RecordAgentRequest {
+  user_id: string;
+  sandbox_name: string;
+  /** SHA-256 hex of the tool token; the token itself never leaves the VPS. */
+  tool_token_hash: string;
+}
+
+export type RecordAgentStatus = "recorded" | "user_gone" | "wrong_environment";
+
 export interface OutboxConfig {
   /** e.g. https://<project-ref>.supabase.co/functions/v1 */
   functionsUrl: string;
@@ -111,5 +128,32 @@ export class OutboxClient {
       throw new OutboxError(`deliver failed: ${result.status} ${JSON.stringify(result.body)}`, result.status);
     }
     return result;
+  }
+
+  /** Hands a job back unspent: its user's sandbox can't run it yet (NH-55). False if the lease is gone. */
+  async defer(request: DeferRequest): Promise<boolean> {
+    const { status, body } = await this.post("assistant-outbox", {
+      action: "defer",
+      ...request,
+      ...(request.reason ? { reason: request.reason.slice(0, 200) } : {}),
+    });
+    if (status !== 200) throw new OutboxError(`defer failed: ${status} ${JSON.stringify(body)}`, status);
+    return body.ok === true;
+  }
+
+  /** Records a sandbox and its tool token's digest before the sandbox is created (NH-55). */
+  async recordAgent(request: RecordAgentRequest): Promise<RecordAgentStatus> {
+    const { status, body } = await this.post("assistant-outbox", { action: "record_agent", ...request });
+    if (status !== 200) throw new OutboxError(`record_agent failed: ${status} ${JSON.stringify(body)}`, status);
+    return body.status as RecordAgentStatus;
+  }
+
+  /** Every sandbox this environment should have (NH-56). */
+  async listAgents(): Promise<Array<{ user_id: string; sandbox_name: string }>> {
+    const { status, body } = await this.post("assistant-outbox", { action: "list_agents" });
+    if (status !== 200 || !Array.isArray(body.agents)) {
+      throw new OutboxError(`list_agents failed: ${status} ${JSON.stringify(body)}`, status);
+    }
+    return body.agents as Array<{ user_id: string; sandbox_name: string }>;
   }
 }

@@ -43,13 +43,16 @@ ns="notch-$env"
 value() { grep -m1 -E "^$1=" "$file" | cut -d= -f2- | tr -d '\r' || true; }
 
 required=(RELAY_SECRET SUPABASE_FUNCTIONS_URL TOKEN_FACTORY_MODEL)
-optional=(RELAY_STATIC_SANDBOXES)
+optional=(SANDBOX_KEY_SECRET RELAY_STATIC_SANDBOXES)
 for key in "${required[@]}"; do
   [[ -n "$(value "$key")" ]] || die "$key is missing or empty in $file"
 done
 (( $(value RELAY_SECRET | tr -d '\n' | wc -c) >= 32 )) || die "RELAY_SECRET must be at least 32 characters (the Edge Functions refuse shorter ones)"
 [[ $(value SUPABASE_FUNCTIONS_URL) =~ ^https://[a-z0-9]+\.supabase\.co/functions/v1/?$ ]] \
   || die "SUPABASE_FUNCTIONS_URL must look like https://<project-ref>.supabase.co/functions/v1"
+if [[ -n "$(value SANDBOX_KEY_SECRET)" ]]; then
+  (( $(value SANDBOX_KEY_SECRET | tr -d '\n' | wc -c) >= 32 )) || die "SANDBOX_KEY_SECRET must be at least 32 characters"
+fi
 
 # The namespace normally comes from Argo CD (notch-<env> app); create it if
 # this runs first — Argo CD adopts it on its next sync.

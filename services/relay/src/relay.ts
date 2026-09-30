@@ -1,25 +1,31 @@
 import { type ChatOptions, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
-import type { DeliverRequest, FailRequest, JobContext } from "./outbox.js";
+import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
 import { buildMessages, CHECKIN_SKIP, type ChatMessage, extractSources, replyText } from "./prompt.js";
+import type { SandboxLease } from "./sandbox-manager.js";
 
 /**
  * The relay (NH-54): pulls jobs from Supabase, runs each one in its user's own
  * sandbox, and reports the result. One sandbox per user (D-26) — the relay
  * never routes a user's message anywhere but that user's endpoint, and a user
- * without a ready sandbox waits (the job goes back to the queue) rather than
- * being served from somewhere shared.
+ * without a ready sandbox waits (the job is deferred: back to the queue with
+ * its attempt unspent) rather than being served from somewhere shared.
  */
 
-export type Outcome = "delivered" | "skipped" | "failed" | "dropped";
+export type Outcome = "delivered" | "skipped" | "failed" | "dropped" | "deferred";
 
 export interface RelayDeps {
   outbox: {
     claim: (limit: number, leaseSeconds: number) => Promise<{ jobs: JobContext[]; paused?: string }>;
     deliver: (request: DeliverRequest) => Promise<{ status: number; body: Record<string, unknown> }>;
     fail: (request: FailRequest) => Promise<boolean>;
+    defer: (request: DeferRequest) => Promise<boolean>;
   };
-  /** The user's own sandbox, or null if it isn't ready — provided by the sandbox manager (NH-55). */
-  sandboxFor: (job: JobContext) => Promise<SandboxEndpoint | null>;
+  /**
+   * The user's own sandbox for this job, released when the job is done — or
+   * how long to wait (the sandbox manager, NH-55; a static map in the spike).
+   * Throws when the sandbox can't be provided at all.
+   */
+  acquireSandbox: (job: JobContext) => Promise<SandboxLease>;
   chat: (endpoint: SandboxEndpoint, messages: ChatMessage[], options: Pick<ChatOptions, "sessionKey">) => Promise<ChatResult>;
   /** The Token Factory model the sandboxes use, for pricing the spend (D-34). */
   model: string;
@@ -44,13 +50,29 @@ async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promi
 
 export async function processJob(job: JobContext, deps: RelayDeps): Promise<Outcome> {
   const base = { job_id: job.id, lease_token: job.lease_token };
-  const endpoint = await deps.sandboxFor(job);
-  if (!endpoint) {
-    deps.log("sandbox_unavailable", { job: job.id, user: job.job.user_id });
-    await deps.outbox.fail({ ...base, error: "sandbox_unavailable" });
+  let lease: SandboxLease;
+  try {
+    lease = await deps.acquireSandbox(job);
+  } catch (e) {
+    // Nothing reached the model, so nothing is charged; the attempt counts.
+    deps.log("sandbox_error", { job: job.id, error: String(e) });
+    await deps.outbox.fail({ ...base, error: `sandbox_error: ${String(e)}`.slice(0, 2000) });
     return "failed";
   }
+  if ("defer" in lease) {
+    deps.log("deferred", { job: job.id, reason: lease.reason, seconds: lease.defer });
+    await deps.outbox.defer({ ...base, seconds: lease.defer, reason: lease.reason });
+    return "deferred";
+  }
+  try {
+    return await runInSandbox(job, lease.endpoint, deps);
+  } finally {
+    lease.release();
+  }
+}
 
+async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, deps: RelayDeps): Promise<Outcome> {
+  const base = { job_id: job.id, lease_token: job.lease_token };
   let result: ChatResult;
   try {
     result = await deps.chat(endpoint, buildMessages(job, deps.now()), { sessionKey: job.job.user_id });

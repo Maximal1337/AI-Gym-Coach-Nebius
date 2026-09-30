@@ -1,0 +1,30 @@
+# OpenShell provider profile for Nebius Token Factory (D-28, NH-33). One
+# provider per environment, named `token-factory`, with that environment's key
+# (D-34: dev and prod keys differ). Hermes' nebius-token-factory provider reads
+# NEBIUS_API_KEY and calls this endpoint.
+#
+# Placeholder, replaced when the profile is imported (see ../README.md):
+#   @HERMES_BINARY@   the interpreter that runs Hermes in the sandbox image (NH-21)
+id: token-factory
+display_name: Nebius Token Factory
+description: Nemotron and other models on Nebius Token Factory, OpenAI-compatible
+category: inference
+inference_capable: true
+credentials:
+  - name: api_key
+    description: The environment's Token Factory API key
+    env_vars: [NEBIUS_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: api.tokenfactory.nebius.com
+    port: 443
+    path: /v1/**
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: POST, path: /v1/chat/completions }
+      - allow: { method: GET, path: /v1/models }
+binaries:
+  - "@HERMES_BINARY@"

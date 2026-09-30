@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chat, HermesError } from "./hermes.js";
-import type { DeliverRequest, FailRequest, JobContext } from "./outbox.js";
+import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
 import { processJob, type RelayDeps, runOnce } from "./relay.js";
-import { staticSandboxes } from "./sandboxes.js";
+import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 
 const ENDPOINT = { baseUrl: "http://10.42.0.17:8642", apiKey: "sandbox-key" };
 
@@ -22,7 +22,14 @@ function job(kind: "chat" | "checkin" = "chat", user = "u1"): JobContext {
 }
 
 function deps(overrides: Partial<RelayDeps> = {}) {
-  const log = { delivered: [] as DeliverRequest[], failed: [] as FailRequest[], chats: [] as unknown[][], events: [] as string[] };
+  const log = {
+    delivered: [] as DeliverRequest[],
+    failed: [] as FailRequest[],
+    deferred: [] as DeferRequest[],
+    chats: [] as unknown[][],
+    events: [] as string[],
+    released: 0,
+  };
   const d: RelayDeps = {
     outbox: {
       claim: () => Promise.resolve({ jobs: [job()] }),
@@ -34,8 +41,12 @@ function deps(overrides: Partial<RelayDeps> = {}) {
         log.failed.push(r);
         return Promise.resolve(true);
       },
+      defer: (r) => {
+        log.deferred.push(r);
+        return Promise.resolve(true);
+      },
     },
-    sandboxFor: () => Promise.resolve(ENDPOINT),
+    acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => void log.released++ }),
     chat: (...args) => {
       log.chats.push(args);
       return Promise.resolve({ text: "Rest 2 min. [Guide](https://example.org/rest)", usage: { tokensInput: 900, tokensOutput: 60 } });
@@ -63,11 +74,33 @@ test("a chat turn runs in the user's own sandbox and is delivered with usage and
   }]);
 });
 
-test("no ready sandbox: the job goes back to the queue, nothing is charged, nothing is shared", async () => {
-  const { d, log } = deps({ sandboxFor: () => Promise.resolve(null) });
+test("no ready sandbox: the job is deferred unspent, nothing is charged, nothing is shared", async () => {
+  const { d, log } = deps({ acquireSandbox: () => Promise.resolve({ defer: 20, reason: "capacity" }) });
+  assert.equal(await processJob(job(), d), "deferred");
+  assert.equal(log.chats.length, 0);
+  assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 20, reason: "capacity" }]);
+  assert.equal(log.failed.length, 0);
+});
+
+test("a sandbox that can't be provided fails the attempt without charging it", async () => {
+  const { d, log } = deps({ acquireSandbox: () => Promise.reject(new Error("record_agent: user_gone")) });
   assert.equal(await processJob(job(), d), "failed");
   assert.equal(log.chats.length, 0);
-  assert.deepEqual(log.failed, [{ job_id: 7, lease_token: "lease-7", error: "sandbox_unavailable" }]);
+  assert.deepEqual(log.failed, [{ job_id: 7, lease_token: "lease-7", error: "sandbox_error: Error: record_agent: user_gone" }]);
+});
+
+test("the sandbox is released after the turn, whatever happened", async () => {
+  for (const chat of [
+    () => Promise.resolve({ text: "ok" }),
+    () => Promise.reject(new HermesError("boom", true)),
+  ]) {
+    const { d, log } = deps({ chat });
+    await processJob(job(), d);
+    assert.equal(log.released, 1);
+  }
+  const { d, log } = deps({ outbox: { ...deps().d.outbox, deliver: () => Promise.reject(new Error("down")) } });
+  await assert.rejects(() => processJob(job(), d));
+  assert.equal(log.released, 1, "released even when reporting throws");
 });
 
 test("a failure after the model may have run is charged; one before it isn't", async () => {
@@ -178,4 +211,12 @@ test("static sandbox map: parsed, and malformed entries ignored", () => {
   const m = staticSandboxes(JSON.stringify({ u1: ENDPOINT, u2: { baseUrl: 1 } }));
   assert.deepEqual([...m.keys()], ["u1"]);
   assert.equal(staticSandboxes(undefined).size, 0);
+});
+
+test("static map: a mapped user gets their endpoint, anyone else waits", async () => {
+  const acquire = staticAcquire(staticSandboxes(JSON.stringify({ u1: ENDPOINT })));
+  const mine = await acquire(job("chat", "u1"));
+  assert.ok("endpoint" in mine);
+  assert.deepEqual(mine.endpoint, ENDPOINT);
+  assert.deepEqual(await acquire(job("chat", "u2")), { defer: 60, reason: "no_sandbox" });
 });

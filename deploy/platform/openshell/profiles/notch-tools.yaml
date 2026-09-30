@@ -1,0 +1,30 @@
+# OpenShell provider profile for the per-user notch-tools credential (NH-55).
+# The relay creates one provider of this type per user, named
+# <sandbox>-tools, holding that user's tool token (NH-41); the proxy puts the
+# token into the Authorization header only for this endpoint (D-28).
+#
+# Placeholders, replaced when the profile is imported (see ../README.md):
+#   @SUPABASE_HOST@   <project-ref>.supabase.co
+#   @HERMES_BINARY@   the interpreter that runs Hermes in the sandbox image (NH-21)
+# A wrong binary fails closed: no credential, traffic denied.
+id: notch-tools
+display_name: Notch tools
+description: The user's own token for Notch's notch-tools MCP server
+category: data
+credentials:
+  - name: tool_token
+    description: The user's tool token; it resolves to that user and nothing else
+    env_vars: [NOTCH_TOOL_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: "@SUPABASE_HOST@"
+    port: 443
+    path: /functions/v1/notch-tools
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: POST, path: /functions/v1/notch-tools }
+binaries:
+  - "@HERMES_BINARY@"

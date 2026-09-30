@@ -29,6 +29,7 @@ How to use this document:
 - 2026-09-28 … 30, local code, not deployed: M6 — fact extraction on Nemotron with per-operation validation and a Token Factory client (NH-61), the nightly memory job and its Supabase Cron schedule (NH-63), the daily check-in (NH-66), the memory evaluation's golden set and runner (NH-65) — what's left needs keys or a sandbox; M7's two screens — the coach assistant chat (NH-70) and "What the coach remembers" (NH-71) — behind the flags and in all 8 languages, checked by typecheck, 8 unit tests and a full Metro bundle. Test counts now: 177 Deno, 222 SQL checks on PGlite, 39 mobile, 25 relay.
 - 2026-09-30, written, not yet run on a VPS: the cluster in [`deploy/`](../deploy/README.md) (NH-36) — bootstrap script, Argo CD app of apps, NetworkPolicies, secrets script, prod sync window — rendered offline with `kubectl kustomize`; the Images workflow (NH-37) that builds the relay image after green CI and commits its tag, with 6 tests for the tag bump. Pinned: k3s v1.36.4+k3s1, Argo CD v3.5.3, Agent Sandbox v1.0.4, OpenShell chart 0.1.2.
 - 2026-09-30, written, not yet run in a sandbox: the Hermes coach profile (NH-40, NH-45) in [`deploy/images/hermes-sandbox`](../deploy/images/hermes-sandbox/README.md) — SOUL.md with the rules ported from today's coach, config.yaml with the D-29 allowlist — pinned by 9 tests; the relay now sends the coach's name, tone, accountability style and the user's style notes with every request, and turns cited links into sources the app can show.
+- 2026-09-30, written, off until the spike proves it on the cluster: the sandbox manager (NH-55, NH-56) — per-user sandboxes created, started, stopped when idle and deleted with the account, at most 4 running in prod and 2 in dev with everyone else waiting in order — driving the `openshell` CLI; the queue's deferral and the sandbox mapping in SQL (25 SQL checks, 5 Deno tests); 27 relay tests; the OpenShell provider profiles for `notch-tools`, Token Factory and Tavily.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -637,6 +638,7 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-36
 
 - [ ] Gateway (or per-environment configuration, per O-11) for `notch-dev` and `notch-prod` deployed from Git
+- [ ] Provider profiles imported (`deploy/platform/openshell/profiles`: `token-factory`, `tavily`, `notch-tools`, written with NH-55) and the shared providers `token-factory` and `tavily` created in each environment
 - [ ] Separate Token Factory keys per environment (D-34), injected by the gateway
 - [ ] Everything comes back after a VPS reboot
 
@@ -651,7 +653,7 @@ Runs **first**, on the VPS, before any runtime wiring, so a model problem can't 
 #### NH-34 · Backups and restore drill
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
 
-- [ ] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase) — and, found while writing NH-36, each gateway's own volume (its SQLite database of sandboxes and encrypted provider credentials) plus its `openshell-credential-kek` Secret, without which the restored credentials can't be decrypted (`secrets.sh --restore-kek`)
+- [ ] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase) — and, found while writing NH-36, each gateway's own volume (its SQLite database of sandboxes and encrypted provider credentials) plus its `openshell-credential-kek` Secret, without which the restored credentials can't be decrypted (`secrets.sh --restore-kek`), and the relay's `SANDBOX_KEY_SECRET` (NH-55), without which it can't call the existing sandboxes
 - [ ] Restore tested once on a fresh host with the NH-36 bootstrap script — the rehearsal for NH-96
 
 #### NH-35 · Monitoring and alerts
@@ -761,15 +763,17 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 #### NH-55 · Sandbox manager: provisioning and lifecycle
 **Priority:** Urgent · **Estimate:** 8 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-29, NH-40, NH-41, NH-54
 
-- [ ] First message from a flagged user → a sandbox is created (NH-29), the tool token minted, the mapping stored in `assistant_agents`
-- [ ] A stopped sandbox is started on demand; idle sandboxes stop after 10 minutes
-- [ ] At most 4 running sandboxes in `notch-prod` and 2 in `notch-dev`; extra work waits in the queue — never shared (D-26)
-- [ ] Idempotent: a retry never creates a second sandbox
+- [x] First message from a flagged user → a sandbox is created (NH-29), the tool token minted, the mapping stored in `assistant_agents` — `services/relay/src/sandbox-manager.ts`: the mapping and the token's digest are recorded first (`assistant_agent_record` through `assistant-outbox`, since the relay has no database credentials), the token goes into a per-user OpenShell provider, then the sandbox is created from the gateway's default image; each sandbox's Hermes API key is derived from a secret, never stored
+- [x] A stopped sandbox is started on demand; idle sandboxes stop after 10 minutes
+- [x] At most 4 running sandboxes in `notch-prod` and 2 in `notch-dev`; extra work waits in the queue — never shared (D-26) — a job that doesn't fit is deferred with its attempt unspent (`assistant_defer_job`, `not_before`), the user's later messages wait behind it, and the least recently used sandbox that isn't answering is stopped to make room; decisions run one at a time, so two jobs can't take the last slot
+- [x] Idempotent: a retry never creates a second sandbox — the name is derived from the user id
+- [ ] Switched on in `notch-dev`, then `notch-prod` (`RELAY_SANDBOXES=manager`) once the spike settles the CLI's JSON, the relay's access to its gateway and to a sandbox's exposed port (NH-29); the steps are in `deploy/README.md`
 
 #### NH-56 · Account deletion cleanup
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Backend, Area/Agent, Type/Feature · **Blocked by:** NH-55
 
-- [ ] Deleting an account destroys the user's sandbox, its volume and its credentials — the sandbox manager (NH-55) destroys every sandbox that no longer has an `assistant_agents` row
+- [x] Deleting an account destroys the user's sandbox, its volume and its credentials — the sandbox manager (NH-55) destroys every sandbox that no longer has an `assistant_agents` row — a sweep every 15 minutes, at most 3 sandboxes per sweep, then their tool providers; a sandbox answering a message is never touched
+- [ ] Checked on the cluster: a deleted test account's sandbox and provider are gone within two sweeps
 - [x] The user's database rows are removed by cascade (`assistant_messages` via NH-50, `user_facts` and `user_memory_state` via NH-60) — also jobs, actions and the mapping; tested, including the QA "fresh" reset
 - [x] `assistant_agents` mapping row removed
 

@@ -1,8 +1,9 @@
 # The relay (NH-54): pulls jobs from Supabase, runs each in the user's
 # sandbox, delivers the reply. Outbound calls only (D-27), so no Service.
 #
-# Configuration: RELAY_ENV from the overlay's ConfigMap; RELAY_SECRET,
-# SUPABASE_FUNCTIONS_URL, TOKEN_FACTORY_MODEL (and, until NH-55,
+# Configuration: RELAY_ENV, RELAY_SANDBOXES and SANDBOX_SHARED_PROVIDERS from
+# the overlay's ConfigMap; RELAY_SECRET, SUPABASE_FUNCTIONS_URL,
+# TOKEN_FACTORY_MODEL, SANDBOX_KEY_SECRET (and, while RELAY_SANDBOXES=static,
 # RELAY_STATIC_SANDBOXES) from the `notch-relay` Secret that
 # deploy/bootstrap/secrets.sh creates.
 apiVersion: v1
@@ -89,7 +90,14 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
+            # The OpenShell CLI keeps its gateway registration here. How the
+            # relay authenticates to its gateway is settled in the spike (NH-29).
+            - name: openshell-config
+              mountPath: /home/node/.config/openshell
       volumes:
         - name: tmp
           emptyDir:
             sizeLimit: 64Mi
+        - name: openshell-config
+          emptyDir:
+            sizeLimit: 16Mi

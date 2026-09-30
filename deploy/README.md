@@ -111,6 +111,50 @@ Written and reviewed on a laptop; these need the real cluster (NH-21, NH-26):
 - Sandbox pods carry `openshell.ai/managed-by=openshell` and never the
   gateway's `notch.app/role: gateway` label.
 
+## Sandboxes: one per user (NH-55, NH-56)
+
+The relay creates and runs every user's sandbox itself, through the
+`openshell` CLI in its image (`services/relay/src/sandbox-manager.ts`):
+
+- **First message** from a flagged user: a sandbox named
+  `notch-<env>-<hash of the user id>` is recorded in Supabase with the digest
+  of a freshly minted tool token, the token goes into a per-user OpenShell
+  provider `<sandbox>-tools`, and the sandbox is created from the gateway's
+  default image with the environment's shared providers, `HERMES_HOME` on its
+  own volume and Hermes' API port exposed. A retry finds the same name and
+  creates nothing twice.
+- **Later messages** start the sandbox if it's stopped. Each sandbox's Hermes
+  API key is derived from `SANDBOX_KEY_SECRET` and its name, so no key is
+  stored anywhere.
+- **Capacity** (D-31): at most 4 running in prod and 2 in dev. A user who
+  doesn't fit waits — the job goes back to the queue with its attempt unspent
+  (`assistant_defer_job`) and their messages stay in order — while the least
+  recently used sandbox that isn't answering anyone is stopped to make room.
+  Nobody is ever served from another user's sandbox.
+- **Idle** sandboxes stop after 10 minutes (checked every minute).
+- **Orphans**: every 15 minutes, sandboxes without an `assistant_agents` row —
+  an account deletion cascades it away — are deleted, at most 3 per sweep,
+  and their providers on the following sweep.
+
+It stays off until the spike has proved it on this cluster: each overlay sets
+`RELAY_SANDBOXES=static` (the spike's hand-made map). Turn dev to `manager`
+first. Before that, per environment:
+
+1. Import the provider profiles in `platform/openshell/profiles/`, replacing
+   `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and `@HERMES_BINARY@` (the
+   interpreter that runs Hermes in the image), then check them with
+   `openshell profile lint`.
+2. Create the shared providers `token-factory` (that environment's key, D-34)
+   and `tavily` (NH-33).
+3. Add `SANDBOX_KEY_SECRET` to `/etc/notch/<env>.env` and rerun `secrets.sh`.
+   Back it up with the gateway key (NH-34): losing it locks the relay out of
+   every existing sandbox.
+
+Settled in the spike (NH-29), not guessed here: how the relay authenticates
+to its gateway and reaches a sandbox's exposed Hermes port (the gateway's
+service URL); the command that starts Hermes in the image; and how an image
+update reaches sandboxes that already exist.
+
 ## Adding the Hermes sandbox image (NH-21)
 
 1. Put its Dockerfile in `deploy/images/hermes-sandbox/`, next to the coach

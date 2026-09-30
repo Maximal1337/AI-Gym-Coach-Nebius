@@ -1,0 +1,31 @@
+# OpenShell provider profile for Tavily, Hermes' web search backend (NH-23,
+# NH-33). One provider per environment, named `tavily`.
+#
+# The request-body rewrite covers a client that sends the key in the JSON body
+# rather than a header; the spike (NH-23) checks which one Hermes uses and the
+# lint on the VPS checks the fields.
+#
+# Placeholder, replaced when the profile is imported (see ../README.md):
+#   @HERMES_BINARY@   the interpreter that runs Hermes in the sandbox image (NH-21)
+id: tavily
+display_name: Tavily
+description: Web search and page extraction for the coach
+category: knowledge
+credentials:
+  - name: api_key
+    description: The Tavily API key
+    env_vars: [TAVILY_API_KEY]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+endpoints:
+  - host: api.tavily.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    request_body_credential_rewrite: true
+    rules:
+      - allow: { method: POST, path: /search }
+      - allow: { method: POST, path: /extract }
+binaries:
+  - "@HERMES_BINARY@"

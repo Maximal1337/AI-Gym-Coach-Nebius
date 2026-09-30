@@ -10,3 +10,8 @@ configMapGenerator:
   - name: notch-relay-config
     literals:
       - RELAY_ENV=prod
+      # static until the spike (NH-29) proves the sandbox manager (NH-55) on
+      # this cluster; switch dev to manager first.
+      - RELAY_SANDBOXES=static
+      # The environment's shared OpenShell providers every sandbox gets (NH-33).
+      - SANDBOX_SHARED_PROVIDERS=token-factory,tavily
