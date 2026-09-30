@@ -77,7 +77,7 @@ Everything here is quick; it unblocks the whole critical path. Commands are bash
 
   > Hi! We're building Notch for the Personal AI track: a fitness coach where every user gets their own Hermes agent in an OpenShell sandbox, running Nemotron on Token Factory. Keeping the demo up through the end of judging (Dec 15) needs a CPU VM for about 11 weeks, and our AI Cloud credits cover it only at the smallest size. Is there a way for hackathon teams to get additional AI Cloud credits? Happy to share details. Thanks!
 
-**@dorhaimbob-web — NH-06 rollout** (full runbook: `.claude/skills/dev-test-scenario-accounts/SKILL.md`)
+**@dorhaimbob-web — NH-06 rollout** (full runbook: `.agents/skills/dev-test-scenario-accounts/SKILL.md`)
 - [ ] Create the new test, review and demo/judge addresses (random, non-guessable), then:
 
   ```bash
@@ -451,7 +451,7 @@ Code done on 2026-09-18; the rollout is in the §0 checklist. The repository is 
 - [ ] New test and App Store review accounts created; the old addresses are rejected by `dev-test-login` (403)
 - [ ] App Review information in App Store Connect updated with the new review account
 - [ ] Additive migrations applied; verified with a live smoke test
-- [x] No test or review address left in `sign-in.tsx` or `.claude/skills/*`. `app-store-connect-form.md` stays as is (O-07); the new review address is never written into it
+- [x] No test or review address left in `sign-in.tsx` or `.agents/skills/*`. `app-store-connect-form.md` stays as is (O-07); the new review address is never written into it
 
 #### NH-07 · CI: run unit tests ✅
 **Priority:** Medium · **Estimate:** 2 · **Labels:** Area/QA, Type/Chore · **Blocked by:** —
