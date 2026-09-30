@@ -1,0 +1,17 @@
+# What every environment namespace runs besides its OpenShell gateway: the
+# relay and the NetworkPolicies. Overlays (dev, prod) set the namespace and
+# RELAY_ENV. Both environments track main (D-32), so the image tag lives here,
+# once, and only CI changes it (NH-37): scripts/bump-image-tag.mjs rewrites
+# the line marked `# image-tag: notch-relay`.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: notch
+resources:
+  - relay.yaml
+  - network-policies.yaml
+images:
+  - name: notch-relay
+    newName: ghcr.io/maximal1337/notch-relay
+    newTag: unbuilt # image-tag: notch-relay

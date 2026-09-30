@@ -1,0 +1,31 @@
+# Wave 0: dev — its Namespace, NetworkPolicies and the relay
+# (deploy/notch/overlays/dev). Tracks main like every app here (D-32); the
+# relay's image tag is changed only by CI after green tests (NH-37).
+# notch-dev exists until 2026-11-14 and serves team accounts only (D-31);
+# the move to member B's host (NH-96) syncs prod only — delete this file then.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: notch-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: notch
+  source:
+    repoURL: https://github.com/Maximal1337/AI-Gym-Coach-Nebius.git
+    targetRevision: main
+    path: deploy/notch/overlays/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: notch-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

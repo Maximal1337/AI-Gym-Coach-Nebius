@@ -1,0 +1,12 @@
+# notch-prod: demo and judge accounts (D-31). Frozen 2026-12-01 → 12-15 by the
+# sync window in deploy/argocd/projects.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: notch-prod
+resources:
+  - namespace.yaml
+  - ../../base
+configMapGenerator:
+  - name: notch-relay-config
+    literals:
+      - RELAY_ENV=prod

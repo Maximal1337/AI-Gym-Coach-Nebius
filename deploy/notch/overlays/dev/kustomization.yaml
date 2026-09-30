@@ -1,0 +1,13 @@
+# notch-dev: team accounts only, until 2026-11-14 (D-31). Its Supabase side
+# is the same project; assistant_agents.environment = 'dev' routes a team
+# account's jobs here.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: notch-dev
+resources:
+  - namespace.yaml
+  - ../../base
+configMapGenerator:
+  - name: notch-relay-config
+    literals:
+      - RELAY_ENV=dev

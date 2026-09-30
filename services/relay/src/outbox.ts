@@ -50,6 +50,9 @@ export interface OutboxConfig {
   nowSec?: () => number;
 }
 
+/** Per request to assistant-outbox / assistant-deliver; both answer in well under a second. */
+export const OUTBOX_TIMEOUT_MS = 30_000;
+
 export class OutboxError extends Error {
   constructor(message: string, readonly status: number) {
     super(message);
@@ -72,6 +75,9 @@ export class OutboxClient {
       method: "POST",
       headers: relayHeaders(this.config.secret, this.config.env, body, this.nowSec()),
       body,
+      // A hung request would stall the whole poll loop; the liveness probe
+      // restarts a stalled relay (deploy/notch/base/relay.yaml), this keeps it rare.
+      signal: AbortSignal.timeout(OUTBOX_TIMEOUT_MS),
     });
     const parsed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return { status: res.status, body: parsed };

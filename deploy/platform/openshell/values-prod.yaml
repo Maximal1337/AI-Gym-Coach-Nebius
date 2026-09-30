@@ -1,0 +1,4 @@
+# notch-prod's gateway. The default sandbox image (the Hermes image from NH-21)
+# goes here as `sandbox.image`, with its tag bumped by CI (NH-37).
+server:
+  name: openshell-prod

@@ -1,0 +1,41 @@
+# Wave 10: the OpenShell gateway for dev, in notch-dev next to its relay
+# and its users' sandboxes. One gateway per environment is O-11's question,
+# answered by the spike (NH-21); the chart's cluster-scoped names already carry
+# the namespace, so two releases don't collide as objects.
+# Chart from GHCR, values from this repository.
+# notch-dev exists until 2026-11-14 and serves team accounts only (D-31);
+# the move to member B's host (NH-96) syncs prod only — delete this file then.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openshell-dev
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: platform
+  sources:
+    - repoURL: ghcr.io/nvidia/openshell
+      chart: helm-chart
+      targetRevision: 0.1.2
+      helm:
+        releaseName: openshell
+        valueFiles:
+          - $values/deploy/platform/openshell/values.yaml
+          - $values/deploy/platform/openshell/values-dev.yaml
+    - repoURL: https://github.com/Maximal1337/AI-Gym-Coach-Nebius.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: notch-dev
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

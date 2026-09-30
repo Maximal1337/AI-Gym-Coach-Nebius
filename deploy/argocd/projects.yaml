@@ -1,0 +1,72 @@
+# Two AppProjects, least privilege (D-29 applies to the cluster too):
+#   platform — cluster-wide pieces: the Agent Sandbox controller and CRDs, and
+#              the OpenShell gateways (their chart creates a ClusterRole).
+#   notch    — our own workloads: namespaced resources only, plus the two
+#              Namespaces themselves.
+# The prod sync window (D-32) freezes notch-prod and openshell-prod for
+# judging, 2026-12-01 00:00 → 2026-12-16 00:00 UTC. Manual syncs stay allowed
+# as the incident escape hatch (deploy/README.md).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: platform
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  description: Agent Sandbox controller and the OpenShell gateways
+  sourceRepos:
+    - https://github.com/Maximal1337/AI-Gym-Coach-Nebius.git
+    - ghcr.io/nvidia/openshell
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: agent-sandbox-system
+    - server: https://kubernetes.default.svc
+      namespace: notch-dev
+    - server: https://kubernetes.default.svc
+      namespace: notch-prod
+  clusterResourceWhitelist:
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+    - group: ""
+      kind: Namespace
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRole
+    - group: rbac.authorization.k8s.io
+      kind: ClusterRoleBinding
+  syncWindows:
+    - kind: deny
+      schedule: "0 0 1 12 *"
+      duration: 360h
+      timeZone: UTC
+      applications:
+        - openshell-prod
+      manualSync: true
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: notch
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+spec:
+  description: Notch workloads in notch-dev and notch-prod
+  sourceRepos:
+    - https://github.com/Maximal1337/AI-Gym-Coach-Nebius.git
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: notch-dev
+    - server: https://kubernetes.default.svc
+      namespace: notch-prod
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+  syncWindows:
+    - kind: deny
+      schedule: "0 0 1 12 *"
+      duration: 360h
+      timeZone: UTC
+      applications:
+        - notch-prod
+      manualSync: true

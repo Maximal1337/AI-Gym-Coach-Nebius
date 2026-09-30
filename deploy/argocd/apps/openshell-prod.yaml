@@ -1,0 +1,40 @@
+# Wave 10: the OpenShell gateway for prod, in notch-prod next to its relay
+# and its users' sandboxes. One gateway per environment is O-11's question,
+# answered by the spike (NH-21); the chart's cluster-scoped names already carry
+# the namespace, so two releases don't collide as objects.
+# Chart from GHCR, values from this repository.
+# Frozen 2026-12-01 → 12-15 by the sync window in deploy/argocd/projects.yaml.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openshell-prod
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
+spec:
+  project: platform
+  sources:
+    - repoURL: ghcr.io/nvidia/openshell
+      chart: helm-chart
+      targetRevision: 0.1.2
+      helm:
+        releaseName: openshell
+        valueFiles:
+          - $values/deploy/platform/openshell/values.yaml
+          - $values/deploy/platform/openshell/values-prod.yaml
+    - repoURL: https://github.com/Maximal1337/AI-Gym-Coach-Nebius.git
+      targetRevision: main
+      ref: values
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: notch-prod
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

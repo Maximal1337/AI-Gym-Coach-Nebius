@@ -1,0 +1,44 @@
+# Isolation between notch-dev and notch-prod (NH-36), from the ingress side:
+# no pod in one environment accepts a connection from the other.
+#
+# NetworkPolicies add up — a pod may receive whatever ANY policy selecting it
+# allows. OpenShell creates its own policies for sandbox pods (only the
+# sandbox's supervisor may reach the workload; the workload opens nothing).
+# A broad "allow the whole namespace" here would silently widen those, so the
+# rules below never grant a sandbox pod more than a connection from this
+# namespace's gateway, which already controls it.
+#
+# Egress is left to OpenShell's policies and the host firewall; the egress
+# allowlist is NH-32. The CNI is k3s' embedded kube-router NetworkPolicy
+# controller, which enforces both directions (OpenShell's requirement).
+
+# Every pod in the namespace: ingress only from this namespace's gateway.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-from-gateway-only
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              notch.app/role: gateway
+---
+# The gateway: ingress from its own namespace — the relay and the sandbox
+# supervisors call it; nothing from the other environment.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gateway-from-own-namespace
+spec:
+  podSelector:
+    matchLabels:
+      notch.app/role: gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}

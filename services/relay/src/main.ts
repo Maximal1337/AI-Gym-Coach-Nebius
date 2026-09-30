@@ -71,9 +71,12 @@ async function main(): Promise<void> {
   log("started", { env, batch, leaseSeconds, staticSandboxes: sandboxes.size });
   let backoffMs = 1_000;
   while (running) {
+    // The heartbeat says "the loop is turning", not "Supabase is up": it's
+    // written on every iteration, failed polls included, so the liveness probe
+    // restarts a stuck relay but not one waiting out an outage in backoff.
+    await writeFile(heartbeat, new Date().toISOString()).catch(() => {});
     try {
       const outcomes = await runOnce(deps, batch, leaseSeconds);
-      await writeFile(heartbeat, new Date().toISOString());
       backoffMs = 1_000;
       if (outcomes.length > 0) log("batch", { outcomes });
       else await sleep(idlePollMs);

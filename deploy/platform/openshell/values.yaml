@@ -1,0 +1,38 @@
+# OpenShell gateway values shared by dev and prod (chart
+# oci://ghcr.io/nvidia/openshell/helm-chart 0.1.2, pinned in
+# deploy/argocd/apps/openshell-*.yaml). Argo CD renders the chart with
+# `helm template`, where Helm's `lookup` returns nothing — two values below
+# exist only because of that.
+
+agentSandbox:
+  preflight:
+    # The preflight check fails rendering when the Sandbox API isn't served
+    # yet. Ordering is handled by sync waves instead: agent-sandbox (-10) is
+    # healthy before the gateways (10) sync.
+    enabled: false
+
+server:
+  # No anonymous telemetry from the gateway or the sandbox supervisors.
+  telemetryEnabled: false
+  credentialStorage:
+    # The chart generates this key with `lookup` + random bytes. Under Argo CD
+    # that would mint a new key on every render and lock the gateway out of the
+    # provider credentials it already stored. secrets.sh creates it once per
+    # environment instead; back it up with the gateway's volume (NH-34).
+    existingSecret: openshell-credential-kek
+  # Sandboxes keep Hermes' memory, skills and sessions under /sandbox (D-26,
+  # D-30). k3s' local-path provisioner doesn't enforce the size; it's the
+  # budget per account, out of a 60 GiB disk shared by all of them.
+  workspaceStorageClass: local-path
+  workspaceDefaultStorageSize: 1Gi
+
+# The gateway pod's role label. deploy/notch/base/network-policies.yaml keys on
+# it; sandbox pods, which the gateway creates itself, never carry it.
+podLabels:
+  notch.app/role: gateway
+
+# Requests only until NH-25 measures the gateway; a guessed limit could OOM it.
+resources:
+  requests:
+    cpu: 50m
+    memory: 96Mi

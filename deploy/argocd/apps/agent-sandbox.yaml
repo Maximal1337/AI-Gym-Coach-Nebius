@@ -1,0 +1,33 @@
+# Wave -10: the Agent Sandbox controller and CRDs (kubernetes-sigs/agent-sandbox),
+# a cluster-wide prerequisite of OpenShell's Kubernetes driver. It must be
+# healthy before the gateways sync (wave 10).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: agent-sandbox
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-10"
+spec:
+  project: platform
+  source:
+    repoURL: https://github.com/Maximal1337/AI-Gym-Coach-Nebius.git
+    targetRevision: main
+    path: deploy/platform/agent-sandbox
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: agent-sandbox-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      # The Sandbox CRD is ~200 KB, close to the 256 KB limit of client-side
+      # apply's last-applied annotation.
+      - ServerSideApply=true
+    retry:
+      limit: 10
+      backoff:
+        duration: 30s
+        factor: 2
+        maxDuration: 10m

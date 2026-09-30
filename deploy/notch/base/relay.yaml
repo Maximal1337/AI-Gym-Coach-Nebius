@@ -1,0 +1,95 @@
+# The relay (NH-54): pulls jobs from Supabase, runs each in the user's
+# sandbox, delivers the reply. Outbound calls only (D-27), so no Service.
+#
+# Configuration: RELAY_ENV from the overlay's ConfigMap; RELAY_SECRET,
+# SUPABASE_FUNCTIONS_URL, TOKEN_FACTORY_MODEL (and, until NH-55,
+# RELAY_STATIC_SANDBOXES) from the `notch-relay` Secret that
+# deploy/bootstrap/secrets.sh creates.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: notch-relay
+automountServiceAccountToken: false
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notch-relay
+  labels:
+    app.kubernetes.io/name: notch-relay
+    notch.app/role: relay
+spec:
+  replicas: 1
+  # One relay per environment; a second one would be safe (leases) but costs
+  # RAM on a 2 vCPU / 8 GiB host (D-31).
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: notch-relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: notch-relay
+        notch.app/role: relay
+    spec:
+      serviceAccountName: notch-relay
+      automountServiceAccountToken: false
+      # SIGTERM stops the poll loop; a batch in flight gets up to its turn
+      # timeout (RELAY_TURN_TIMEOUT_MS, 120 s) to finish and deliver.
+      terminationGracePeriodSeconds: 150
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: relay
+          image: notch-relay
+          envFrom:
+            - configMapRef:
+                name: notch-relay-config
+            - secretRef:
+                name: notch-relay
+          env:
+            - name: RELAY_HEARTBEAT_FILE
+              value: /tmp/relay-heartbeat
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 20m
+              memory: 96Mi
+            limits:
+              memory: 256Mi
+          # The poll loop writes the heartbeat on every turn, failed polls
+          # included (src/main.ts). Stale for 5 minutes means the loop is stuck
+          # — longer than a batch can take (120 s turn timeout plus the 30 s
+          # Supabase calls) — so the pod is restarted.
+          startupProbe:
+            exec:
+              command: ["sh", "-c", "test -f /tmp/relay-heartbeat"]
+            periodSeconds: 5
+            failureThreshold: 24
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - test $(( $(date +%s) - $(stat -c %Y /tmp/relay-heartbeat) )) -lt 300
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 2
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir:
+            sizeLimit: 64Mi

@@ -1,0 +1,17 @@
+# The OpenShell Helm chart is an OCI artifact on GHCR
+# (oci://ghcr.io/nvidia/openshell/helm-chart). It's public, so this repository
+# entry carries no credentials and is safe in Git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: repo-openshell-helm
+  namespace: argocd
+  labels:
+    argocd.argoproj.io/secret-type: repository
+  annotations:
+    argocd.argoproj.io/sync-wave: "-20"
+stringData:
+  name: openshell
+  type: helm
+  url: ghcr.io/nvidia/openshell
+  enableOCI: "true"

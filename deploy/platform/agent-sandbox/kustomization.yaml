@@ -1,0 +1,23 @@
+# The Agent Sandbox controller and its CRDs, pinned to a release. OpenShell's
+# Kubernetes driver creates Sandbox resources; this controller turns them into
+# pods. Upgrading: change the version here, then restart the OpenShell
+# gateways (their docs: the gateway detects new API versions on restart).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.4/sandbox.yaml
+patches:
+  # The release ships no requests or limits; on a 2 vCPU / 8 GiB host (D-31)
+  # every pod declares what it needs.
+  - target:
+      kind: Deployment
+      name: agent-sandbox-controller
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: 10m
+            memory: 48Mi
+          limits:
+            memory: 256Mi
