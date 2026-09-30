@@ -1,0 +1,123 @@
+# Hermes Agent configuration for every user's sandbox (NH-40, D-25, D-29).
+# Installed into $HERMES_HOME by install-profile.sh on every start, so the
+# repository stays the source of truth; the user's memories, skills and
+# sessions next to it are never touched. Written against Hermes Agent's docs
+# as of v2026.9.24.
+#
+# No secret appears here. `${VAR}` values come from the sandbox environment,
+# and the credentials among them are OpenShell placeholders: the real key is
+# put into the request by OpenShell's proxy, only for that provider's host
+# (D-28), so the agent never holds it. See ../README.md for every variable.
+
+model:
+  # Nemotron on Nebius Token Factory. The model id is chosen in NH-22 and set
+  # per environment; the relay prices spend with the same variable (D-34).
+  provider: nebius-token-factory   # key: NEBIUS_API_KEY (placeholder)
+  default: "${TOKEN_FACTORY_MODEL}"
+
+agent:
+  # Short coaching answers don't need long reasoning, and every reasoning token
+  # counts against the D-34 ceilings. NH-25 measures quality and cost; raise
+  # it only if answers suffer.
+  reasoning_effort: "low"
+  # D-29: off everywhere, whatever a platform default would include.
+  disabled_toolsets:
+    - terminal
+    - file
+    - code_execution
+    - browser
+    - computer_use
+    - delegation
+    - cronjob
+    - session_search
+    - todo
+    - clarify
+    - connections
+    - homeassistant
+    - vision
+    - image_gen
+    - video_gen
+    - tts
+
+# D-29: exactly these four for the API server the relay talks to — the Notch
+# tools, web search (Tavily), and Hermes' own memory and skills (D-30).
+platform_toolsets:
+  api_server: [mcp-notch, web, memory, skills]
+
+mcp_servers:
+  notch:
+    # supabase/functions/notch-tools: stateless Streamable HTTP, POST only.
+    url: "${NOTCH_TOOLS_URL}"
+    headers:
+      # The user's own tool token (NH-41); it resolves to this user and
+      # nothing else, and the placeholder only resolves for this host.
+      Authorization: "Bearer ${NOTCH_TOOL_TOKEN}"
+    timeout: 30
+    connect_timeout: 15
+    # GET on the function is 405 (no server-sent stream), which Hermes'
+    # content-type probe would read as "not an MCP endpoint".
+    skip_preflight: true
+    supports_parallel_tool_calls: false
+    tools:
+      # Everything the coach needs; the server's test tool (notch_ping) stays out.
+      include:
+        - get_profile
+        - get_active_plans
+        - get_workout_history
+        - get_user_facts
+        - save_note
+        - adjust_plan_exercise
+        - undo_last_change
+      resources: false
+      prompts: false
+
+web:
+  backend: tavily                  # key: TAVILY_API_KEY (placeholder)
+  # No silent fallback to other search vendors: every query goes to Tavily,
+  # the one search host the sandbox's egress policy allows (NH-32).
+  keyless_fallback: false
+
+memory:
+  # MEMORY.md: the agent's own coaching know-how. USER.md stays off: facts
+  # about the user live in Notch's user_facts, which the user can see and
+  # delete (D-30, NH-71) — a copy inside Hermes would survive that delete.
+  memory_enabled: true
+  user_profile_enabled: false
+  memory_char_limit: 2200
+
+auxiliary:
+  # Hidden model calls that the relay's usage never sees, so the D-34
+  # ceilings couldn't count them: the post-turn memory/skill review fork, and
+  # a session title for every request (each relay request is a new session).
+  # Memory and skills are still written in the turn itself, through the tools.
+  background_review:
+    enabled: false
+  title_generation:
+    enabled: false
+
+curator:
+  # The deterministic stale/archive pass only; no model calls.
+  consolidate: false
+
+gateway:
+  api_server:
+    enabled: true
+    # The key is API_SERVER_KEY, per sandbox, held by the relay (NH-55).
+    # Loopback by default; NH-29 sets API_SERVER_HOST if OpenShell's route to
+    # the sandbox needs another address.
+    host: 127.0.0.1
+    port: 8642
+    model_name: notch-coach
+    # D-29: one turn at a time per sandbox. The queue already sends one job
+    # per user at a time; this makes a second one a 429 instead of a race.
+    max_concurrent_runs: 1
+    # A `model` in the request body (the relay sends "hermes-agent") is
+    # ignored unless direct_model_requests is on; it stays off.
+
+updates:
+  check: false
+
+telemetry:
+  shared_metrics:
+    enabled: false
+    send: false
