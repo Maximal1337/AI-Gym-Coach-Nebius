@@ -1,6 +1,6 @@
 # Notch × Nebius Hackathon — Decisions & Action Plan
 
-> **Status:** Accepted v1.2 — revised 2026-09-27: runtime moved to OpenShell + Hermes, infrastructure on k3s with Argo CD, budget held inside the credits · **Last updated:** 2026-09-27 · **Owners:** @Maximal1337, @dorhaimbob-web
+> **Status:** Accepted v1.2 — revised 2026-09-27: runtime moved to OpenShell + Hermes, infrastructure on k3s with Argo CD, budget held inside the credits · **Last updated:** 2026-10-01 · **Owners:** @Maximal1337, @dorhaimbob-web
 > **Track:** Personal AI · **Submission deadline:** 2026-10-30 10:00 PT · **Judging:** 2026-12-01 → 2026-12-15
 > **Tracking:** Linear — see [§8 Linear setup](#8-linear-setup)
 
@@ -34,6 +34,8 @@ How to use this document:
 - 2026-09-30, written, not yet run on a VPS: backups, restore and monitoring (NH-34, NH-35) in [`deploy/ops`](../deploy/README.md#backups-and-restore-nh-34) — nightly encrypted backups of every gateway and sandbox volume with SQLite copied consistently, the restore that is also the move to member B's credits (NH-96), and a health check every 5 minutes reporting to a dead man's switch; billing alerts in the budget runbook. A test runs all three scripts on real files against a fake kubectl in a separate "Ops scripts" workflow, so it can't hold up a deploy; it first runs on the next push.
 - 2026-09-30, ready to run on the VPS's first day: NH-28's Token Factory smoke test, [`scripts/token-factory-smoke.mjs`](../scripts/token-factory-smoke.mjs) — the tool round trip, `tool_choice: "required"` and JSON schema output with thinking off, per Nemotron model, as a table to paste into NH-28; 8 tests against a fake Token Factory. And NH-25's measurements, [`services/relay/src/bench.ts`](../services/relay/src/bench.ts): a scripted conversation, cold starts and a soak, run in the relay's pod with the relay's own prompt; 9 tests. And NH-26's probes: [`deploy/spike/sandbox-probe.sh`](../deploy/spike/sandbox-probe.sh) from inside a sandbox, [`services/relay/src/agent-probe.ts`](../services/relay/src/agent-probe.ts) against the agent. And NH-29's open question answered from OpenShell's docs and chart: the relay reaches its gateway with the chart's client certificate and no token (`allowUnauthenticatedUsers`, since there's no identity provider), and reaches a sandbox's Hermes port through the gateway by service hostname (`services/relay/src/gateway.ts`, with a real TLS test). NH-21 is prepared from NemoClaw's own image, and the relay now starts Hermes with `hermes gateway run`.
 - 2026-09-30, drafts: the Devpost submission, the judges' testing instructions, the feedback, the video script and the judging-period checklist in [`submission.md`](./submission.md) (NH-91, NH-93, NH-95), with placeholders for links and live numbers.
+- 2026-09-30 … 10-01, on GitHub: the Images workflow's first runs (NH-37, done) — the relay image built for `a06692a` and `4887498`, pushed to GHCR, its package public (pulled without credentials on 10-01), and both tag commits landed on `main`. The relay and the Hermes image now build in separate jobs and deploy separately, so a broken Hermes build can't hold back the relay.
+- 2026-10-01, a full local run: typecheck, 84 relay, 39 agent, 39 mobile and 182 Deno tests, the locale and `deno check` checks, the script tests, a full Metro bundle, the kustomize renders and the backup, restore and health check tests all pass; the sandbox probe's test passes except its check that system directories aren't writable, which a root shell can't pass. The PGlite SQL checks counted above aren't in the repository, so neither CI nor anyone else can re-run them yet.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -377,11 +379,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 37 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **142 remaining ≈ 50 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
+**Scope:** **179 points** in total, 40 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **139 remaining ≈ 49 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 132 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 129 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -560,6 +562,7 @@ node scripts/token-factory-smoke.mjs    # or --model <id>, repeatable
 - [ ] Agent Sandbox controller and the OpenShell Helm chart installed per the OpenShell Kubernetes setup guide; versions pinned
 - [ ] Hermes sandbox image built for `linux/amd64` from NemoClaw's Hermes blueprint plus our config; a test sandbox answers through the Hermes API — prepared 2026-09-30 from NemoClaw's own Dockerfile and start script ([the image README](../deploy/images/hermes-sandbox/README.md#for-the-dockerfile-nh-21)). Their start script refuses a config that doesn't match a hash pinned at build time, and it also runs a dashboard. So the first option is their image as the base with our own start command: install the profile, then `hermes gateway run` in the foreground. The relay's default command said `hermes gateway` and now says that.
 - [ ] O-11 answered: two gateways in one cluster, or one gateway with per-environment namespaces
+- [ ] After the first Images run that pushes it, the `notch-hermes-sandbox` package set to public in GHCR, or the cluster can't pull it (`deploy/README.md`, "Adding the Hermes sandbox image")
 - [ ] Upstream licenses (OpenShell, NemoClaw, Hermes) recorded for the README
 
 #### NH-22 · Connect Nemotron via Token Factory
@@ -662,14 +665,15 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 - [x] Argo CD UI and API not exposed; the CLI works over SSH — core install; `argocd --core`, and `argocd admin dashboard` through an SSH tunnel when a UI is needed
 - [ ] Bootstrapped on the VPS, both environments synced and healthy, the isolation checked (NH-26)
 
-#### NH-37 · CI: images to GHCR and tag updates
+#### NH-37 · CI: images to GHCR and tag updates ✅
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Feature · **Blocked by:** NH-21
 
 - [x] After green tests on `main`, CI builds the relay and Hermes sandbox images for `linux/amd64` and pushes them to GHCR — `.github/workflows/images.yml`, triggered by a successful CI run on a push to this repository's `main` (never a fork's pull request); the Hermes image builds as soon as NH-21 adds `deploy/images/hermes-sandbox/Dockerfile`
 - [x] CI commits the new image tags to the manifests; nothing else changes a tag — `scripts/bump-image-tag.mjs` rewrites lines marked `# image-tag: <image>`, never moving a tag backwards when runs finish out of order; the commit carries `[skip ci]`
 - [x] No self-hosted runner; the workflow uses only GitHub-hosted `ubuntu-latest`
 - [x] A red test leaves the cluster on the previous version — a failed CI run never reaches the Images workflow
-- [ ] First run on GitHub: the images pushed, the GHCR packages set to public, the tag commit lands
+- [x] First run on GitHub: the images pushed, the GHCR packages set to public, the tag commit lands — 2026-09-30 for the relay (`notch-relay` public, tag commits `3b8a080` and `e5e6fbd`); the Hermes package's first push and visibility belong to NH-21
+- [x] The relay and the Hermes image build in separate jobs and deploy separately (2026-10-01): an image that fails to build, or has no line marked for its tag, keeps its previous tag while the other one deploys, and the run still goes red
 
 #### NH-32 · Egress allowlist
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Security, Type/Chore · **Blocked by:** NH-26, NH-36
@@ -1016,7 +1020,7 @@ The weekly checklist and the fixed dates are in [`submission.md`](./submission.m
 
 | Risk | Impact | Mitigation | Related |
 |---|---|---|---|
-| Scope exceeds team capacity (156 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
+| Scope exceeds team capacity (139 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
 | OpenShell and Hermes are alpha; the Kubernetes path is less traveled than NemoClaw's host installer | Spike slips, runtime unstable | NH-21 first thing after the VPS; versions pinned; go/no-go on Oct 4 | NH-21, NH-27 |
 | 2 vCPU / 8 GiB doesn't hold the platform plus sandboxes | Long queues | Measured in NH-25 (O-12); shorter idle timeout, then a temporary 4/16 within the credits; never shared spaces | NH-25, D-31 |
 | Hermes gateway memory grows over hours (upstream issue) | OOM, sandboxes killed | Idle sandboxes stop after 10 minutes; per-sandbox RSS watchdog | NH-25, NH-35 |
