@@ -4,6 +4,10 @@
 # tags to deploy/. Argo CD on the VPS pulls that commit. A red CI run never
 # gets here, so the cluster stays on the previous version.
 #
+# Each image builds in its own job and deploys on its own: a broken Hermes
+# build doesn't hold back a relay that built, or the other way round. The
+# image that failed keeps its previous tag, and the run still goes red.
+#
 # GitHub-hosted runners only; a self-hosted runner on a public repository
 # would run strangers' pull-request code on our machine.
 name: Images
@@ -21,9 +25,10 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  build:
+  relay:
     # A push to this repository's main only: a pull request from a fork's own
     # `main` also completes CI with head_branch "main", and must never deploy.
+    # The hermes job repeats this condition; keep the two the same.
     if: >-
       github.event.workflow_run.conclusion == 'success' &&
       github.event.workflow_run.event == 'push' &&
@@ -34,7 +39,6 @@ jobs:
       packages: write
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
-      hermes: ${{ steps.meta.outputs.hermes }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -48,7 +52,6 @@ jobs:
         run: |
           echo "tag=sha-${SHA:0:12}" >> "$GITHUB_OUTPUT"
           echo "registry=ghcr.io/${OWNER,,}" >> "$GITHUB_OUTPUT"
-          if [ -f deploy/images/hermes-sandbox/Dockerfile ]; then echo "hermes=true"; else echo "hermes=false"; fi >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v4
 
@@ -72,10 +75,49 @@ jobs:
           cache-from: type=gha,scope=relay
           cache-to: type=gha,scope=relay,mode=max
 
-      # The sandbox image comes with the spike (NH-21), built from NemoClaw's
-      # Hermes blueprint. Until its Dockerfile exists this step is skipped.
+  # The sandbox image comes with the spike (NH-21), built from NemoClaw's
+  # Hermes blueprint. Until its Dockerfile exists this job only looks for it.
+  hermes:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      dockerfile: ${{ steps.meta.outputs.dockerfile }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - id: meta
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          {
+            echo "tag=sha-${SHA:0:12}"
+            echo "registry=ghcr.io/${OWNER,,}"
+            if [ -f deploy/images/hermes-sandbox/Dockerfile ]; then echo "dockerfile=true"; else echo "dockerfile=false"; fi
+          } >> "$GITHUB_OUTPUT"
+
+      - if: steps.meta.outputs.dockerfile == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - if: steps.meta.outputs.dockerfile == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Hermes sandbox
-        if: steps.meta.outputs.hermes == 'true'
+        if: steps.meta.outputs.dockerfile == 'true'
         uses: docker/build-push-action@v7
         with:
           context: deploy/images/hermes-sandbox
@@ -89,7 +131,13 @@ jobs:
           cache-to: type=gha,scope=hermes,mode=max
 
   deploy:
-    needs: build
+    needs: [relay, hermes]
+    # Whenever at least one image was built, whatever happened to the other;
+    # never after a cancel.
+    if: >-
+      !cancelled() &&
+      (needs.relay.result == 'success' ||
+      (needs.hermes.result == 'success' && needs.hermes.outputs.dockerfile == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -105,16 +153,25 @@ jobs:
         with:
           node-version: 22
 
+      # Only an image that was built gets a new tag. A bump that fails — e.g.
+      # no line marked for the image yet, see deploy/README.md — doesn't stop
+      # the other image's: what did move is committed, then the job fails.
       - id: bump
         env:
           SHA: ${{ github.event.workflow_run.head_sha }}
-          TAG: ${{ needs.build.outputs.tag }}
-          HERMES: ${{ needs.build.outputs.hermes }}
+          RELAY: ${{ needs.relay.result == 'success' }}
+          RELAY_TAG: ${{ needs.relay.outputs.tag }}
+          HERMES: ${{ needs.hermes.result == 'success' && needs.hermes.outputs.dockerfile == 'true' }}
+          HERMES_TAG: ${{ needs.hermes.outputs.tag }}
         run: |
-          node scripts/bump-image-tag.mjs notch-relay "$TAG" --commit "${SHA:0:12}"
-          if [ "$HERMES" = true ]; then
-            node scripts/bump-image-tag.mjs notch-hermes-sandbox "$TAG" --commit "${SHA:0:12}"
+          failed=""
+          if [ "$RELAY" = true ]; then
+            node scripts/bump-image-tag.mjs notch-relay "$RELAY_TAG" --commit "${SHA:0:12}" || failed="$failed notch-relay"
           fi
+          if [ "$HERMES" = true ]; then
+            node scripts/bump-image-tag.mjs notch-hermes-sandbox "$HERMES_TAG" --commit "${SHA:0:12}" || failed="$failed notch-hermes-sandbox"
+          fi
+          echo "failed=${failed# }" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then echo "changed=false"; else echo "changed=true"; fi >> "$GITHUB_OUTPUT"
 
       # [skip ci]: the commit only moves tags; its code is the commit CI just
@@ -131,4 +188,11 @@ jobs:
             sleep $((attempt * 5))
             git pull --rebase origin main
           done
+          exit 1
+
+      - if: steps.bump.outputs.failed != ''
+        env:
+          FAILED: ${{ steps.bump.outputs.failed }}
+        run: |
+          echo "::error::The tag bump failed for: $FAILED"
           exit 1

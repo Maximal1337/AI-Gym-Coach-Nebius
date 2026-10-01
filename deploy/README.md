@@ -82,7 +82,10 @@ kubectl get pods -A
 
 - **Deploying** is pushing to `main`. After CI passes, the Images workflow
   builds, pushes and commits the tag; Argo CD applies it within about three
-  minutes. `argocd --core app get notch-prod` shows what's live.
+  minutes. `argocd --core app get notch-prod` shows what's live. The relay
+  and the Hermes image build in separate jobs and deploy separately: one that
+  fails to build keeps its previous tag, the other still deploys, and the run
+  goes red.
 - **Rolling back** is `git revert` of the tag commit ("Deploy <sha> to the
   cluster"), pushed to `main`. Don't `kubectl edit`: self-heal reverts it.
 - **Secrets** change only through `secrets.sh`, which restarts the relay.
@@ -333,4 +336,7 @@ sudo /usr/local/lib/notch-ops/health.sh
    ```
 
    Without the marker the deploy job fails on purpose: an image nobody points
-   at would be built and never used.
+   at would be built and never used. The relay's tag still moves first, so
+   relay deploys don't wait for this.
+3. After the first run that pushes it, set the `notch-hermes-sandbox` package
+   to public, as for the relay above, or the cluster can't pull it.
