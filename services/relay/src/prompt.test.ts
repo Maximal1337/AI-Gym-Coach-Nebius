@@ -119,6 +119,12 @@ test("sources: at most 10", () => {
   assert.equal(extractSources(text).length, 10);
 });
 
+// The other half of this contract is in supabase/functions/assistant-deliver/handler.test.ts:
+// change both sides together.
+test("contract: REPLY_LIMITS are assistant-deliver's DELIVER_SCHEMA limits", () => {
+  assert.deepEqual({ ...REPLY_LIMITS }, { text: 8000, sources: 10, urlMin: 9, urlMax: 500, title: 200 });
+});
+
 test("reply text: cut to what assistant-deliver accepts, with an ellipsis", () => {
   const long = replyText("word ".repeat(3000));
   assert.equal(long.length <= REPLY_LIMITS.text, true);

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chat, HermesError } from "./hermes.js";
 import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
-import { DELIVERY_MARGIN_MS, LEASE_SHORT_DEFER_SECONDS, processJob, type RelayDeps, runOnce, turnBudget } from "./relay.js";
+import { DELIVERY_MARGIN_MS, LEASE_SECONDS_RANGE, LEASE_SHORT_DEFER_SECONDS, processJob, type RelayDeps, runOnce, turnBudget } from "./relay.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 
 const ENDPOINT = { baseUrl: "http://10.42.0.17:8642", apiKey: "sandbox-key" };
@@ -128,14 +128,23 @@ test("SKIP in a normal chat is just a reply", async () => {
 });
 
 test("a lost lease or a deleted job drops the result; assistant-deliver has charged it, so the relay doesn't", async () => {
-  for (const status of [409, 404]) {
+  for (const [status, error] of [[409, "lease_lost"], [404, "job_not_found"]] as const) {
     let calls = 0;
     const { d, log } = deps();
-    d.outbox.deliver = () => (calls++, Promise.resolve({ status, body: {} }));
+    d.outbox.deliver = () => (calls++, Promise.resolve({ status, body: { error } }));
     assert.equal(await processJob(job(), d), "dropped");
     assert.equal(calls, 1, "not retried");
     assert.equal(log.failed.length, 0);
   }
+});
+
+test("a 404 that isn't assistant-deliver's (the function missing) is charged through fail, not taken as charged", async () => {
+  const { d, log } = deps();
+  d.outbox.deliver = () => Promise.resolve({ status: 404, body: { code: "NOT_FOUND", message: "Requested function was not found" } });
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(log.failed.length, 1);
+  assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
+  assert.match(log.failed[0].error, /^delivery_rejected: 404 /);
 });
 
 test("a delivery refused as invalid isn't retried: the turn is charged through fail and the job goes back", async () => {
@@ -168,6 +177,19 @@ test("a model reply over the limit is cut before it's delivered, never refused",
   assert.equal(log.delivered[0].reply!.text.length, 8000);
 });
 
+test("a reply with nothing storable left isn't sent to be refused: the turn is charged and the job goes back", async () => {
+  const { d, log } = deps({ chat: () => Promise.resolve({ text: "\u0000 \n\u0000", usage: { tokensInput: 900, tokensOutput: 2 } }) });
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(log.delivered.length, 0);
+  assert.deepEqual(log.failed, [{
+    job_id: 7,
+    lease_token: "lease-7",
+    error: "hermes returned an empty reply",
+    model: "nvidia/nemotron-3-super",
+    usage: { tokensInput: 900, tokensOutput: 2 },
+  }]);
+});
+
 // ------------------------------------------------------------ lease deadline
 
 test("too little lease left once the sandbox is ready: deferred unspent, sandbox released", async () => {
@@ -183,24 +205,36 @@ test("too little lease left once the sandbox is ready: deferred unspent, sandbox
 });
 
 test("runOnce: the deadline is the lease from before the claim, so a slow sandbox defers instead of running late", async () => {
-  for (const [acquireMs, expected] of [[30_000, "delivered"], [60_000, "deferred"]] as const) {
+  // 180 s lease − 135 s turn budget leaves 45 s, counted from before the claim,
+  // which itself takes 20 s here. Counted from after it, a 30 s acquire would fit.
+  for (const [acquireMs, expected] of [[25_000, "delivered"], [30_000, "deferred"]] as const) {
     let clock = Date.parse("2026-10-10T08:00:00Z");
+    const base = deps().d.outbox;
     const { d } = deps({
       now: () => new Date(clock),
+      outbox: { ...base, claim: (limit, leaseSeconds) => ((clock += 20_000), base.claim(limit, leaseSeconds)) },
       acquireSandbox: () => {
         clock += acquireMs;
         return Promise.resolve({ endpoint: ENDPOINT, release: () => {} });
       },
     });
-    // 180 s lease − 135 s turn budget leaves 45 s to get the sandbox.
     assert.deepEqual(await runOnce(d, 1, 180), [expected], `acquire took ${acquireMs} ms`);
   }
 });
 
-test("turnBudget: the turn timeout plus the delivery margin, and a lease too short for it refuses to start", () => {
+// The other half of this contract is in supabase/functions/assistant-outbox/handler.test.ts:
+// change both sides together.
+test("contract: LEASE_SECONDS_RANGE is assistant-outbox's CLAIM_SCHEMA lease_seconds", () => {
+  assert.deepEqual({ ...LEASE_SECONDS_RANGE }, { min: 30, max: 900 });
+});
+
+test("turnBudget: the turn timeout plus the delivery margin; a lease the claim refuses or can't cover won't start", () => {
   assert.equal(turnBudget(180, 120_000), 120_000 + DELIVERY_MARGIN_MS);
-  assert.throws(() => turnBudget(150, 120_000), /RELAY_LEASE_SECONDS \(150\) must be at least 165/);
   assert.equal(turnBudget(165, 120_000), 135_000);
+  assert.throws(() => turnBudget(150, 120_000), /RELAY_LEASE_SECONDS \(150\) must be at least 165/);
+  assert.throws(() => turnBudget(180.5, 120_000), /whole number from 30 to 900/);
+  assert.throws(() => turnBudget(1200, 600_000), /whole number from 30 to 900/);
+  assert.throws(() => turnBudget(900, 860_000), /RELAY_TURN_TIMEOUT_MS \(860000\) is too long/);
 });
 
 test("delivery is retried on transient errors (it's idempotent)", async () => {

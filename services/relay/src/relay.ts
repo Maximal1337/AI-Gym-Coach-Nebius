@@ -48,16 +48,23 @@ export const DELIVERY_MARGIN_MS = 15_000;
 export const LEASE_SHORT_DEFER_SECONDS = 2;
 /** What a lease must leave for getting the sandbox on top of the turn budget. */
 export const MIN_ACQUIRE_MS = 30_000;
+/** The leases assistant-outbox grants: lease_seconds in its CLAIM_SCHEMA, a whole number of seconds. */
+export const LEASE_SECONDS_RANGE = { min: 30, max: 900 } as const;
 
 /**
- * RelayDeps.turnBudgetMs for a turn timeout. Throws when the lease would
- * leave under MIN_ACQUIRE_MS to get the sandbox: jobs would keep being
- * deferred instead of run.
+ * RelayDeps.turnBudgetMs for a turn timeout. Throws for a lease that
+ * assistant-outbox would refuse, or that leaves under MIN_ACQUIRE_MS to get
+ * the sandbox: either way the relay would run and never answer anyone.
  */
 export function turnBudget(leaseSeconds: number, turnTimeoutMs: number): number {
+  const { min, max } = LEASE_SECONDS_RANGE;
+  if (!Number.isInteger(leaseSeconds) || leaseSeconds < min || leaseSeconds > max) {
+    throw new Error(`RELAY_LEASE_SECONDS (${leaseSeconds}) must be a whole number from ${min} to ${max}`);
+  }
   const budgetMs = turnTimeoutMs + DELIVERY_MARGIN_MS;
-  if (leaseSeconds * 1000 - budgetMs < MIN_ACQUIRE_MS) {
-    const minimum = Math.ceil((budgetMs + MIN_ACQUIRE_MS) / 1000);
+  const minimum = Math.ceil((budgetMs + MIN_ACQUIRE_MS) / 1000);
+  if (minimum > max) throw new Error(`RELAY_TURN_TIMEOUT_MS (${turnTimeoutMs}) is too long for any lease up to ${max} s`);
+  if (leaseSeconds < minimum) {
     throw new Error(`RELAY_LEASE_SECONDS (${leaseSeconds}) must be at least ${minimum} with RELAY_TURN_TIMEOUT_MS ${turnTimeoutMs}`);
   }
   return budgetMs;
@@ -128,31 +135,41 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, deps: Re
   // From here on the model has run: every way out charges the turn (D-34).
   const charge = { model: deps.model, ...(result.usage ? { usage: result.usage } : {}) };
   const skip = job.job.kind === "checkin" && result.text.trim() === CHECKIN_SKIP;
+  const text = skip ? "" : replyText(result.text);
+  if (!skip && !text) {
+    // Nothing storable was left (the reply was only NUL characters), which
+    // deliver would refuse: the same as an empty reply from Hermes.
+    deps.log("turn_failed", { job: job.id, error: "empty reply", spent: true });
+    await deps.outbox.fail({ ...base, error: "hermes returned an empty reply", ...charge });
+    return "failed";
+  }
   const request: DeliverRequest = {
     ...base,
     ...charge,
-    ...(skip ? { skip: true } : { reply: { text: replyText(result.text), sources: extractSources(result.text) } }),
+    ...(skip ? { skip: true } : { reply: { text, sources: extractSources(result.text) } }),
   };
   let delivery: { status: number; body: Record<string, unknown> };
   try {
     delivery = await deliverWithRetry(deps, request);
   } catch (e) {
     // Every attempt failed. fail charges the turn and puts the job back. Should
-    // one attempt have reached the database after all, the job is done already
-    // and the charge counts twice: an overcount, never a lost one.
+    // an attempt have reached assistant-deliver after all, its response lost,
+    // the turn may be charged more than once: an overcount, never a lost one.
     deps.log("delivery_failed", { job: job.id, error: String(e) });
     await deps.outbox.fail({ ...base, error: `delivery_failed: ${String(e)}`, ...charge });
     return "failed";
   }
-  if (delivery.status === 409 || delivery.status === 404) {
-    // 409: the lease expired and another attempt owns the job; 404: the job is
-    // gone (user deleted). assistant-deliver charged the turn all the same.
+  const refusal = delivery.body.error;
+  if ((delivery.status === 409 && refusal === "lease_lost") || (delivery.status === 404 && refusal === "job_not_found")) {
+    // The lease expired and another attempt owns the job, or the job is gone
+    // (user deleted). assistant-deliver charged the turn all the same.
     deps.log("delivery_dropped", { job: job.id, status: delivery.status });
     return "dropped";
   }
   if (delivery.status !== 200) {
-    // Refused as invalid (400): the same request would be refused again.
-    // Charge the turn and put the job back for a fresh attempt.
+    // Refused as invalid (400), or a 404/409 that isn't assistant-deliver's
+    // own answer (the function not deployed, say): nothing charged the turn,
+    // and the same request would be refused again. Charge it and put the job back.
     const detail = JSON.stringify(delivery.body).slice(0, 300);
     deps.log("delivery_rejected", { job: job.id, status: delivery.status, detail });
     await deps.outbox.fail({ ...base, error: `delivery_rejected: ${delivery.status} ${detail}`, ...charge });

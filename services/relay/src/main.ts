@@ -22,7 +22,8 @@ import type { RelayEnvironment } from "./signing.js";
  *   TOKEN_FACTORY_MODEL       the model the sandboxes run, for pricing spend
  *   RELAY_BATCH (2), RELAY_LEASE_SECONDS (180), RELAY_TURN_TIMEOUT_MS (120000),
  *   RELAY_IDLE_POLL_MS (2000), RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat).
- *   The lease must cover the turn timeout plus 45 s (src/relay.ts turnBudget),
+ *   The lease is a whole number of seconds from 30 to 900 (what assistant-outbox
+ *   grants) and must cover the turn timeout plus 45 s (src/relay.ts turnBudget),
  *   or the relay refuses to start.
  *
  * Where sandboxes come from: RELAY_SANDBOXES = static (the default, the spike's

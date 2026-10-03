@@ -111,7 +111,9 @@ Deno.test("pushPreview flattens whitespace and trims to 140 characters", () => {
   assertEquals(long.endsWith("…"), true);
 });
 
-Deno.test("the reply limits the relay cuts to (REPLY_LIMITS in services/relay/src/prompt.ts) are this schema's", () => {
+// The other half of this contract is REPLY_LIMITS in services/relay/src/prompt.ts (and its
+// test): the relay cuts every reply to these limits, so change both sides together.
+Deno.test("contract: DELIVER_SCHEMA's reply limits are the relay's REPLY_LIMITS", () => {
   const reply = DELIVER_SCHEMA.properties!.reply;
   const sources = reply.properties!.sources;
   const source = sources.items!.properties!;
