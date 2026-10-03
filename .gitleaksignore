@@ -1,0 +1,11 @@
+# Findings gitleaks reports that aren't secrets, by fingerprint
+# (<commit>:<file>:<rule>:<line>). Each one was checked by hand; add a line
+# here only for a value that is provably not a credential.
+
+# A made-up job lease token (a UUID) in the relay channel's unit tests.
+880d8402d08cd68047291729f642d3005351eb59:supabase/functions/assistant-deliver/handler.test.ts:generic-api-key:5
+880d8402d08cd68047291729f642d3005351eb59:supabase/functions/assistant-outbox/handler.test.ts:generic-api-key:6
+
+# The app's local storage key name, 'gymcoach.pending-turn.v1'.
+d785f426df00fe4c8d1d09fbd5d85230aa9c912c:apps/mobile/src/lib/pendingTurn.ts:generic-api-key:40
+70f4e56306019a78542ec1879b2bd34d607fd311:apps/mobile/src/lib/pendingTurn.ts:generic-api-key:40
