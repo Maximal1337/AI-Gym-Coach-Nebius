@@ -53,7 +53,13 @@ check "the node's API port is tried" has "$out" "no connection to 127.0.0.2:6443
 check "the proxy is the positive control" has "$out" "INFO   net-control    the proxy at 127.0.0.1:18080 is reachable"
 check "a refusing proxy passes" has "$out" "PASS   net-proxy      the proxy refused example.com:443 (HTTP/1.1 403 Forbidden)"
 check "no service account token on the runner" has "$out" "PASS   sa-token"
-check "system directories aren't writable" has "$out" "PASS   fs-write"
+# A CI runner's user can't write to system directories; root can, and the probe
+# has to say so.
+if (( EUID == 0 )); then
+  check "system directories writable as root are reported" has "$out" "FAIL   fs-write       could write to: / /etc /usr /var"
+else
+  check "system directories aren't writable" has "$out" "PASS   fs-write"
+fi
 check "failures set the exit code" has "$out" "exit 1"
 
 out="$(run HTTPS_PROXY=http://user:pw@127.0.0.1:18081/)"
