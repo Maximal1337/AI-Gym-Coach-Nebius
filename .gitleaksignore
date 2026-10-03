@@ -6,6 +6,9 @@
 880d8402d08cd68047291729f642d3005351eb59:supabase/functions/assistant-deliver/handler.test.ts:generic-api-key:5
 880d8402d08cd68047291729f642d3005351eb59:supabase/functions/assistant-outbox/handler.test.ts:generic-api-key:6
 
-# The app's local storage key name, 'gymcoach.pending-turn.v1'.
+# The name of the app's local storage entry for a pending turn.
 d785f426df00fe4c8d1d09fbd5d85230aa9c912c:apps/mobile/src/lib/pendingTurn.ts:generic-api-key:40
 70f4e56306019a78542ec1879b2bd34d607fd311:apps/mobile/src/lib/pendingTurn.ts:generic-api-key:40
+
+# This file's own first version quoted that name in a comment.
+02bedab31a096f4140c4364794391c677f9e7176:.gitleaksignore:generic-api-key:9
