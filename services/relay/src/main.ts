@@ -6,7 +6,7 @@ import { chat } from "./hermes.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 import { OutboxClient } from "./outbox.js";
-import { type RelayDeps, runOnce } from "./relay.js";
+import { type RelayDeps, runOnce, turnBudget } from "./relay.js";
 import { SandboxManager } from "./sandbox-manager.js";
 import type { RelayEnvironment } from "./signing.js";
 
@@ -21,7 +21,9 @@ import type { RelayEnvironment } from "./signing.js";
  *   RELAY_SECRET              the environment's ASSISTANT_RELAY_SECRET_* value
  *   TOKEN_FACTORY_MODEL       the model the sandboxes run, for pricing spend
  *   RELAY_BATCH (2), RELAY_LEASE_SECONDS (180), RELAY_TURN_TIMEOUT_MS (120000),
- *   RELAY_IDLE_POLL_MS (2000), RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat)
+ *   RELAY_IDLE_POLL_MS (2000), RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat).
+ *   The lease must cover the turn timeout plus 45 s (src/relay.ts turnBudget),
+ *   or the relay refuses to start.
  *
  * Where sandboxes come from: RELAY_SANDBOXES = static (the default, the spike's
  * map) or manager (the sandbox manager, NH-55). The manager needs:
@@ -68,6 +70,12 @@ async function main(): Promise<void> {
   const functionsUrl = required("SUPABASE_FUNCTIONS_URL").replace(/\/+$/, "");
   const outbox = new OutboxClient({ functionsUrl, env: env as RelayEnvironment, secret: required("RELAY_SECRET") });
   const model = required("TOKEN_FACTORY_MODEL");
+  const timeoutMs = number("RELAY_TURN_TIMEOUT_MS", 120_000);
+  const batch = number("RELAY_BATCH", 2);
+  const leaseSeconds = number("RELAY_LEASE_SECONDS", 180);
+  const turnBudgetMs = turnBudget(leaseSeconds, timeoutMs);
+  const idlePollMs = number("RELAY_IDLE_POLL_MS", 2_000);
+  const heartbeat = process.env.RELAY_HEARTBEAT_FILE ?? "/tmp/relay-heartbeat";
   const timers: NodeJS.Timeout[] = [];
   let acquireSandbox: RelayDeps["acquireSandbox"];
   const mode = process.env.RELAY_SANDBOXES?.trim() || "static";
@@ -126,11 +134,6 @@ async function main(): Promise<void> {
     acquireSandbox = staticAcquire(map);
     log("static_sandboxes", { users: map.size });
   }
-  const timeoutMs = number("RELAY_TURN_TIMEOUT_MS", 120_000);
-  const batch = number("RELAY_BATCH", 2);
-  const leaseSeconds = number("RELAY_LEASE_SECONDS", 180);
-  const idlePollMs = number("RELAY_IDLE_POLL_MS", 2_000);
-  const heartbeat = process.env.RELAY_HEARTBEAT_FILE ?? "/tmp/relay-heartbeat";
   // HTTPS sandbox URLs are the gateway's service URLs: through the gateway, with its client certificate.
   const sandboxFetch = gateway ? gatewayFetch(gateway.route) : undefined;
 
@@ -139,6 +142,7 @@ async function main(): Promise<void> {
     acquireSandbox,
     chat: (endpoint, messages, options) => chat(endpoint, messages, { ...options, timeoutMs, ...(sandboxFetch ? { fetch: sandboxFetch } : {}) }),
     model,
+    turnBudgetMs,
     now: () => new Date(),
     log,
   };

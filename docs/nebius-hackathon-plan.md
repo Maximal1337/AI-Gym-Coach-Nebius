@@ -798,7 +798,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 
 - [x] HMAC-verified requests with replay protection (timestamp + dedup): a retried delivery returns the stored reply — one reply per job, enforced by a unique `job_id`
 - [x] Stores the reply in `assistant_messages` and finishes the job in one transaction (`assistant_complete_job`), then sends a push notification; a check-in can be finished with `skip` and no message
-- [x] Records the turn's spend with `recordSpend` — the usage the relay reports, or the fallback
+- [x] Records the turn's spend with `recordSpend` — the usage the relay reports, or the fallback — also when the result is dropped (409 `lease_lost`, 404 `job_not_found`)
 - [ ] Live smoke test against the deployed function (after the NH-06 rollout)
 
 #### NH-54 · The relay
@@ -807,6 +807,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [x] Polls `assistant-outbox`, routes each message to the user's sandbox Hermes API with that sandbox's key, posts the reply to `assistant-deliver` — `services/relay`; a user without a ready sandbox waits in the queue, never served elsewhere; sandbox addresses come from a static map until NH-55
 - [x] Attaches the facts block to every request (NH-64)
 - [x] Recovers from network errors: exponential backoff, idempotent delivery retries, a lost lease drops the result
+- [x] Keeps the D-34 spend total honest: a reply is cut to what `assistant-deliver` accepts (8000 characters, valid https sources, nothing jsonb refuses); a job whose sandbox took so long that its lease can't cover the turn is deferred unspent; and a turn whose result is lost — refused, undeliverable, or dropped on a lost lease — still records its spend
 - [ ] Deployed per environment through Argo CD (NH-36, NH-37)
 - [ ] Verified against a real Hermes sandbox: reply text, `usage` across the tool loop, `x-hermes-session-key` (NH-24, NH-25)
 

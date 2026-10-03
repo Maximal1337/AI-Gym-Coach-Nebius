@@ -121,10 +121,14 @@ export class OutboxClient {
     return body.ok === true;
   }
 
-  /** 200 delivered / skipped / already_delivered, 409 lease_lost, 404 job_not_found; throws on anything else. */
+  /**
+   * 200 delivered / skipped / already_delivered, 409 lease_lost, 404
+   * job_not_found, 400 invalid_input (retrying can't help); throws on anything
+   * else, which is worth a retry.
+   */
   async deliver(request: DeliverRequest): Promise<{ status: number; body: Record<string, unknown> }> {
     const result = await this.post("assistant-deliver", request);
-    if (result.status !== 200 && result.status !== 409 && result.status !== 404) {
+    if (result.status !== 200 && result.status !== 409 && result.status !== 404 && result.status !== 400) {
       throw new OutboxError(`deliver failed: ${result.status} ${JSON.stringify(result.body)}`, result.status);
     }
     return result;

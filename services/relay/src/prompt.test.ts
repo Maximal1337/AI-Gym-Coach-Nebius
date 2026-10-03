@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, replyText } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, clampText, contextBlock, extractSources, REPLY_LIMITS, replyText, storableText } from "./prompt.js";
 
 const NOW = new Date("2026-10-10T08:00:00Z");
 
@@ -117,4 +117,32 @@ test("sources: markdown links and bare https URLs, deduplicated, never http", ()
 test("sources: at most 10", () => {
   const text = Array.from({ length: 15 }, (_, i) => `https://a.example/${i}`).join(" ");
   assert.equal(extractSources(text).length, 10);
+});
+
+test("reply text: cut to what assistant-deliver accepts, with an ellipsis", () => {
+  const long = replyText("word ".repeat(3000));
+  assert.equal(long.length <= REPLY_LIMITS.text, true);
+  assert.ok(long.endsWith("word…"), long.slice(-10));
+  assert.equal(replyText("x".repeat(REPLY_LIMITS.text)), "x".repeat(REPLY_LIMITS.text), "a reply at the limit is left whole");
+  assert.equal(replyText("x".repeat(REPLY_LIMITS.text + 1)).length, REPLY_LIMITS.text);
+});
+
+test("reply text: a cut never splits an emoji into a lone surrogate", () => {
+  const cut = clampText("x".repeat(REPLY_LIMITS.text - 2) + "💪💪", REPLY_LIMITS.text);
+  assert.equal(cut.length <= REPLY_LIMITS.text, true);
+  assert.equal(storableText(cut), cut, "nothing left for storableText to repair");
+  assert.ok(cut.endsWith("x…"));
+});
+
+test("reply text: NUL characters and unpaired surrogates, which jsonb refuses, are made storable", () => {
+  assert.equal(replyText("a\u0000b"), "ab");
+  assert.equal(replyText("lone \uD83D here"), "lone \uFFFD here");
+  assert.equal(replyText("lone \uDE00 here"), "lone \uFFFD here");
+  assert.equal(replyText("pair 💪 kept"), "pair 💪 kept");
+});
+
+test("sources: only links assistant-deliver accepts — a host, within the length limits", () => {
+  assert.deepEqual(extractSources("see https://. and https:// and https://example.org/x)."), [{ url: "https://example.org/x" }]);
+  assert.deepEqual(extractSources(`https://a.example/${"p".repeat(REPLY_LIMITS.urlMax)}`), []);
+  assert.deepEqual(extractSources("[Guide](https://a.example/\u0000g)"), [{ title: "Guide", url: "https://a.example/g" }]);
 });

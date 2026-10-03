@@ -107,14 +107,50 @@ export function buildMessages(job: JobContext, now: Date): ChatMessage[] {
 }
 
 /**
+ * What assistant-deliver accepts (DELIVER_SCHEMA in
+ * supabase/functions/assistant-deliver/handler.ts, lengths in UTF-16 units):
+ * it refuses a whole reply that breaks any of these, so the relay keeps
+ * every reply inside them.
+ */
+export const REPLY_LIMITS = { text: 8000, sources: 10, urlMin: 9, urlMax: 500, title: 200 } as const;
+
+/**
+ * A model's text, made storable: Postgres' jsonb refuses NUL characters and
+ * unpaired surrogates, and a reply holding either would fail its delivery
+ * every time.
+ */
+export function storableText(text: string): string {
+  return text.replace(/\u0000/g, "").replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "�");
+}
+
+/** At most `max` UTF-16 units, never splitting a surrogate pair; a text that was cut ends with "…". */
+export function clampText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let cut = text.slice(0, max - 1);
+  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
+  return `${cut.trimEnd()}…`;
+}
+
+/**
  * The reply as the app shows it. The chat renders plain text and **bold**
  * only, so a markdown link would show as raw brackets: it becomes its title,
  * and the link itself becomes a tappable source under the message
- * (extractSources, run on the original text).
+ * (extractSources, run on the original text). Cut to REPLY_LIMITS.text.
  */
 export function replyText(text: string): string {
-  const plain = text.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
-  return plain || text.trim();
+  const clean = storableText(text);
+  const plain = clean.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
+  return clampText(plain || clean.trim(), REPLY_LIMITS.text);
+}
+
+/** A link assistant-deliver accepts as a source: https, with a host, within the length limits. */
+function isSourceUrl(url: string): boolean {
+  if (!url.startsWith("https://") || url.length < REPLY_LIMITS.urlMin || url.length > REPLY_LIMITS.urlMax) return false;
+  try {
+    return new URL(url).hostname !== "";
+  } catch {
+    return false;
+  }
 }
 
 /** Links in a reply, as sources for the app: markdown links first, then bare https URLs. */
@@ -123,11 +159,12 @@ export function extractSources(text: string): Array<{ title?: string; url: strin
   const seen = new Set<string>();
   const add = (url: string, title?: string) => {
     const clean = url.replace(/[).,;:!?]+$/, "");
-    if (!clean.startsWith("https://") || clean.length > 500 || seen.has(clean) || out.length >= 10) return;
+    if (!isSourceUrl(clean) || seen.has(clean) || out.length >= REPLY_LIMITS.sources) return;
     seen.add(clean);
-    out.push(title ? { title: title.slice(0, 200), url: clean } : { url: clean });
+    out.push(title ? { title: clampText(title, REPLY_LIMITS.title), url: clean } : { url: clean });
   };
-  for (const m of text.matchAll(/\[([^\]]{1,200})\]\((https:\/\/[^\s)]+)\)/g)) add(m[2], m[1]);
-  for (const m of text.matchAll(/https:\/\/[^\s<>"'\])]+/g)) add(m[0]);
+  const clean = storableText(text);
+  for (const m of clean.matchAll(/\[([^\]]{1,200})\]\((https:\/\/[^\s)]+)\)/g)) add(m[2], m[1]);
+  for (const m of clean.matchAll(/https:\/\/[^\s<>"'\])]+/g)) add(m[0]);
   return out;
 }
