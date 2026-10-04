@@ -13,7 +13,8 @@ import {
   setAssistantChatFocused,
 } from '../../src/lib/assistant';
 import {
-  buildItems, classifySendFailure, MAX_ASSISTANT_MESSAGE, mergeRows, pruneLocal, replyStatus, shouldPoll, sourceLabel,
+  buildItems, classifySendFailure, failedMessageIds, MAX_ASSISTANT_MESSAGE, mergeRows, pruneLocal, replyStatus, shouldPoll,
+  sourceLabel,
   type AssistantRow, type ChatItem, type LocalSend, type OpenJob, type SendFailure,
 } from '../../src/lib/assistantLogic';
 import { generateMessageId } from '../../src/lib/messages';
@@ -144,7 +145,7 @@ export default function CoachAssistant() {
     };
   }, [refresh]);
 
-  const status = replyStatus(jobs, now);
+  const status = replyStatus(jobs, rows, now);
   const polling = focused && shouldPoll(status, local);
   useEffect(() => {
     if (!polling) return;
@@ -152,10 +153,7 @@ export default function CoachAssistant() {
     return () => clearInterval(timer);
   }, [polling, refresh]);
 
-  const failedIds = useMemo(
-    () => new Set(jobs.filter((j) => j.status === 'failed' && !resent.has(j.message_id)).map((j) => j.message_id)),
-    [jobs, resent],
-  );
+  const failedIds = useMemo(() => failedMessageIds(jobs, rows, resent), [jobs, rows, resent]);
   const items = useMemo(() => buildItems(rows, local, failedIds), [rows, local, failedIds]);
 
   async function send(text: string, clientMessageId: string = generateMessageId()) {

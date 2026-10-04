@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildItems, classifySendFailure, factCategoryKey, mergeRows, pruneLocal, replyStatus, shouldPoll, SLOW_REPLY_MS,
+  buildItems, classifySendFailure, factCategoryKey, failedMessageIds, mergeRows, pruneLocal, replyStatus, shouldPoll, SLOW_REPLY_MS,
   sortFacts, sourceLabel, validSources, type AssistantRow, type FactRow, type OpenJob,
 } from './assistantLogic';
 
@@ -71,12 +71,39 @@ test('replyStatus: queued, typing, slow, idle', () => {
   const job = (status: OpenJob['status'], secondsAgo: number): OpenJob => ({
     message_id: `${status}-${secondsAgo}`, status, updated_at: new Date(now - secondsAgo * 1000).toISOString(),
   });
-  assert.equal(replyStatus([], now), 'idle');
-  assert.equal(replyStatus([job('failed', 5)], now), 'idle');
-  assert.equal(replyStatus([job('pending', 5)], now), 'queued');
-  assert.equal(replyStatus([job('pending', 5), job('leased', 3)], now), 'typing');
-  assert.equal(replyStatus([job('leased', SLOW_REPLY_MS / 1000 + 1)], now), 'slow');
-  assert.equal(replyStatus([job('pending', 10), job('pending', SLOW_REPLY_MS / 1000 + 30)], now), 'slow');
+  assert.equal(replyStatus([], [], now), 'idle');
+  assert.equal(replyStatus([job('failed', 5)], [], now), 'idle');
+  assert.equal(replyStatus([job('pending', 5)], [], now), 'queued');
+  assert.equal(replyStatus([job('pending', 5), job('leased', 3)], [], now), 'typing');
+  assert.equal(replyStatus([job('leased', SLOW_REPLY_MS / 1000 + 1)], [], now), 'slow');
+  assert.equal(replyStatus([job('pending', 10), job('pending', SLOW_REPLY_MS / 1000 + 30)], [], now), 'slow');
+});
+
+test('replyStatus: slow is timed from when the message was sent, not the job\'s last change', () => {
+  const now = Date.parse('2026-10-01T10:05:00Z');
+  // Deferred a moment ago, again and again: updated_at stays fresh, the message is 3 minutes old.
+  const deferred: OpenJob = { message_id: 'm1', status: 'pending', updated_at: new Date(now - 5_000).toISOString() };
+  const sent = row('m1', 'user', new Date(now - 3 * 60_000).toISOString());
+  assert.equal(replyStatus([deferred], [], now), 'queued', 'not fetched yet: the job is all there is');
+  assert.equal(replyStatus([deferred], [sent], now), 'slow');
+  assert.equal(replyStatus([{ ...deferred, status: 'leased' }], [row('m1', 'user', new Date(now - 30_000).toISOString())], now), 'typing');
+});
+
+test('failedMessageIds: a failed message sent again is no longer offered, on any device, after a restart too', () => {
+  const failed = (id: string): OpenJob => ({ message_id: id, status: 'failed', updated_at: '2026-10-01T10:01:00Z' });
+  const rows = [
+    row('m1', 'user', '2026-10-01T10:00:00Z', { doc: { text: 'Plan for Friday?' } }),
+    row('m2', 'user', '2026-10-01T10:02:00Z', { doc: { text: 'Other question' } }),
+    row('m3', 'user', '2026-10-01T10:03:00Z', { doc: { text: ' Plan for Friday? ' } }),
+  ];
+  const jobs = [failed('m1'), failed('m2'), { message_id: 'm3', status: 'pending' as const, updated_at: '2026-10-01T10:03:00Z' }];
+  assert.deepEqual([...failedMessageIds(jobs, rows, new Set())], ['m2'], 'm1 was sent again as m3');
+  assert.deepEqual([...failedMessageIds(jobs, rows, new Set(['m2']))], [], 'm2 tapped on this device');
+  // The same text sent before the failed one isn't a resend of it.
+  const earlier = [row('m0', 'user', '2026-10-01T09:00:00Z', { doc: { text: 'Plan for Friday?' } }), rows[0]];
+  assert.deepEqual([...failedMessageIds([failed('m1')], earlier, new Set())], ['m1']);
+  // A failed job whose message isn't fetched yet still counts as failed.
+  assert.deepEqual([...failedMessageIds([failed('m9')], rows, new Set())], ['m9']);
 });
 
 test('shouldPoll: while a reply is expected or a send is in flight', () => {
