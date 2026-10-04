@@ -321,7 +321,7 @@ sudo /usr/local/lib/notch-ops/health.sh
 
 ## The Hermes sandbox image (NH-21)
 
-Added on 2026-10-04 (steps 1 and 2); step 3 is left for its first build.
+Added on 2026-10-04. The first build (`sha-4655445706c5`) came out public, so step 3 needed nothing.
 
 1. Its Dockerfile is in `deploy/images/hermes-sandbox/`, next to the coach
    profile (see [its README](images/hermes-sandbox/README.md)). The Images
