@@ -175,3 +175,19 @@ Deno.test("with real signing: the handler verifies the exact bytes it received",
   });
   assertEquals((await handleOutbox(tampered, d)).status, 401);
 });
+
+Deno.test("claim: a job whose context fails goes back at once; the rest of the batch still goes out", async () => {
+  const other = "6a0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
+  const { d, log } = deps({
+    claim: () =>
+      Promise.resolve([
+        { id: 7, lease_token: TOKEN, leased_until: "2026-10-10T12:03:00Z", status: "leased" },
+        { id: 8, lease_token: other, leased_until: "2026-10-10T12:03:00Z", status: "leased" },
+      ]),
+    context: (jobId) => jobId === 7 ? Promise.reject(new Error("connection reset")) : Promise.resolve({ job: { id: jobId, kind: "chat" } }),
+  });
+  const res = await handleOutbox(post({ action: "claim" }), d);
+  assertEquals(res.status, 200);
+  assertEquals((await res.json()).jobs.map((j: { id: number }) => j.id), [8]);
+  assertEquals(log.fails, [[7, TOKEN, "context_error: Error: connection reset"]]);
+});

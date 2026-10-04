@@ -276,7 +276,7 @@ relay creates. The Hermes image and its profile are described in
 ## Tests
 
 CI runs on every push: typecheck of every workspace, the unit tests (relay,
-mobile, in-workout coach), 182 Deno tests for the Edge Functions and shared
+mobile, in-workout coach), 184 Deno tests for the Edge Functions and shared
 modules, locale checks, `deno check` against a baseline, the image-tag tests
 and a secret scan. Every migration is applied to a real Postgres 17 (PGlite)
 and checked there (`supabase/db-tests`): who can read and write what, the job

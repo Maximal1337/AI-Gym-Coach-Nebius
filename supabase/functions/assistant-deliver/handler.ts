@@ -107,7 +107,13 @@ export async function handleDeliver(req: Request, deps: DeliverDeps): Promise<Re
 
   const done = result.data;
   if (done.status === "delivered" || done.status === "skipped") {
-    await deps.recordSpend(env, body.model as string, body.usage as Partial<TokenUsage> | undefined);
+    // The reply is stored. Failing now would make the relay retry into
+    // already_delivered, which records no spend and sends no push at all.
+    try {
+      await deps.recordSpend(env, body.model as string, body.usage as Partial<TokenUsage> | undefined);
+    } catch (e) {
+      console.error("assistant spend not recorded", { jobId: body.job_id, error: String(e) });
+    }
   }
   if (done.status === "delivered") {
     await deps.push(

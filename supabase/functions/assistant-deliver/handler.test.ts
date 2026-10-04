@@ -109,3 +109,11 @@ Deno.test("pushPreview flattens whitespace and trims to 140 characters", () => {
   assertEquals(long.length, 140);
   assertEquals(long.endsWith("…"), true);
 });
+
+Deno.test("a stored reply is still pushed and answered 200 when recording its spend fails", async () => {
+  const { d, log } = deps(delivered, { recordSpend: () => Promise.reject(new Error("db down")) });
+  const res = await handleDeliver(post(good), d);
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { status: "delivered", message_id: "m9" });
+  assertEquals(log.pushes.length, 1);
+});

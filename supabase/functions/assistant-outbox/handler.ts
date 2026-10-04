@@ -133,7 +133,15 @@ export async function handleOutbox(req: Request, deps: OutboxDeps): Promise<Resp
     );
     const jobs = [];
     for (const job of leased) {
-      jobs.push({ id: job.id, lease_token: job.lease_token, leased_until: job.leased_until, ...(await deps.context(job.id as number)) });
+      try {
+        jobs.push({ id: job.id, lease_token: job.lease_token, leased_until: job.leased_until, ...(await deps.context(job.id as number)) });
+      } catch (e) {
+        // One job's context failing mustn't strand the rest of the batch until
+        // their leases run out. This one goes back now, its attempt spent, so a
+        // job whose context never loads still ends.
+        console.error("assistant_job_context failed", { jobId: job.id, error: String(e) });
+        await deps.fail(job.id as number, job.lease_token as string, `context_error: ${String(e)}`.slice(0, 2000)).catch(() => false);
+      }
     }
     return reply(200, { jobs });
   }
