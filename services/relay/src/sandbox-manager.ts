@@ -84,7 +84,11 @@ export interface ManagerConfig {
   idleStopMs: number;
   /** Derives each sandbox's Hermes API key, so the relay never has to store one. */
   apiKeySecret: string;
-  /** Plain values for every sandbox: HERMES_HOME, TOKEN_FACTORY_MODEL, NOTCH_TOOLS_URL. */
+  /**
+   * Plain values for every sandbox: HERMES_HOME, NOTCH_MODEL, NOTCH_TOOLS_URL.
+   * No name that looks like a secret (…_KEY, TOKEN_…): NemoClaw's secret
+   * boundary refuses to start Hermes with a raw value under one.
+   */
   sandboxEnv: Record<string, string>;
   /** The environment's shared providers (Token Factory, Tavily; NH-33). */
   sharedProviders: string[];
@@ -127,9 +131,13 @@ export function sandboxName(env: "dev" | "prod", userId: string): string {
   return `notch-${env}-${sha256hex(userId).slice(0, 20)}`;
 }
 
-/** The sandbox's Hermes API key (API_SERVER_KEY): derived, never stored. */
+/**
+ * The sandbox's Hermes API key (API_SERVER_KEY): derived, never stored. 64
+ * lowercase hex characters, the only shape NemoClaw's secret boundary lets
+ * into Hermes' .env (see install-profile.sh).
+ */
 export function sandboxApiKey(secret: string, name: string): string {
-  return createHmac("sha256", secret).update(name).digest("base64url");
+  return createHmac("sha256", secret).update(name).digest("hex");
 }
 
 export function toolsProviderName(name: string): string {

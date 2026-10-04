@@ -77,11 +77,11 @@ class FakeStore implements AgentStore {
 const CONFIG: ManagerConfig = {
   env: "prod",
   image: "ghcr.io/maximal1337/notch-hermes-sandbox:sha-1",
-  command: ["sh", "-c", "install-profile.sh && exec hermes gateway run"],
+  command: ["sh", "-c", "install-profile.sh && exec env -u API_SERVER_KEY hermes gateway run"],
   maxRunning: 2,
   idleStopMs: 10 * MIN,
   apiKeySecret: "k".repeat(40),
-  sandboxEnv: { HERMES_HOME: "/sandbox/.hermes", TOKEN_FACTORY_MODEL: "nvidia/nemotron", NOTCH_TOOLS_URL: "https://ref.supabase.co/functions/v1/notch-tools" },
+  sandboxEnv: { HERMES_HOME: "/sandbox/.hermes", NOTCH_MODEL: "nvidia/nemotron", NOTCH_TOOLS_URL: "https://ref.supabase.co/functions/v1/notch-tools" },
   sharedProviders: ["shared-token-factory", "shared-tavily"],
   toolsProviderType: "notch-tools",
   hermesPort: 8642,
@@ -104,6 +104,13 @@ function setup(config: Partial<ManagerConfig> = {}) {
   };
   return { driver, store, clock, events, manager, job };
 }
+
+test("the Hermes API key: 64 lowercase hex, the only shape NemoClaw lets into Hermes' .env", () => {
+  const key = sandboxApiKey(CONFIG.apiKeySecret, sandboxName("prod", "u1"));
+  assert.match(key, /^[0-9a-f]{64}$/);
+  assert.equal(key, sandboxApiKey(CONFIG.apiKeySecret, sandboxName("prod", "u1")));
+  assert.notEqual(key, sandboxApiKey(CONFIG.apiKeySecret, sandboxName("prod", "u2")));
+});
 
 test("names: deterministic, per environment, valid for assistant_agents, no user id in them", () => {
   const a = sandboxName("prod", "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b");

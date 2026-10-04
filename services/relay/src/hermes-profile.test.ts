@@ -44,10 +44,28 @@ test("the MCP allowlist is exactly notch-tools' tools minus the test tool", () =
 test("D-28: no secret in the file — every credential is an environment placeholder", () => {
   assert.equal(config.mcp_servers.notch.headers.Authorization, "Bearer ${NOTCH_TOOL_TOKEN}");
   assert.equal(config.mcp_servers.notch.url, "${NOTCH_TOOLS_URL}");
-  assert.equal(config.gateway.api_server.key, undefined, "API_SERVER_KEY comes from the environment");
+  assert.equal(config.gateway.api_server.key, undefined, "API_SERVER_KEY comes from .env, written by install-profile.sh");
   assert.equal(config.model.api_key, undefined);
   // Nothing shaped like a real key or token (Tavily, Token Factory JWTs, long hex/base64).
   assert.doesNotMatch(configText, /tvly-|eyJ[A-Za-z0-9_-]{10,}|\b[A-Za-z0-9+/_-]{40,}\b/);
+});
+
+test("NemoClaw's secret boundary: a variable the profile gets as a plain value never looks like a secret", () => {
+  // NemoClaw's `hermes` wrapper refuses to start the gateway when a variable
+  // whose name matches this (validate-env-secret-boundary.py, SECRET_KEY_RE)
+  // holds anything but an OpenShell placeholder. Provider credentials arrive
+  // as placeholders; everything else the relay sets is a plain value.
+  const secretShaped = /(^|_)(TOKEN|KEY|SECRET|PASSWORD|CREDENTIAL|API)(_|$)/;
+  const fromProviders = new Set(
+    ["notch-tools", "tavily", "token-factory"].flatMap((p) =>
+      [...readFileSync(repo(`deploy/platform/openshell/profiles/${p}.yaml`), "utf8").matchAll(/env_vars: \[([^\]]*)\]/g)]
+        .flatMap((m) => m[1].split(",").map((v) => v.trim())),
+    ),
+  );
+  const plain = [...new Set([...configText.matchAll(/\$\{([A-Z][A-Z0-9_]*)\}/g)].map((m) => m[1]))]
+    .filter((v) => v !== "VAR" && !fromProviders.has(v));
+  assert.deepEqual(plain.sort(), ["NOTCH_MODEL", "NOTCH_TOOLS_URL"]);
+  for (const v of plain) assert.doesNotMatch(v, secretShaped, v);
 });
 
 test("D-30 / NH-45: no user profile inside Hermes, and no hidden model calls outside the counted spend", () => {
@@ -61,7 +79,7 @@ test("D-30 / NH-45: no user profile inside Hermes, and no hidden model calls out
 test("inference and search go only where the egress policy allows", () => {
   assert.equal(config.model.provider, "nebius-token-factory");
   assert.equal(config.agent.reasoning_effort, "none", "D-03: no thinking on tool-calling turns");
-  assert.equal(config.model.default, "${TOKEN_FACTORY_MODEL}");
+  assert.equal(config.model.default, "${NOTCH_MODEL}");
   assert.equal(config.web.backend, "tavily");
   assert.equal(config.web.keyless_fallback, false);
   assert.equal(config.updates.check, false);
@@ -99,14 +117,33 @@ test("the check-in skip word stays the relay's, not SOUL.md's", () => {
   assert.ok(!soul.includes(CHECKIN_SKIP));
 });
 
+const HEX64 = "0123456789abcdef".repeat(4);
+
 test("install-profile.sh: installs both files, replaces stale ones, leaves memories alone", { skip: process.platform === "win32" && "needs a POSIX sh" }, () => {
   const home = mkdtempSync(join(tmpdir(), "hermes-home-"));
   writeFileSync(join(home, "SOUL.md"), "stale");
   execFileSync("sh", ["-c", `mkdir -p "${home}/memories" && echo keep > "${home}/memories/MEMORY.md"`]);
-  execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { ...process.env, HERMES_HOME: home } });
+  execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { ...process.env, HERMES_HOME: home, API_SERVER_KEY: HEX64 } });
   assert.equal(readFileSync(join(home, "SOUL.md"), "utf8"), soul);
   assert.equal(readFileSync(join(home, "config.yaml"), "utf8"), configText);
   assert.equal(readFileSync(join(home, "memories", "MEMORY.md"), "utf8"), "keep\n");
   assert.equal(statSync(join(home, "config.yaml")).mode & 0o777, 0o600);
-  assert.throws(() => execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { PATH: process.env.PATH }, stdio: "pipe" }));
+  assert.throws(() => execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { PATH: process.env.PATH, API_SERVER_KEY: HEX64 }, stdio: "pipe" }));
+});
+
+test("install-profile.sh: the API key goes into .env, in the only shape and mode NemoClaw's boundary accepts", { skip: process.platform === "win32" && "needs a POSIX sh" }, () => {
+  const home = mkdtempSync(join(tmpdir(), "hermes-home-"));
+  writeFileSync(join(home, ".env"), "API_SERVER_KEY=stale\nOTHER=1\n");
+  execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { ...process.env, HERMES_HOME: home, API_SERVER_KEY: HEX64 } });
+  assert.equal(readFileSync(join(home, ".env"), "utf8"), `API_SERVER_KEY=${HEX64}\n`);
+  // NemoClaw's installed guard accepts sandbox:sandbox 0640 (or 0660) for .env, not 0600.
+  assert.equal(statSync(join(home, ".env")).mode & 0o777, 0o640);
+  for (const bad of ["", "abc", HEX64.toUpperCase(), "c2FuZGJveC1rZXktZGVyaXZlZC1ieS10aGUtcmVsYXk", `${HEX64}0`]) {
+    assert.throws(
+      () => execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { PATH: process.env.PATH, HERMES_HOME: home, API_SERVER_KEY: bad }, stdio: "pipe" }),
+      Error,
+      JSON.stringify(bad),
+    );
+  }
+  assert.equal(readFileSync(join(home, ".env"), "utf8"), `API_SERVER_KEY=${HEX64}\n`, "a refused key leaves the last good .env");
 });

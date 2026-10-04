@@ -30,7 +30,8 @@ import type { RelayEnvironment } from "./signing.js";
  *                             the environment's Token Factory and Tavily providers (NH-33)
  *   SANDBOX_TOOLS_PROFILE (notch-tools), SANDBOX_MAX_RUNNING (prod 4, dev 2),
  *   SANDBOX_IDLE_MINUTES (10), SANDBOX_HERMES_HOME (/sandbox/.hermes),
- *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground),
+ *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground,
+ *                             without API_SERVER_KEY in its environment),
  *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
  * The environment's OpenShell gateway (NH-29, src/gateway.ts):
@@ -43,7 +44,9 @@ import type { RelayEnvironment } from "./signing.js";
  *   RELAY_STATIC_SANDBOXES    {"<user id>": {"baseUrl": "...", "apiKey": "..."}}
  */
 
-const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec hermes gateway run"];
+// install-profile.sh moves API_SERVER_KEY into Hermes' .env; NemoClaw's
+// `hermes` wrapper refuses to start the gateway with it in the environment.
+const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec env -u API_SERVER_KEY hermes gateway run"];
 const IDLE_SWEEP_MS = 60_000;
 const ORPHAN_SWEEP_MS = 15 * 60_000;
 
@@ -103,7 +106,8 @@ async function main(): Promise<void> {
         apiKeySecret: keySecret,
         sandboxEnv: {
           HERMES_HOME: process.env.SANDBOX_HERMES_HOME || "/sandbox/.hermes",
-          TOKEN_FACTORY_MODEL: model,
+          // Not TOKEN_FACTORY_MODEL: NemoClaw's secret boundary reads TOKEN_… as a secret.
+          NOTCH_MODEL: model,
           NOTCH_TOOLS_URL: `${functionsUrl}/notch-tools`,
         },
         sharedProviders: (process.env.SANDBOX_SHARED_PROVIDERS ?? "").split(",").map((p) => p.trim()).filter(Boolean),
