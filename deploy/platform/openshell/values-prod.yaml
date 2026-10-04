@@ -5,4 +5,4 @@ server:
 sandbox:
   image:
     repository: ghcr.io/maximal1337/notch-hermes-sandbox
-    tag: unbuilt # image-tag: notch-hermes-sandbox
+    tag: sha-4655445706c5 # image-tag: notch-hermes-sandbox
