@@ -311,6 +311,32 @@ Deno.test("a check-in's history ends when it was queued: a message sent while it
   await db.close();
 });
 
+Deno.test("a job still deferred 30 minutes after it was queued fails, so it can't hold the user's messages forever", async () => {
+  const db = await migratedDb();
+  const u = await createUser(db);
+  await send(db, u, "first", "c1");
+  await send(db, u, "second", "c2");
+  const defer = (job: Job) =>
+    asService(db, async (tx) =>
+      (await tx.query<{ ok: boolean }>("select public.assistant_defer_job('prod', $1, $2, 10, 'sandbox_provisioning') ok", [job.id, job.lease_token])).rows[0].ok
+    );
+  const [young] = await claim(db);
+  assertEquals(await defer(young), true);
+  assertEquals(await one(db, "select status, attempts from public.assistant_jobs where id = $1", [young.id]), { status: "pending", attempts: 0 });
+  await db.query("update public.assistant_jobs set not_before = null, created_at = now() - interval '31 minutes' where id = $1", [young.id]);
+  const [old] = await claim(db);
+  assertEquals(old.id, young.id);
+  assertEquals(await defer(old), true);
+  assertEquals(await one(db, "select status, last_error from public.assistant_jobs where id = $1", [old.id]), {
+    status: "failed",
+    last_error: "deferred too long: sandbox_provisioning",
+  });
+  // The user's next message is no longer held behind it.
+  const [next] = await claim(db);
+  assertEquals((await one<{ t: string }>(db, "select m.doc->>'text' t from public.assistant_messages m join public.assistant_jobs j on j.message_id = m.id where j.id = $1", [next.id]))!.t, "second");
+  await db.close();
+});
+
 Deno.test("the app sees only its own open chat jobs, without errors or leases", async () => {
   const db = await migratedDb();
   const [a, b] = [await createUser(db), await createUser(db)];
