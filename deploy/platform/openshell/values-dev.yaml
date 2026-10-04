@@ -1,4 +1,8 @@
-# notch-dev's gateway. The default sandbox image (the Hermes image from NH-21)
-# goes here as `sandbox.image`, with its tag bumped by CI (NH-37).
+# notch-dev's gateway. Its default sandbox image is the Hermes image from
+# NH-21 (deploy/images/hermes-sandbox); CI moves the tag (NH-37).
 server:
   name: openshell-dev
+sandbox:
+  image:
+    repository: ghcr.io/maximal1337/notch-hermes-sandbox
+    tag: unbuilt # image-tag: notch-hermes-sandbox
