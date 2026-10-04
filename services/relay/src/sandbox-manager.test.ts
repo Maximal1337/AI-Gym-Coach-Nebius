@@ -166,6 +166,27 @@ test("a stopped sandbox is started, keeping its token and volume", async () => {
   assert.equal(store.rows.get("u1")!.hash, hash);
 });
 
+test("a lease says when this manager last created or started the sandbox, and nothing for one it found running", async () => {
+  const { driver, clock, manager, job } = setup();
+  const name = sandboxName("prod", "u1");
+  const created = await manager.acquire(job("u1")) as { release: () => void; startedAt?: number };
+  assert.equal(created.startedAt, clock.t);
+  created.release();
+  clock.t += MIN;
+  const reused = await manager.acquire(job("u1")) as { release: () => void; startedAt?: number };
+  assert.equal(reused.startedAt, clock.t - MIN);
+  reused.release();
+  clock.t += 11 * MIN;
+  assert.deepEqual(await manager.sweepIdle(), [name]);
+  const restarted = await manager.acquire(job("u1")) as { release: () => void; startedAt?: number };
+  assert.equal(restarted.startedAt, clock.t);
+  restarted.release();
+  // A relay that restarts finds the sandbox running and doesn't know when it started.
+  const fresh = new SandboxManager(driver, setup().store, CONFIG, () => clock.t);
+  const found = await fresh.acquire({ ...job("u1"), agent: { sandbox_name: name, provisioned: true } }) as { startedAt?: number };
+  assert.equal("startedAt" in found, false);
+});
+
 test("a running sandbox without its mapping gets a new token and a restart to pick it up", async () => {
   const { driver, store, manager, job } = setup();
   (await manager.acquire(job("u1")) as { release: () => void }).release();

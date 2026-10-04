@@ -1,7 +1,7 @@
 import { type ChatOptions, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
 import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, type ChatMessage, extractSources, replyText } from "./prompt.js";
-import type { SandboxLease } from "./sandbox-manager.js";
+import { buildMessages, type ChatMessage, extractSources, isCheckinSkip, replyText } from "./prompt.js";
+import { DEFER_SECONDS, type SandboxLease } from "./sandbox-manager.js";
 
 /**
  * The relay (NH-54): pulls jobs from Supabase, runs each one in its user's own
@@ -34,6 +34,12 @@ export interface RelayDeps {
 }
 
 const DELIVER_ATTEMPTS = 3;
+/**
+ * How long after the relay starts a sandbox its Hermes may still be booting:
+ * until then a turn that finds nothing listening waits in the queue, unspent,
+ * instead of using up the job's attempts. The bench allows the same two minutes.
+ */
+export const HERMES_BOOT_MS = 120_000;
 
 async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promise<number> {
   let lastError: unknown;
@@ -65,25 +71,30 @@ export async function processJob(job: JobContext, deps: RelayDeps): Promise<Outc
     return "deferred";
   }
   try {
-    return await runInSandbox(job, lease.endpoint, deps);
+    return await runInSandbox(job, lease.endpoint, lease.startedAt, deps);
   } finally {
     lease.release();
   }
 }
 
-async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, deps: RelayDeps): Promise<Outcome> {
+async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedAt: number | undefined, deps: RelayDeps): Promise<Outcome> {
   const base = { job_id: job.id, lease_token: job.lease_token };
   let result: ChatResult;
   try {
     result = await deps.chat(endpoint, buildMessages(job, deps.now()), { sessionKey: job.job.user_id });
   } catch (e) {
+    if (e instanceof HermesError && e.notReady && startedAt !== undefined && deps.now().getTime() - startedAt < HERMES_BOOT_MS) {
+      deps.log("deferred", { job: job.id, reason: "hermes_starting", seconds: DEFER_SECONDS.busy });
+      await deps.outbox.defer({ ...base, seconds: DEFER_SECONDS.busy, reason: "hermes_starting" });
+      return "deferred";
+    }
     const spent = e instanceof HermesError ? e.mayHaveSpent : true;
     deps.log("turn_failed", { job: job.id, error: String(e), spent });
     await deps.outbox.fail({ ...base, error: String(e), ...(spent ? { model: deps.model } : {}) });
     return "failed";
   }
 
-  const skip = job.job.kind === "checkin" && result.text.trim() === CHECKIN_SKIP;
+  const skip = job.job.kind === "checkin" && isCheckinSkip(result.text);
   const request: DeliverRequest = {
     ...base,
     model: deps.model,

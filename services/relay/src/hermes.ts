@@ -19,8 +19,13 @@ export interface ChatResult {
 }
 
 export class HermesError extends Error {
-  /** True when the model may already have run (and spent tokens) before the failure. */
-  constructor(message: string, readonly mayHaveSpent: boolean) {
+  /**
+   * mayHaveSpent: the model may already have run (and spent tokens) before the failure.
+   * notReady: nothing was listening — a refused connection, or the gateway's 502/503
+   * for a sandbox port that isn't open yet. Hermes' API server comes up some time
+   * after its sandbox does.
+   */
+  constructor(message: string, readonly mayHaveSpent: boolean, readonly notReady = false) {
     super(message);
     this.name = "HermesError";
   }
@@ -58,12 +63,12 @@ export async function chat(endpoint: SandboxEndpoint, messages: ChatMessage[], o
   } catch (e) {
     const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
     // A timeout means the agent was running; a refused connection means it never started.
-    throw new HermesError(timedOut ? `hermes timed out after ${options.timeoutMs} ms` : `hermes unreachable: ${String(e)}`, timedOut);
+    throw new HermesError(timedOut ? `hermes timed out after ${options.timeoutMs} ms` : `hermes unreachable: ${String(e)}`, timedOut, !timedOut);
   }
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     // 4xx is refused before the model runs (auth, bad request, too many runs); 5xx may be mid-turn.
-    throw new HermesError(`hermes ${res.status}: ${JSON.stringify(body).slice(0, 300)}`, res.status >= 500);
+    throw new HermesError(`hermes ${res.status}: ${JSON.stringify(body).slice(0, 300)}`, res.status >= 500, res.status === 502 || res.status === 503);
   }
   const choice = (body.choices as Array<{ message?: { content?: unknown } }> | undefined)?.[0];
   const text = typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";

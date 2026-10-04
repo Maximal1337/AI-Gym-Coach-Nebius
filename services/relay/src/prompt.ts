@@ -21,6 +21,11 @@ export interface ChatMessage {
 /** What a check-in answers when there's nothing worth saying (NH-66); the relay then skips it. */
 export const CHECKIN_SKIP = "SKIP";
 
+/** SKIP alone, give or take the quotes, markdown or full stop a model puts around it. */
+export function isCheckinSkip(text: string): boolean {
+  return /^[\s"'`*_.!]*SKIP[\s"'`*_.!]*$/i.test(text);
+}
+
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
   he: "Hebrew",
