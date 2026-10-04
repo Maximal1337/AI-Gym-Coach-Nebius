@@ -4,7 +4,7 @@ Kill switch and saved queries for the hackathon's coach chat (NH-57 in [`nebius-
 
 ## Kill switch
 
-Hides the assistant for everyone at once — the app, `assistant-send` and `notch-tools` all check the same flags. Per-user flags stay as they are:
+Hides the assistant for everyone at once — the app, `assistant-send` and `notch-tools` all check the same flags, and `assistant-outbox` fails anything already queued as the relay claims it (`last_error` = `assistant_disabled`), so nothing queued earlier still runs or pushes. The same happens to one user's queued work when their own flag is removed, and to a check-in for a user without a subscription (`subscription_required`). Per-user flags stay as they are:
 
 ```sql
 update public.feature_flags set enabled = false where flag like 'assistant_%';

@@ -1,7 +1,7 @@
-import { admin, withSentry } from "../_shared/mod.ts";
+import { admin, subscriptionAccess, withSentry } from "../_shared/mod.ts";
 import { checkSpend, recordSpend, spendBucketFor } from "../_shared/assistant.ts";
 import { relaySecrets, verifyRelayRequest } from "../_shared/relay-auth.ts";
-import { handleOutbox } from "./handler.ts";
+import { handleOutbox, jobRefusal } from "./handler.ts";
 
 /**
  * assistant-outbox (NH-52): see handler.ts. Called by the relay with a signed
@@ -26,14 +26,35 @@ Deno.serve(withSentry((req) => {
       if (error) throw new Error(`assistant_job_context: ${error.message}`);
       return data as Record<string, unknown>;
     },
-    fail: async (jobId, leaseToken, message) => {
-      const { data, error } = await db.rpc("assistant_ack_job", {
+    refusal: (job) =>
+      jobRefusal(job, {
+        flagEnabled: async (userId, flag) => {
+          // Not isFlagEnabled: that reads an error as "off", which here would
+          // drop a job for good on a passing database error.
+          const { data, error } = await db.rpc("feature_enabled", { p_user_id: userId, p_flag: flag });
+          if (error) throw new Error(`feature_enabled: ${error.message}`);
+          return data === true;
+        },
+        entitled: async (userId) => (await subscriptionAccess(db, userId)).ok,
+      }),
+    drop: async (env, jobId, leaseToken, reason) => {
+      const { data, error } = await db.rpc("assistant_drop_job", {
+        p_environment: env,
         p_job_id: jobId,
         p_lease_token: leaseToken,
-        p_ok: false,
+        p_reason: reason,
+      });
+      if (error) throw new Error(`assistant_drop_job: ${error.message}`);
+      return data === true;
+    },
+    fail: async (env, jobId, leaseToken, message) => {
+      const { data, error } = await db.rpc("assistant_fail_job", {
+        p_environment: env,
+        p_job_id: jobId,
+        p_lease_token: leaseToken,
         p_error: message,
       });
-      if (error) throw new Error(`assistant_ack_job: ${error.message}`);
+      if (error) throw new Error(`assistant_fail_job: ${error.message}`);
       return data === true;
     },
     recordSpend: (env, model, usage) => recordSpend(db, spendBucketFor(env), model, usage),

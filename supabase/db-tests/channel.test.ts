@@ -337,6 +337,45 @@ Deno.test("a job still deferred 30 minutes after it was queued fails, so it can'
   await db.close();
 });
 
+Deno.test("dropping a job ends it for good, only with its own lease and environment", async () => {
+  const db = await migratedDb();
+  const u = await createUser(db);
+  await send(db, u, "hi", "c1");
+  const [job] = await claim(db);
+  const drop = (env: string, token: string) =>
+    asService(db, async (tx) =>
+      (await tx.query<{ ok: boolean }>("select public.assistant_drop_job($1, $2, $3, 'assistant_disabled') ok", [env, job.id, token])).rows[0].ok
+    );
+  assertEquals(await drop("dev", job.lease_token!), false);
+  assertEquals(await drop("prod", crypto.randomUUID()), false);
+  assertEquals(await one(db, "select status from public.assistant_jobs"), { status: "leased" });
+  assertEquals(await drop("prod", job.lease_token!), true);
+  assertEquals(await one(db, "select status, attempts, max_attempts, last_error from public.assistant_jobs"), {
+    status: "failed",
+    attempts: 1,
+    max_attempts: 5,
+    last_error: "assistant_disabled",
+  });
+  assertEquals(await claim(db), []);
+  await db.close();
+});
+
+Deno.test("a failed attempt is accepted only from the job's own environment", async () => {
+  const db = await migratedDb();
+  const u = await createUser(db);
+  await send(db, u, "hi", "c1");
+  const [job] = await claim(db);
+  const fail = (env: string) =>
+    asService(db, async (tx) =>
+      (await tx.query<{ ok: boolean }>("select public.assistant_fail_job($1, $2, $3, 'hermes timeout') ok", [env, job.id, job.lease_token])).rows[0].ok
+    );
+  assertEquals(await fail("dev"), false);
+  assertEquals(await one(db, "select status from public.assistant_jobs"), { status: "leased" });
+  assertEquals(await fail("prod"), true);
+  assertEquals(await one(db, "select status, last_error from public.assistant_jobs"), { status: "pending", last_error: "hermes timeout" });
+  await db.close();
+});
+
 Deno.test("the app sees only its own open chat jobs, without errors or leases", async () => {
   const db = await migratedDb();
   const [a, b] = [await createUser(db), await createUser(db)];
