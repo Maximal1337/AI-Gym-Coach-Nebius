@@ -128,7 +128,7 @@ limit 20;
 
 ## Daily check-in
 
-At 06:00 UTC Supabase Cron queues one check-in per user with both `assistant_chat` and `assistant_checkin` ([`supabase/cron/assistant.sql`](../supabase/cron/assistant.sql)). The relay runs it in the user's sandbox; when there's nothing worth saying the agent answers `SKIP` and nothing is sent. A check-in that didn't go out on its day is marked stale the next morning rather than sent late.
+At 06:00 UTC Supabase Cron queues one check-in per user with both `assistant_chat` and `assistant_checkin` ([`supabase/cron/assistant.sql`](../supabase/cron/assistant.sql)). The relay runs it in the user's sandbox; when there's nothing worth saying the agent answers `SKIP` and nothing is sent. A check-in that didn't go out on its UTC day is never sent late: the relay's next claim after midnight marks it stale (`last_error` = `stale: not sent on its day`), and so does the 06:00 run.
 
 Opt an account in:
 

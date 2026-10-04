@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chat, HermesError } from "./hermes.js";
-import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
-import { DELIVERY_MARGIN_MS, LEASE_SECONDS_RANGE, LEASE_SHORT_DEFER_SECONDS, processJob, type RelayDeps, runOnce, turnBudget } from "./relay.js";
+import { type DeferRequest, type DeliverRequest, type FailRequest, type JobContext, OutboxError } from "./outbox.js";
+import { HERMES_BOOT_MS, processJob, type RelayDeps, runOnce } from "./relay.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 
 const ENDPOINT = { baseUrl: "http://10.42.0.17:8642", apiKey: "sandbox-key" };
@@ -52,7 +52,6 @@ function deps(overrides: Partial<RelayDeps> = {}) {
       return Promise.resolve({ text: "Rest 2 min. [Guide](https://example.org/rest)", usage: { tokensInput: 900, tokensOutput: 60 } });
     },
     model: "nvidia/nemotron-3-super",
-    turnBudgetMs: 120_000 + DELIVERY_MARGIN_MS,
     now: () => new Date("2026-10-10T08:00:00Z"),
     log: (event) => log.events.push(event),
     ...overrides,
@@ -121,10 +120,77 @@ test("a check-in answered with SKIP is finished silently", async () => {
   assert.equal(log.delivered[0].reply, undefined);
 });
 
+test("a check-in's SKIP counts with the punctuation, quotes or markdown a model adds", async () => {
+  for (const text of ["SKIP.", "\"SKIP\"", "**SKIP**", "skip", "`SKIP`!"]) {
+    const { d } = deps({ chat: () => Promise.resolve({ text }) });
+    assert.equal(await processJob(job("checkin"), d), "skipped", text);
+  }
+  for (const text of ["SKIP leg day today, rest instead.", "Skipped? No: upper body today."]) {
+    const { d } = deps({ chat: () => Promise.resolve({ text }) });
+    assert.equal(await processJob(job("checkin"), d), "delivered", text);
+  }
+});
+
 test("SKIP in a normal chat is just a reply", async () => {
   const { d, log } = deps({ chat: () => Promise.resolve({ text: "SKIP" }) });
   assert.equal(await processJob(job("chat"), d), "delivered");
   assert.equal(log.delivered[0].reply?.text, "SKIP");
+});
+
+test("a sandbox started moments ago with Hermes not up yet: the job waits unspent instead of failing", async () => {
+  const now = new Date("2026-10-10T08:00:00Z").getTime();
+  const notUp = [new HermesError("hermes unreachable: ECONNREFUSED", false, true), new HermesError("hermes 503: {}", true, true)];
+  for (const error of notUp) {
+    const { d, log } = deps({
+      acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, startedAt: now - 5_000 }),
+      chat: () => Promise.reject(error),
+    });
+    assert.equal(await processJob(job(), d), "deferred", error.message);
+    assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 10, reason: "hermes_starting" }]);
+    assert.deepEqual([log.failed, log.delivered], [[], []]);
+  }
+});
+
+test("Hermes still not up after the boot window, or a sandbox the relay didn't just start: the attempt fails as before", async () => {
+  const now = new Date("2026-10-10T08:00:00Z").getTime();
+  for (const startedAt of [now - HERMES_BOOT_MS, undefined]) {
+    const { d, log } = deps({
+      acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, ...(startedAt ? { startedAt } : {}) }),
+      chat: () => Promise.reject(new HermesError("hermes unreachable: ECONNREFUSED", false, true)),
+    });
+    assert.equal(await processJob(job(), d), "failed", String(startedAt));
+    assert.equal(log.deferred.length, 0);
+  }
+  // A timeout means the agent was running: never deferred, even right after a start.
+  const { d, log } = deps({
+    acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, startedAt: now - 1_000 }),
+    chat: () => Promise.reject(new HermesError("hermes timed out after 120000 ms", true, false)),
+  });
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(log.deferred.length, 0);
+});
+
+test("a delivery refused as invalid is reported once, with the turn's spend, instead of left to expire", async () => {
+  let calls = 0;
+  const { d, log } = deps({
+    outbox: {
+      ...deps().d.outbox,
+      deliver: () => {
+        calls++;
+        return Promise.reject(new OutboxError("deliver failed: 400 {\"error\":\"invalid_input\"}", 400));
+      },
+    },
+  });
+  d.outbox.fail = (r) => {
+    log.failed.push(r);
+    return Promise.resolve(true);
+  };
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(calls, 1);
+  assert.equal(log.failed.length, 1);
+  assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
+  assert.deepEqual(log.failed[0].usage, { tokensInput: 900, tokensOutput: 60 });
+  assert.match(log.failed[0].error, /^delivery_refused: /);
 });
 
 test("a lost lease or a deleted job drops the result; assistant-deliver has charged it, so the relay doesn't", async () => {
@@ -144,37 +210,20 @@ test("a 404 that isn't assistant-deliver's (the function missing) is charged thr
   assert.equal(await processJob(job(), d), "failed");
   assert.equal(log.failed.length, 1);
   assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
-  assert.match(log.failed[0].error, /^delivery_rejected: 404 /);
-});
-
-test("a delivery refused as invalid isn't retried: the turn is charged through fail and the job goes back", async () => {
-  let calls = 0;
-  const { d, log } = deps();
-  d.outbox.deliver = () => (calls++, Promise.resolve({ status: 400, body: { error: "invalid_input", detail: "body.reply.text must be at most 8000 characters" } }));
-  assert.equal(await processJob(job(), d), "failed");
-  assert.equal(calls, 1);
-  assert.equal(log.failed.length, 1);
-  assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
   assert.deepEqual(log.failed[0].usage, { tokensInput: 900, tokensOutput: 60 });
-  assert.match(log.failed[0].error, /^delivery_rejected: 400 .*8000 characters/);
+  assert.match(log.failed[0].error, /^delivery_refused: 404 /);
 });
 
 test("deliveries that keep failing are charged through fail, which puts the job back", async () => {
   let calls = 0;
   const { d, log } = deps();
-  d.outbox.deliver = () => (calls++, Promise.reject(new Error("deliver failed: 500")));
+  d.outbox.deliver = () => (calls++, Promise.reject(new OutboxError("deliver failed: 500 {}", 500)));
   assert.equal(await processJob(job(), d), "failed");
   assert.equal(calls, 3);
   assert.equal(log.failed.length, 1);
   assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
   assert.deepEqual(log.failed[0].usage, { tokensInput: 900, tokensOutput: 60 });
-  assert.match(log.failed[0].error, /^delivery_failed: Error: deliver failed: 500/);
-});
-
-test("a model reply over the limit is cut before it's delivered, never refused", async () => {
-  const { d, log } = deps({ chat: () => Promise.resolve({ text: "x".repeat(9000) }) });
-  assert.equal(await processJob(job(), d), "delivered");
-  assert.equal(log.delivered[0].reply!.text.length, 8000);
+  assert.match(log.failed[0].error, /^delivery_failed: OutboxError: deliver failed: 500/);
 });
 
 test("a reply with nothing storable left isn't sent to be refused: the turn is charged and the job goes back", async () => {
@@ -190,51 +239,11 @@ test("a reply with nothing storable left isn't sent to be refused: the turn is c
   }]);
 });
 
-// ------------------------------------------------------------ lease deadline
-
-test("too little lease left once the sandbox is ready: deferred unspent, sandbox released", async () => {
-  const { d, log } = deps();
-  const now = d.now().getTime();
-  assert.equal(await processJob(job(), d, now + d.turnBudgetMs - 1), "deferred");
-  assert.equal(log.chats.length, 0, "the model never ran");
-  assert.equal(log.failed.length, 0);
-  assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: LEASE_SHORT_DEFER_SECONDS, reason: "lease_short" }]);
-  assert.equal(log.released, 1);
-  const enough = deps();
-  assert.equal(await processJob(job(), enough.d, now + d.turnBudgetMs), "delivered");
-});
-
-test("runOnce: the deadline is the lease from before the claim, so a slow sandbox defers instead of running late", async () => {
-  // 180 s lease − 135 s turn budget leaves 45 s, counted from before the claim,
-  // which itself takes 20 s here. Counted from after it, a 30 s acquire would fit.
-  for (const [acquireMs, expected] of [[25_000, "delivered"], [30_000, "deferred"]] as const) {
-    let clock = Date.parse("2026-10-10T08:00:00Z");
-    const base = deps().d.outbox;
-    const { d } = deps({
-      now: () => new Date(clock),
-      outbox: { ...base, claim: (limit, leaseSeconds) => ((clock += 20_000), base.claim(limit, leaseSeconds)) },
-      acquireSandbox: () => {
-        clock += acquireMs;
-        return Promise.resolve({ endpoint: ENDPOINT, release: () => {} });
-      },
-    });
-    assert.deepEqual(await runOnce(d, 1, 180), [expected], `acquire took ${acquireMs} ms`);
-  }
-});
-
-// The other half of this contract is in supabase/functions/assistant-outbox/handler.test.ts:
-// change both sides together.
-test("contract: LEASE_SECONDS_RANGE is assistant-outbox's CLAIM_SCHEMA lease_seconds", () => {
-  assert.deepEqual({ ...LEASE_SECONDS_RANGE }, { min: 30, max: 900 });
-});
-
-test("turnBudget: the turn timeout plus the delivery margin; a lease the claim refuses or can't cover won't start", () => {
-  assert.equal(turnBudget(180, 120_000), 120_000 + DELIVERY_MARGIN_MS);
-  assert.equal(turnBudget(165, 120_000), 135_000);
-  assert.throws(() => turnBudget(150, 120_000), /RELAY_LEASE_SECONDS \(150\) must be at least 165/);
-  assert.throws(() => turnBudget(180.5, 120_000), /whole number from 30 to 900/);
-  assert.throws(() => turnBudget(1200, 600_000), /whole number from 30 to 900/);
-  assert.throws(() => turnBudget(900, 860_000), /RELAY_TURN_TIMEOUT_MS \(860000\) is too long/);
+test("NUL characters and a bare https:// source don't sink a reply: it's cleaned and delivered", async () => {
+  const { d, log } = deps({ chat: () => Promise.resolve({ text: "Done\u0000. Every link starts with https://, see https://example.org/x." }) });
+  assert.equal(await processJob(job(), d), "delivered");
+  assert.equal(log.delivered[0].reply!.text, "Done. Every link starts with https://, see https://example.org/x.");
+  assert.deepEqual(log.delivered[0].reply!.sources, [{ url: "https://example.org/x" }]);
 });
 
 test("delivery is retried on transient errors (it's idempotent)", async () => {
@@ -270,6 +279,24 @@ test("runOnce: one job's reporting failure doesn't sink the batch", async () => 
   assert.ok(log.events.includes("job_error"));
 });
 
+test("a turn Hermes couldn't finish isn't delivered as the coach's reply: the attempt fails with its spend", async () => {
+  for (const kind of ["chat", "checkin"] as const) {
+    const usage = { tokensInput: 1200, tokensOutput: 0 };
+    const { d, log } = deps({
+      chat: () => Promise.reject(new HermesError("hermes turn failed: HTTP 429: rate limited", true, false, usage)),
+    });
+    assert.equal(await processJob(job(kind), d), "failed");
+    assert.equal(log.delivered.length, 0, kind);
+    assert.deepEqual(log.failed, [{
+      job_id: 7,
+      lease_token: "lease-7",
+      error: "HermesError: hermes turn failed: HTTP 429: rate limited",
+      model: "nvidia/nemotron-3-super",
+      usage,
+    }]);
+  }
+});
+
 // ------------------------------------------------------------ hermes client
 
 function fakeFetch(respond: () => Promise<Response>) {
@@ -293,24 +320,62 @@ test("hermes: posts OpenAI-style messages with the sandbox key and maps usage", 
   assert.equal(JSON.parse(calls[0].body as string).stream, false);
 });
 
+// The shape Hermes v2026.9.24's /v1/chat/completions sends for a turn the agent
+// couldn't finish (gateway/platforms/api_server_openai_routes.py): 200, its own
+// failure text as the content, finish_reason "error", the hermes extras.
+const FAILED_TURN = {
+  choices: [{
+    index: 0,
+    message: { role: "assistant", content: "Nebius Token Factory failed after 3 attempts — it looks temporarily unavailable. Send /retry …" },
+    finish_reason: "error",
+  }],
+  usage: { prompt_tokens: 1200, completion_tokens: 0 },
+  hermes: { completed: false, partial: false, failed: true, error: "HTTP 429: rate limited", error_code: "agent_error" },
+};
+
+test("hermes: a turn the agent couldn't finish is an error that may have spent, with its usage — never a reply", async () => {
+  for (const body of [FAILED_TURN, { ...FAILED_TURN, hermes: undefined }, { ...FAILED_TURN, choices: [{ ...FAILED_TURN.choices[0], finish_reason: "stop" }] }]) {
+    const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body), { headers: { "x-hermes-completed": "false" } })));
+    await assert.rejects(
+      () => chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f }),
+      (e: unknown) =>
+        e instanceof HermesError && e.mayHaveSpent && !e.notReady && /^hermes turn failed: /.test(e.message) &&
+        e.usage?.tokensInput === 1200 && e.usage?.tokensOutput === 0,
+    );
+  }
+});
+
+test("hermes: a reply cut short (finish_reason length) is still a reply", async () => {
+  const body = {
+    choices: [{ message: { content: "Here is the first half of your program…" }, finish_reason: "length" }],
+    usage: { prompt_tokens: 10, completion_tokens: 4000 },
+    hermes: { completed: false, partial: true, failed: false, error: "output truncated", error_code: "output_truncated" },
+  };
+  const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body))));
+  const r = await chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f });
+  assert.equal(r.text, "Here is the first half of your program…");
+});
+
 test("hermes: missing usage is left for the fallback charge", async () => {
   const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }))));
   assert.equal((await chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f })).usage, undefined);
 });
 
-test("hermes: errors say whether tokens may have been spent", async () => {
-  const cases: Array<[() => Promise<Response>, boolean]> = [
-    [() => Promise.resolve(new Response("{}", { status: 429 })), false],
-    [() => Promise.resolve(new Response("{}", { status: 502 })), true],
-    [() => Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: "" } }] }))), true],
-    [() => Promise.reject(new TypeError("fetch failed")), false],
-    [() => Promise.reject(Object.assign(new Error("timeout"), { name: "TimeoutError" })), true],
+test("hermes: errors say whether tokens may have been spent, and whether anything was listening", async () => {
+  const cases: Array<[() => Promise<Response>, boolean, boolean]> = [
+    [() => Promise.resolve(new Response("{}", { status: 429 })), false, false],
+    [() => Promise.resolve(new Response("{}", { status: 500 })), true, false],
+    [() => Promise.resolve(new Response("{}", { status: 502 })), true, true],
+    [() => Promise.resolve(new Response("{}", { status: 503 })), true, true],
+    [() => Promise.resolve(new Response(JSON.stringify({ choices: [{ message: { content: "" } }] }))), true, false],
+    [() => Promise.reject(new TypeError("fetch failed")), false, true],
+    [() => Promise.reject(Object.assign(new Error("timeout"), { name: "TimeoutError" })), true, false],
   ];
-  for (const [respond, spent] of cases) {
+  for (const [respond, spent, notReady] of cases) {
     const { f } = fakeFetch(respond);
     await assert.rejects(
       () => chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f }),
-      (e: unknown) => e instanceof HermesError && e.mayHaveSpent === spent,
+      (e: unknown) => e instanceof HermesError && e.mayHaveSpent === spent && e.notReady === notReady,
     );
   }
 });

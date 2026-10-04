@@ -11,9 +11,11 @@
 
 model:
   # Nemotron on Nebius Token Factory. The model id is chosen in NH-22 and set
-  # per environment; the relay prices spend with the same variable (D-34).
+  # per environment: the relay's TOKEN_FACTORY_MODEL, which it also prices
+  # spend with (D-34), reaches the sandbox as NOTCH_MODEL — NemoClaw's secret
+  # boundary reads any TOKEN_… variable as a secret.
   provider: nebius-token-factory   # key: NEBIUS_API_KEY (placeholder)
-  default: "${TOKEN_FACTORY_MODEL}"
+  default: "${NOTCH_MODEL}"
 
 agent:
   # D-03: no thinking on interactive, tool-calling turns — a reasoning model
@@ -105,7 +107,8 @@ curator:
 gateway:
   api_server:
     enabled: true
-    # The key is API_SERVER_KEY, per sandbox, held by the relay (NH-55).
+    # The key is API_SERVER_KEY, per sandbox, held by the relay (NH-55);
+    # install-profile.sh writes it into $HERMES_HOME/.env, where Hermes reads it.
     # Loopback by default; NH-29 sets API_SERVER_HOST if OpenShell's route to
     # the sandbox needs another address.
     host: 127.0.0.1

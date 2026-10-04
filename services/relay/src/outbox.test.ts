@@ -36,8 +36,8 @@ test("claim: a refused request throws with its status", async () => {
   await assert.rejects(() => new OutboxClient(config(f)).claim(2, 180), (e: unknown) => e instanceof OutboxError && e.status === 401);
 });
 
-test("deliver: 409, 404 and 400 are answers, not errors; 500 throws", async () => {
-  for (const status of [200, 409, 404, 400]) {
+test("deliver: 409 and 404 are answers, not errors; 500 throws", async () => {
+  for (const status of [200, 409, 404]) {
     const { f } = fakeFetch(status, {});
     assert.equal((await new OutboxClient(config(f)).deliver({ job_id: 1, lease_token: "t", model: "m", skip: true })).status, status);
   }

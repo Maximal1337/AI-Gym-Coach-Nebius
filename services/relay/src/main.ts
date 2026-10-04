@@ -6,7 +6,7 @@ import { chat } from "./hermes.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 import { OutboxClient } from "./outbox.js";
-import { type RelayDeps, runOnce, turnBudget } from "./relay.js";
+import { type RelayDeps, runOnce } from "./relay.js";
 import { SandboxManager } from "./sandbox-manager.js";
 import type { RelayEnvironment } from "./signing.js";
 
@@ -21,10 +21,7 @@ import type { RelayEnvironment } from "./signing.js";
  *   RELAY_SECRET              the environment's ASSISTANT_RELAY_SECRET_* value
  *   TOKEN_FACTORY_MODEL       the model the sandboxes run, for pricing spend
  *   RELAY_BATCH (2), RELAY_LEASE_SECONDS (180), RELAY_TURN_TIMEOUT_MS (120000),
- *   RELAY_IDLE_POLL_MS (2000), RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat).
- *   The lease is a whole number of seconds from 30 to 900 (what assistant-outbox
- *   grants) and must cover the turn timeout plus 45 s (src/relay.ts turnBudget),
- *   or the relay refuses to start.
+ *   RELAY_IDLE_POLL_MS (2000), RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat)
  *
  * Where sandboxes come from: RELAY_SANDBOXES = static (the default, the spike's
  * map) or manager (the sandbox manager, NH-55). The manager needs:
@@ -33,7 +30,8 @@ import type { RelayEnvironment } from "./signing.js";
  *                             the environment's Token Factory and Tavily providers (NH-33)
  *   SANDBOX_TOOLS_PROFILE (notch-tools), SANDBOX_MAX_RUNNING (prod 4, dev 2),
  *   SANDBOX_IDLE_MINUTES (10), SANDBOX_HERMES_HOME (/sandbox/.hermes),
- *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground),
+ *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground,
+ *                             without API_SERVER_KEY in its environment),
  *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
  * The environment's OpenShell gateway (NH-29, src/gateway.ts):
@@ -46,7 +44,9 @@ import type { RelayEnvironment } from "./signing.js";
  *   RELAY_STATIC_SANDBOXES    {"<user id>": {"baseUrl": "...", "apiKey": "..."}}
  */
 
-const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec hermes gateway run"];
+// install-profile.sh moves API_SERVER_KEY into Hermes' .env; NemoClaw's
+// `hermes` wrapper refuses to start the gateway with it in the environment.
+const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec env -u API_SERVER_KEY hermes gateway run"];
 const IDLE_SWEEP_MS = 60_000;
 const ORPHAN_SWEEP_MS = 15 * 60_000;
 
@@ -71,12 +71,6 @@ async function main(): Promise<void> {
   const functionsUrl = required("SUPABASE_FUNCTIONS_URL").replace(/\/+$/, "");
   const outbox = new OutboxClient({ functionsUrl, env: env as RelayEnvironment, secret: required("RELAY_SECRET") });
   const model = required("TOKEN_FACTORY_MODEL");
-  const timeoutMs = number("RELAY_TURN_TIMEOUT_MS", 120_000);
-  const batch = number("RELAY_BATCH", 2);
-  const leaseSeconds = number("RELAY_LEASE_SECONDS", 180);
-  const turnBudgetMs = turnBudget(leaseSeconds, timeoutMs);
-  const idlePollMs = number("RELAY_IDLE_POLL_MS", 2_000);
-  const heartbeat = process.env.RELAY_HEARTBEAT_FILE ?? "/tmp/relay-heartbeat";
   const timers: NodeJS.Timeout[] = [];
   let acquireSandbox: RelayDeps["acquireSandbox"];
   const mode = process.env.RELAY_SANDBOXES?.trim() || "static";
@@ -112,7 +106,8 @@ async function main(): Promise<void> {
         apiKeySecret: keySecret,
         sandboxEnv: {
           HERMES_HOME: process.env.SANDBOX_HERMES_HOME || "/sandbox/.hermes",
-          TOKEN_FACTORY_MODEL: model,
+          // Not TOKEN_FACTORY_MODEL: NemoClaw's secret boundary reads TOKEN_… as a secret.
+          NOTCH_MODEL: model,
           NOTCH_TOOLS_URL: `${functionsUrl}/notch-tools`,
         },
         sharedProviders: (process.env.SANDBOX_SHARED_PROVIDERS ?? "").split(",").map((p) => p.trim()).filter(Boolean),
@@ -135,6 +130,11 @@ async function main(): Promise<void> {
     acquireSandbox = staticAcquire(map);
     log("static_sandboxes", { users: map.size });
   }
+  const timeoutMs = number("RELAY_TURN_TIMEOUT_MS", 120_000);
+  const batch = number("RELAY_BATCH", 2);
+  const leaseSeconds = number("RELAY_LEASE_SECONDS", 180);
+  const idlePollMs = number("RELAY_IDLE_POLL_MS", 2_000);
+  const heartbeat = process.env.RELAY_HEARTBEAT_FILE ?? "/tmp/relay-heartbeat";
   // HTTPS sandbox URLs are the gateway's service URLs: through the gateway, with its client certificate.
   const sandboxFetch = gateway ? gatewayFetch(gateway.route) : undefined;
 
@@ -143,7 +143,6 @@ async function main(): Promise<void> {
     acquireSandbox,
     chat: (endpoint, messages, options) => chat(endpoint, messages, { ...options, timeoutMs, ...(sandboxFetch ? { fetch: sandboxFetch } : {}) }),
     model,
-    turnBudgetMs,
     now: () => new Date(),
     log,
   };

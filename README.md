@@ -276,9 +276,12 @@ relay creates. The Hermes image and its profile are described in
 ## Tests
 
 CI runs on every push: typecheck of every workspace, the unit tests (relay,
-mobile, in-workout coach), 182 Deno tests for the Edge Functions and shared
+mobile, in-workout coach), 184 Deno tests for the Edge Functions and shared
 modules, locale checks, `deno check` against a baseline, the image-tag tests
-and a secret scan. The memory extraction has a separate evaluation set
+and a secret scan. Every migration is applied to a real Postgres 17 (PGlite)
+and checked there (`supabase/db-tests`): who can read and write what, the job
+queue, the write tools and undo, the facts caps, the demo seed and account
+deletion. The memory extraction has a separate evaluation set
 (`supabase/eval/memory`) that runs against Token Factory. A separate workflow
 runs shellcheck and the backup, restore and health scripts end to end against
 a fake `kubectl` (`deploy/ops/test`).

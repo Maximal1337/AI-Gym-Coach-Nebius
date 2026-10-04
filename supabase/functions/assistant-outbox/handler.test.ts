@@ -1,7 +1,7 @@
 // Tests for assistant-outbox (NH-52). Run: deno test --no-config supabase/functions/
 import { assertEquals } from "jsr:@std/assert@1";
 import { relayHeaders, verifyRelayRequest } from "../_shared/relay-auth.ts";
-import { CLAIM_SCHEMA, DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS, handleOutbox, type OutboxDeps } from "./handler.ts";
+import { DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS, handleOutbox, type OutboxDeps } from "./handler.ts";
 
 const TOKEN = "5f0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
 const USER = "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
@@ -176,9 +176,18 @@ Deno.test("with real signing: the handler verifies the exact bytes it received",
   assertEquals((await handleOutbox(tampered, d)).status, 401);
 });
 
-// The other half of this contract is LEASE_SECONDS_RANGE in services/relay/src/relay.ts (and its
-// test): the relay refuses to start with a lease outside it, so change both sides together.
-Deno.test("contract: CLAIM_SCHEMA's lease_seconds is the relay's LEASE_SECONDS_RANGE", () => {
-  const lease = CLAIM_SCHEMA.properties!.lease_seconds;
-  assertEquals({ type: lease.type, min: lease.minimum, max: lease.maximum }, { type: "integer", min: 30, max: 900 });
+Deno.test("claim: a job whose context fails goes back at once; the rest of the batch still goes out", async () => {
+  const other = "6a0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
+  const { d, log } = deps({
+    claim: () =>
+      Promise.resolve([
+        { id: 7, lease_token: TOKEN, leased_until: "2026-10-10T12:03:00Z", status: "leased" },
+        { id: 8, lease_token: other, leased_until: "2026-10-10T12:03:00Z", status: "leased" },
+      ]),
+    context: (jobId) => jobId === 7 ? Promise.reject(new Error("connection reset")) : Promise.resolve({ job: { id: jobId, kind: "chat" } }),
+  });
+  const res = await handleOutbox(post({ action: "claim" }), d);
+  assertEquals(res.status, 200);
+  assertEquals((await res.json()).jobs.map((j: { id: number }) => j.id), [8]);
+  assertEquals(log.fails, [[7, TOKEN, "context_error: Error: connection reset"]]);
 });

@@ -84,7 +84,11 @@ export interface ManagerConfig {
   idleStopMs: number;
   /** Derives each sandbox's Hermes API key, so the relay never has to store one. */
   apiKeySecret: string;
-  /** Plain values for every sandbox: HERMES_HOME, TOKEN_FACTORY_MODEL, NOTCH_TOOLS_URL. */
+  /**
+   * Plain values for every sandbox: HERMES_HOME, NOTCH_MODEL, NOTCH_TOOLS_URL.
+   * No name that looks like a secret (…_KEY, TOKEN_…): NemoClaw's secret
+   * boundary refuses to start Hermes with a raw value under one.
+   */
   sandboxEnv: Record<string, string>;
   /** The environment's shared providers (Token Factory, Tavily; NH-33). */
   sharedProviders: string[];
@@ -97,7 +101,8 @@ export interface ManagerConfig {
 }
 
 export type SandboxLease =
-  | { endpoint: SandboxEndpoint; release: () => void }
+  /** startedAt: when this manager last created or started the sandbox, if it did. */
+  | { endpoint: SandboxEndpoint; release: () => void; startedAt?: number }
   | { defer: number; reason: string };
 
 export class SandboxError extends Error {
@@ -126,9 +131,13 @@ export function sandboxName(env: "dev" | "prod", userId: string): string {
   return `notch-${env}-${sha256hex(userId).slice(0, 20)}`;
 }
 
-/** The sandbox's Hermes API key (API_SERVER_KEY): derived, never stored. */
+/**
+ * The sandbox's Hermes API key (API_SERVER_KEY): derived, never stored. 64
+ * lowercase hex characters, the only shape NemoClaw's secret boundary lets
+ * into Hermes' .env (see install-profile.sh).
+ */
 export function sandboxApiKey(secret: string, name: string): string {
-  return createHmac("sha256", secret).update(name).digest("base64url");
+  return createHmac("sha256", secret).update(name).digest("hex");
 }
 
 export function toolsProviderName(name: string): string {
@@ -139,6 +148,7 @@ export class SandboxManager {
   private readonly inFlight = new Map<string, number>();
   private readonly lastUsed = new Map<string, number>();
   private readonly urls = new Map<string, string>();
+  private readonly startedAt = new Map<string, number>();
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -211,22 +221,27 @@ export class SandboxManager {
     if (!sandbox) {
       this.log("sandbox_create", { sandbox: name });
       await this.driver.create(this.spec(name));
+      this.startedAt.set(name, this.now());
     } else if (!mapped) {
       // A running process keeps the credential placeholder it started with.
       this.log("sandbox_restart", { sandbox: name, reason: "new_token" });
       if (sandbox.phase === "ready") await this.driver.stop(name);
       await this.driver.start(name);
+      this.startedAt.set(name, this.now());
     } else if (needsCompute) {
       this.log("sandbox_start", { sandbox: name, from: sandbox.phase });
       await this.driver.start(name);
+      this.startedAt.set(name, this.now());
     }
 
     const endpoint = { baseUrl: await this.url(name), apiKey: sandboxApiKey(this.config.apiKeySecret, name) };
     this.inFlight.set(name, (this.inFlight.get(name) ?? 0) + 1);
     this.lastUsed.set(name, this.now());
     let released = false;
+    const startedAt = this.startedAt.get(name);
     return {
       endpoint,
+      ...(startedAt !== undefined ? { startedAt } : {}),
       release: () => {
         if (released) return;
         released = true;
@@ -250,6 +265,7 @@ export class SandboxManager {
       this.log("sandbox_evict", { sandbox: s.name, for: name });
       await this.driver.stop(s.name);
       this.lastUsed.delete(s.name);
+      this.startedAt.delete(s.name);
     }
     return true;
   }
@@ -294,6 +310,7 @@ export class SandboxManager {
       try {
         await this.driver.stop(s.name);
         this.lastUsed.delete(s.name);
+        this.startedAt.delete(s.name);
         stopped.push(s.name);
       } catch (e) {
         this.log("sandbox_stop_failed", { sandbox: s.name, error: String(e) });
@@ -317,6 +334,7 @@ export class SandboxManager {
         await this.driver.delete(s.name);
         this.urls.delete(s.name);
         this.lastUsed.delete(s.name);
+        this.startedAt.delete(s.name);
         deleted.push(s.name);
       } catch (e) {
         this.log("sandbox_delete_failed", { sandbox: s.name, error: String(e) });

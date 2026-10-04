@@ -1,7 +1,7 @@
 import { type ChatOptions, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
-import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, type ChatMessage, extractSources, replyText } from "./prompt.js";
-import type { SandboxLease } from "./sandbox-manager.js";
+import { type DeferRequest, type DeliverRequest, type FailRequest, type JobContext, OutboxError } from "./outbox.js";
+import { buildMessages, type ChatMessage, extractSources, isCheckinSkip, replyText } from "./prompt.js";
+import { DEFER_SECONDS, type SandboxLease } from "./sandbox-manager.js";
 
 /**
  * The relay (NH-54): pulls jobs from Supabase, runs each one in its user's own
@@ -29,46 +29,17 @@ export interface RelayDeps {
   chat: (endpoint: SandboxEndpoint, messages: ChatMessage[], options: Pick<ChatOptions, "sessionKey">) => Promise<ChatResult>;
   /** The Token Factory model the sandboxes use, for pricing the spend (D-34). */
   model: string;
-  /**
-   * How much of its lease a job needs left to start its turn: the turn
-   * timeout plus DELIVERY_MARGIN_MS (main.ts). A reply delivered after the
-   * lease ran out is dropped, so a job whose sandbox took longer than that to
-   * get ready is deferred instead: the sandbox is warm by then, and the next
-   * claim runs the job at once on a fresh lease.
-   */
-  turnBudgetMs: number;
   now: () => Date;
   log: (event: string, fields: Record<string, unknown>) => void;
 }
 
 const DELIVER_ATTEMPTS = 3;
-/** Time a turn's delivery may take on top of the turn timeout. */
-export const DELIVERY_MARGIN_MS = 15_000;
-/** How long a job deferred for lack of lease waits: its sandbox is ready, so hardly at all. */
-export const LEASE_SHORT_DEFER_SECONDS = 2;
-/** What a lease must leave for getting the sandbox on top of the turn budget. */
-export const MIN_ACQUIRE_MS = 30_000;
-/** The leases assistant-outbox grants: lease_seconds in its CLAIM_SCHEMA, a whole number of seconds. */
-export const LEASE_SECONDS_RANGE = { min: 30, max: 900 } as const;
-
 /**
- * RelayDeps.turnBudgetMs for a turn timeout. Throws for a lease that
- * assistant-outbox would refuse, or that leaves under MIN_ACQUIRE_MS to get
- * the sandbox: either way the relay would run and never answer anyone.
+ * How long after the relay starts a sandbox its Hermes may still be booting:
+ * until then a turn that finds nothing listening waits in the queue, unspent,
+ * instead of using up the job's attempts. The bench allows the same two minutes.
  */
-export function turnBudget(leaseSeconds: number, turnTimeoutMs: number): number {
-  const { min, max } = LEASE_SECONDS_RANGE;
-  if (!Number.isInteger(leaseSeconds) || leaseSeconds < min || leaseSeconds > max) {
-    throw new Error(`RELAY_LEASE_SECONDS (${leaseSeconds}) must be a whole number from ${min} to ${max}`);
-  }
-  const budgetMs = turnTimeoutMs + DELIVERY_MARGIN_MS;
-  const minimum = Math.ceil((budgetMs + MIN_ACQUIRE_MS) / 1000);
-  if (minimum > max) throw new Error(`RELAY_TURN_TIMEOUT_MS (${turnTimeoutMs}) is too long for any lease up to ${max} s`);
-  if (leaseSeconds < minimum) {
-    throw new Error(`RELAY_LEASE_SECONDS (${leaseSeconds}) must be at least ${minimum} with RELAY_TURN_TIMEOUT_MS ${turnTimeoutMs}`);
-  }
-  return budgetMs;
-}
+export const HERMES_BOOT_MS = 120_000;
 
 async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promise<{ status: number; body: Record<string, unknown> }> {
   let lastError: unknown;
@@ -77,18 +48,15 @@ async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promi
       return await deps.outbox.deliver(request);
     } catch (e) {
       // Safe to retry: a delivery is idempotent per job (assistant_complete_job).
+      // A request refused as invalid would only be refused again.
+      if (e instanceof OutboxError && e.status === 400) throw e;
       lastError = e;
     }
   }
   throw lastError;
 }
 
-/**
- * Runs one leased job. `deadline` (epoch ms, the relay's clock) is when its
- * lease runs out, taken before the claim so it's never later than the real
- * one; runOnce passes it.
- */
-export async function processJob(job: JobContext, deps: RelayDeps, deadline = Number.POSITIVE_INFINITY): Promise<Outcome> {
+export async function processJob(job: JobContext, deps: RelayDeps): Promise<Outcome> {
   const base = { job_id: job.id, lease_token: job.lease_token };
   let lease: SandboxLease;
   try {
@@ -105,36 +73,33 @@ export async function processJob(job: JobContext, deps: RelayDeps, deadline = Nu
     return "deferred";
   }
   try {
-    // Getting the sandbox ate into the lease (a cold start, or waiting behind
-    // another job's): with too little left, the turn's reply would be dropped
-    // after its tokens were spent. Hand the job back unspent instead.
-    const leftMs = deadline - deps.now().getTime();
-    if (leftMs < deps.turnBudgetMs) {
-      deps.log("deferred", { job: job.id, reason: "lease_short", seconds: LEASE_SHORT_DEFER_SECONDS, leftMs });
-      await deps.outbox.defer({ ...base, seconds: LEASE_SHORT_DEFER_SECONDS, reason: "lease_short" });
-      return "deferred";
-    }
-    return await runInSandbox(job, lease.endpoint, deps);
+    return await runInSandbox(job, lease.endpoint, lease.startedAt, deps);
   } finally {
     lease.release();
   }
 }
 
-async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, deps: RelayDeps): Promise<Outcome> {
+async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedAt: number | undefined, deps: RelayDeps): Promise<Outcome> {
   const base = { job_id: job.id, lease_token: job.lease_token };
   let result: ChatResult;
   try {
     result = await deps.chat(endpoint, buildMessages(job, deps.now()), { sessionKey: job.job.user_id });
   } catch (e) {
+    if (e instanceof HermesError && e.notReady && startedAt !== undefined && deps.now().getTime() - startedAt < HERMES_BOOT_MS) {
+      deps.log("deferred", { job: job.id, reason: "hermes_starting", seconds: DEFER_SECONDS.busy });
+      await deps.outbox.defer({ ...base, seconds: DEFER_SECONDS.busy, reason: "hermes_starting" });
+      return "deferred";
+    }
     const spent = e instanceof HermesError ? e.mayHaveSpent : true;
+    const usage = e instanceof HermesError ? e.usage : undefined;
     deps.log("turn_failed", { job: job.id, error: String(e), spent });
-    await deps.outbox.fail({ ...base, error: String(e), ...(spent ? { model: deps.model } : {}) });
+    await deps.outbox.fail({ ...base, error: String(e), ...(spent ? { model: deps.model, ...(usage ? { usage } : {}) } : {}) });
     return "failed";
   }
 
   // From here on the model has run: every way out charges the turn (D-34).
   const charge = { model: deps.model, ...(result.usage ? { usage: result.usage } : {}) };
-  const skip = job.job.kind === "checkin" && result.text.trim() === CHECKIN_SKIP;
+  const skip = job.job.kind === "checkin" && isCheckinSkip(result.text);
   const text = skip ? "" : replyText(result.text);
   if (!skip && !text) {
     // Nothing storable was left (the reply was only NUL characters), which
@@ -152,27 +117,30 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, deps: Re
   try {
     delivery = await deliverWithRetry(deps, request);
   } catch (e) {
-    // Every attempt failed. fail charges the turn and puts the job back. Should
-    // an attempt have reached assistant-deliver after all, its response lost,
-    // the turn may be charged more than once: an overcount, never a lost one.
-    deps.log("delivery_failed", { job: job.id, error: String(e) });
-    await deps.outbox.fail({ ...base, error: `delivery_failed: ${String(e)}`, ...charge });
+    // Refused as invalid (400), it would be refused again; any other error has
+    // already been retried. Either way, report the attempt with its spend
+    // rather than let the lease run out and the turn go unrecorded. Should a
+    // retried attempt have reached the database after all, its response lost,
+    // the job is done already and the charge counts twice: an overcount,
+    // never a lost one.
+    const refused = e instanceof OutboxError && e.status === 400;
+    deps.log(refused ? "delivery_refused" : "delivery_failed", { job: job.id, error: String(e) });
+    await deps.outbox.fail({ ...base, error: `${refused ? "delivery_refused" : "delivery_failed"}: ${String(e)}`, ...charge });
     return "failed";
   }
   const refusal = delivery.body.error;
   if ((delivery.status === 409 && refusal === "lease_lost") || (delivery.status === 404 && refusal === "job_not_found")) {
-    // The lease expired and another attempt owns the job, or the job is gone
-    // (user deleted). assistant-deliver charged the turn all the same.
+    // The lease was lost to another attempt, or the job is gone (user
+    // deleted). assistant-deliver charged the turn all the same.
     deps.log("delivery_dropped", { job: job.id, status: delivery.status });
     return "dropped";
   }
   if (delivery.status !== 200) {
-    // Refused as invalid (400), or a 404/409 that isn't assistant-deliver's
-    // own answer (the function not deployed, say): nothing charged the turn,
-    // and the same request would be refused again. Charge it and put the job back.
+    // A 404 or 409 that isn't assistant-deliver's own answer (the function not
+    // deployed, say): nothing charged the turn. Charge it and put the job back.
     const detail = JSON.stringify(delivery.body).slice(0, 300);
-    deps.log("delivery_rejected", { job: job.id, status: delivery.status, detail });
-    await deps.outbox.fail({ ...base, error: `delivery_rejected: ${delivery.status} ${detail}`, ...charge });
+    deps.log("delivery_refused", { job: job.id, status: delivery.status, detail });
+    await deps.outbox.fail({ ...base, error: `delivery_refused: ${delivery.status} ${detail}`, ...charge });
     return "failed";
   }
   return skip ? "skipped" : "delivered";
@@ -180,12 +148,9 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, deps: Re
 
 /** One poll: claim a batch and run it; each user has at most one job in the batch (the queue guarantees it). */
 export async function runOnce(deps: RelayDeps, limit: number, leaseSeconds: number): Promise<Outcome[]> {
-  // Read before the claim, so it's never later than the leases' own end
-  // whatever the skew between this clock and the database's.
-  const deadline = deps.now().getTime() + leaseSeconds * 1000;
   const { jobs, paused } = await deps.outbox.claim(limit, leaseSeconds);
   if (paused) deps.log("paused", { reason: paused });
-  const settled = await Promise.allSettled(jobs.map((job) => processJob(job, deps, deadline)));
+  const settled = await Promise.allSettled(jobs.map((job) => processJob(job, deps)));
   return settled.map((s, i) => {
     if (s.status === "fulfilled") return s.value;
     // Reporting itself failed; the lease will expire and the job will be retried.

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, clampText, contextBlock, extractSources, REPLY_LIMITS, replyText, storableText } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText, SOURCE_LIMITS, storableText } from "./prompt.js";
 
 const NOW = new Date("2026-10-10T08:00:00Z");
 
@@ -119,25 +119,22 @@ test("sources: at most 10", () => {
   assert.equal(extractSources(text).length, 10);
 });
 
+test("a reply too long to store is cut short, between characters, never mid-emoji", () => {
+  const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  for (const long of ["a".repeat(9000), `${"a".repeat(REPLY_MAX_CHARS - 2)}💪💪💪 more`, "💪".repeat(5000)]) {
+    const out = replyText(long);
+    assert.ok(out.length <= REPLY_MAX_CHARS, `${out.length}`);
+    assert.ok(out.endsWith("…"));
+    assert.equal(loneSurrogate.test(out), false);
+  }
+  const fits = "b".repeat(REPLY_MAX_CHARS);
+  assert.equal(replyText(fits), fits);
+});
+
 // The other half of this contract is in supabase/functions/assistant-deliver/handler.test.ts:
 // change both sides together.
-test("contract: REPLY_LIMITS are assistant-deliver's DELIVER_SCHEMA limits", () => {
-  assert.deepEqual({ ...REPLY_LIMITS }, { text: 8000, sources: 10, urlMin: 9, urlMax: 500, title: 200 });
-});
-
-test("reply text: cut to what assistant-deliver accepts, with an ellipsis", () => {
-  const long = replyText("word ".repeat(3000));
-  assert.equal(long.length <= REPLY_LIMITS.text, true);
-  assert.ok(long.endsWith("word…"), long.slice(-10));
-  assert.equal(replyText("x".repeat(REPLY_LIMITS.text)), "x".repeat(REPLY_LIMITS.text), "a reply at the limit is left whole");
-  assert.equal(replyText("x".repeat(REPLY_LIMITS.text + 1)).length, REPLY_LIMITS.text);
-});
-
-test("reply text: a cut never splits an emoji into a lone surrogate", () => {
-  const cut = clampText("x".repeat(REPLY_LIMITS.text - 2) + "💪💪", REPLY_LIMITS.text);
-  assert.equal(cut.length <= REPLY_LIMITS.text, true);
-  assert.equal(storableText(cut), cut, "nothing left for storableText to repair");
-  assert.ok(cut.endsWith("x…"));
+test("contract: the reply and source limits are assistant-deliver's DELIVER_SCHEMA limits", () => {
+  assert.deepEqual({ text: REPLY_MAX_CHARS, ...SOURCE_LIMITS }, { text: 8000, count: 10, urlMin: 9, urlMax: 500, title: 200 });
 });
 
 test("reply text: NUL characters and unpaired surrogates, which jsonb refuses, are made storable", () => {
@@ -145,10 +142,11 @@ test("reply text: NUL characters and unpaired surrogates, which jsonb refuses, a
   assert.equal(replyText("lone \uD83D here"), "lone \uFFFD here");
   assert.equal(replyText("lone \uDE00 here"), "lone \uFFFD here");
   assert.equal(replyText("pair 💪 kept"), "pair 💪 kept");
+  assert.equal(storableText("ok"), "ok");
 });
 
 test("sources: only links assistant-deliver accepts — a host, within the length limits", () => {
-  assert.deepEqual(extractSources("see https://. and https:// and https://example.org/x)."), [{ url: "https://example.org/x" }]);
-  assert.deepEqual(extractSources(`https://a.example/${"p".repeat(REPLY_LIMITS.urlMax)}`), []);
+  assert.deepEqual(extractSources("see https://. and https:// and [ACSM](https://.) and https://example.org/x)."), [{ url: "https://example.org/x" }]);
+  assert.deepEqual(extractSources(`https://a.example/${"p".repeat(SOURCE_LIMITS.urlMax)}`), []);
   assert.deepEqual(extractSources("[Guide](https://a.example/\u0000g)"), [{ title: "Guide", url: "https://a.example/g" }]);
 });

@@ -71,6 +71,21 @@ which is the closest thing to actually running the app that's available here.
    ```bash
    DENO_NO_PACKAGE_JSON=1 deno test --no-config supabase/functions/
    ```
+5. **Migrations and SQL functions** run on a real Postgres 17 (PGlite) in
+   `supabase/db-tests/`: every migration applied in order on top of
+   `supabase-stubs.sql` (the auth schema, `auth.uid()`, the API roles and
+   Supabase's default grants), then checks of the access model and of the
+   assistant's SQL functions. CI runs the same command:
+   ```bash
+   DENO_NO_PACKAGE_JSON=1 deno test --no-config --allow-read supabase/db-tests/
+   ```
+   A new migration that makes a table or a security definer function
+   reachable by `anon` or `authenticated` fails `access.test.ts` on purpose:
+   if the access is intended, add it to that test's expected list. Use
+   `asUser`, `asService` and `asAnon` from `db.ts` to run as each role, and
+   `createUser`, which backdates the signup so the 20-in-10-minutes limit
+   never trips. This proves the SQL, not PostgREST or a deployed function —
+   the live smoke test below is still needed.
 
 ## Backend — agent service (Node)
 

@@ -111,14 +111,22 @@ Deno.test("pushPreview flattens whitespace and trims to 140 characters", () => {
   assertEquals(long.endsWith("…"), true);
 });
 
-// The other half of this contract is REPLY_LIMITS in services/relay/src/prompt.ts (and its
-// test): the relay cuts every reply to these limits, so change both sides together.
-Deno.test("contract: DELIVER_SCHEMA's reply limits are the relay's REPLY_LIMITS", () => {
+Deno.test("a stored reply is still pushed and answered 200 when recording its spend fails", async () => {
+  const { d, log } = deps(delivered, { recordSpend: () => Promise.reject(new Error("db down")) });
+  const res = await handleDeliver(post(good), d);
+  assertEquals(res.status, 200);
+  assertEquals(await res.json(), { status: "delivered", message_id: "m9" });
+  assertEquals(log.pushes.length, 1);
+});
+
+// The other half of this contract is REPLY_MAX_CHARS and SOURCE_LIMITS in services/relay/src/prompt.ts
+// (and its test): the relay cuts every reply to these limits, so change both sides together.
+Deno.test("contract: DELIVER_SCHEMA's reply limits are the relay's", () => {
   const reply = DELIVER_SCHEMA.properties!.reply;
   const sources = reply.properties!.sources;
   const source = sources.items!.properties!;
   assertEquals(
-    { text: reply.properties!.text.maxLength, sources: sources.maxItems, urlMin: source.url.minLength, urlMax: source.url.maxLength, title: source.title.maxLength },
-    { text: 8000, sources: 10, urlMin: 9, urlMax: 500, title: 200 },
+    { text: reply.properties!.text.maxLength, count: sources.maxItems, urlMin: source.url.minLength, urlMax: source.url.maxLength, title: source.title.maxLength },
+    { text: 8000, count: 10, urlMin: 9, urlMax: 500, title: 200 },
   );
 });

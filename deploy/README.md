@@ -319,13 +319,14 @@ sudo /usr/local/lib/notch-ops/health.sh
   it's set.
 - **Nebius billing alerts:** [`docs/budget-runbook.md`](../docs/budget-runbook.md).
 
-## Adding the Hermes sandbox image (NH-21)
+## The Hermes sandbox image (NH-21)
 
-1. Put its Dockerfile in `deploy/images/hermes-sandbox/`, next to the coach
-   profile already there (see [its README](images/hermes-sandbox/README.md)).
-   From then on the Images workflow builds
-   `ghcr.io/maximal1337/notch-hermes-sandbox` too.
-2. In `platform/openshell/values-{dev,prod}.yaml`, point the gateway's default
+Added on 2026-10-04. The first build (`sha-4655445706c5`) came out public, so step 3 needed nothing.
+
+1. Its Dockerfile is in `deploy/images/hermes-sandbox/`, next to the coach
+   profile (see [its README](images/hermes-sandbox/README.md)). The Images
+   workflow builds `ghcr.io/maximal1337/notch-hermes-sandbox` with the relay.
+2. `platform/openshell/values-{dev,prod}.yaml` point the gateway's default
    sandbox image at it, with the tag line marked for CI:
 
    ```yaml

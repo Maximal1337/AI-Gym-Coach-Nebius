@@ -21,6 +21,11 @@ export interface ChatMessage {
 /** What a check-in answers when there's nothing worth saying (NH-66); the relay then skips it. */
 export const CHECKIN_SKIP = "SKIP";
 
+/** SKIP alone, give or take the quotes, markdown or full stop a model puts around it. */
+export function isCheckinSkip(text: string): boolean {
+  return /^[\s"'`*_.!]*SKIP[\s"'`*_.!]*$/i.test(text);
+}
+
 const LANGUAGE_NAMES: Record<string, string> = {
   en: "English",
   he: "Hebrew",
@@ -106,46 +111,55 @@ export function buildMessages(job: JobContext, now: Date): ChatMessage[] {
   return messages;
 }
 
-/**
- * What assistant-deliver accepts (DELIVER_SCHEMA in
- * supabase/functions/assistant-deliver/handler.ts, lengths in UTF-16 units):
- * it refuses a whole reply that breaks any of these, so the relay keeps
- * every reply inside them.
- */
-export const REPLY_LIMITS = { text: 8000, sources: 10, urlMin: 9, urlMax: 500, title: 200 } as const;
-
-/**
- * A model's text, made storable: Postgres' jsonb refuses NUL characters and
- * unpaired surrogates, and a reply holding either would fail its delivery
- * every time.
- */
-export function storableText(text: string): string {
-  return text.replace(/\u0000/g, "").replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "�");
-}
-
-/** At most `max` UTF-16 units, never splitting a surrogate pair; a text that was cut ends with "…". */
-export function clampText(text: string, max: number): string {
-  if (text.length <= max) return text;
-  let cut = text.slice(0, max - 1);
-  if (/[\uD800-\uDBFF]$/.test(cut)) cut = cut.slice(0, -1);
-  return `${cut.trimEnd()}…`;
-}
+/** The longest reply assistant-deliver and assistant_messages accept. */
+export const REPLY_MAX_CHARS = 8000;
 
 /**
  * The reply as the app shows it. The chat renders plain text and **bold**
  * only, so a markdown link would show as raw brackets: it becomes its title,
  * and the link itself becomes a tappable source under the message
- * (extractSources, run on the original text). Cut to REPLY_LIMITS.text.
+ * (extractSources, run on the original text). A reply too long to store is
+ * cut short rather than refused, which would throw the paid turn away.
  */
 export function replyText(text: string): string {
   const clean = storableText(text);
   const plain = clean.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
-  return clampText(plain || clean.trim(), REPLY_LIMITS.text);
+  return clip(plain || clean.trim(), REPLY_MAX_CHARS);
 }
 
-/** A link assistant-deliver accepts as a source: https, with a host, within the length limits. */
+/**
+ * A model's text, made storable: Postgres' jsonb refuses NUL characters and
+ * unpaired surrogates, so a reply holding either would fail its delivery
+ * (a 500) on every attempt.
+ */
+export function storableText(text: string): string {
+  return text.replace(/\u0000/g, "").replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+}
+
+/**
+ * At most `max` UTF-16 units (what the deliver schema counts), cut between
+ * characters: half an emoji is a lone surrogate, which Postgres refuses.
+ */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let out = "";
+  for (const ch of text) {
+    if (out.length + ch.length > max - 1) break;
+    out += ch;
+  }
+  return `${out.trimEnd()}…`;
+}
+
+/**
+ * What assistant-deliver's DELIVER_SCHEMA accepts for sources
+ * (supabase/functions/assistant-deliver/handler.ts): one source it refuses
+ * sinks the whole reply.
+ */
+export const SOURCE_LIMITS = { count: 10, urlMin: 9, urlMax: 500, title: 200 } as const;
+
+/** https, with a host, within the length limits — "https://" alone, left by "see https://.", isn't. */
 function isSourceUrl(url: string): boolean {
-  if (!url.startsWith("https://") || url.length < REPLY_LIMITS.urlMin || url.length > REPLY_LIMITS.urlMax) return false;
+  if (!url.startsWith("https://") || url.length < SOURCE_LIMITS.urlMin || url.length > SOURCE_LIMITS.urlMax) return false;
   try {
     return new URL(url).hostname !== "";
   } catch {
@@ -159,9 +173,9 @@ export function extractSources(text: string): Array<{ title?: string; url: strin
   const seen = new Set<string>();
   const add = (url: string, title?: string) => {
     const clean = url.replace(/[).,;:!?]+$/, "");
-    if (!isSourceUrl(clean) || seen.has(clean) || out.length >= REPLY_LIMITS.sources) return;
+    if (!isSourceUrl(clean) || seen.has(clean) || out.length >= SOURCE_LIMITS.count) return;
     seen.add(clean);
-    out.push(title ? { title: clampText(title, REPLY_LIMITS.title), url: clean } : { url: clean });
+    out.push(title ? { title: clip(title, SOURCE_LIMITS.title), url: clean } : { url: clean });
   };
   const clean = storableText(text);
   for (const m of clean.matchAll(/\[([^\]]{1,200})\]\((https:\/\/[^\s)]+)\)/g)) add(m[2], m[1]);
