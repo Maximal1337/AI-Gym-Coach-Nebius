@@ -111,15 +111,33 @@ export function buildMessages(job: JobContext, now: Date): ChatMessage[] {
   return messages;
 }
 
+/** The longest reply assistant-deliver and assistant_messages accept. */
+export const REPLY_MAX_CHARS = 8000;
+
 /**
  * The reply as the app shows it. The chat renders plain text and **bold**
  * only, so a markdown link would show as raw brackets: it becomes its title,
  * and the link itself becomes a tappable source under the message
- * (extractSources, run on the original text).
+ * (extractSources, run on the original text). A reply too long to store is
+ * cut short rather than refused, which would throw the paid turn away.
  */
 export function replyText(text: string): string {
   const plain = text.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
-  return plain || text.trim();
+  return clip(plain || text.trim(), REPLY_MAX_CHARS);
+}
+
+/**
+ * At most `max` UTF-16 units (what the deliver schema counts), cut between
+ * characters: half an emoji is a lone surrogate, which Postgres refuses.
+ */
+function clip(text: string, max: number): string {
+  if (text.length <= max) return text;
+  let out = "";
+  for (const ch of text) {
+    if (out.length + ch.length > max - 1) break;
+    out += ch;
+  }
+  return `${out.trimEnd()}…`;
 }
 
 /** Links in a reply, as sources for the app: markdown links first, then bare https URLs. */

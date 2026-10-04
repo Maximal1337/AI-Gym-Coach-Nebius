@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, replyText } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText } from "./prompt.js";
 
 const NOW = new Date("2026-10-10T08:00:00Z");
 
@@ -117,4 +117,16 @@ test("sources: markdown links and bare https URLs, deduplicated, never http", ()
 test("sources: at most 10", () => {
   const text = Array.from({ length: 15 }, (_, i) => `https://a.example/${i}`).join(" ");
   assert.equal(extractSources(text).length, 10);
+});
+
+test("a reply too long to store is cut short, between characters, never mid-emoji", () => {
+  const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+  for (const long of ["a".repeat(9000), `${"a".repeat(REPLY_MAX_CHARS - 2)}💪💪💪 more`, "💪".repeat(5000)]) {
+    const out = replyText(long);
+    assert.ok(out.length <= REPLY_MAX_CHARS, `${out.length}`);
+    assert.ok(out.endsWith("…"));
+    assert.equal(loneSurrogate.test(out), false);
+  }
+  const fits = "b".repeat(REPLY_MAX_CHARS);
+  assert.equal(replyText(fits), fits);
 });

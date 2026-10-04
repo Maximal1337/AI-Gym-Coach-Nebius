@@ -1,5 +1,5 @@
 import { type ChatOptions, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
-import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
+import { type DeferRequest, type DeliverRequest, type FailRequest, type JobContext, OutboxError } from "./outbox.js";
 import { buildMessages, type ChatMessage, extractSources, isCheckinSkip, replyText } from "./prompt.js";
 import { DEFER_SECONDS, type SandboxLease } from "./sandbox-manager.js";
 
@@ -48,6 +48,8 @@ async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promi
       return (await deps.outbox.deliver(request)).status;
     } catch (e) {
       // Safe to retry: a delivery is idempotent per job (assistant_complete_job).
+      // A request refused as invalid would only be refused again.
+      if (e instanceof OutboxError && e.status === 400) throw e;
       lastError = e;
     }
   }
@@ -101,7 +103,17 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedA
     ...(result.usage ? { usage: result.usage } : {}),
     ...(skip ? { skip: true } : { reply: { text: replyText(result.text), sources: extractSources(result.text) } }),
   };
-  const status = await deliverWithRetry(deps, request);
+  let status: number;
+  try {
+    status = await deliverWithRetry(deps, request);
+  } catch (e) {
+    // Refused as invalid, it would be refused again: report the attempt, with
+    // its spend, rather than let the lease run out and the turn go unrecorded.
+    if (!(e instanceof OutboxError && e.status === 400)) throw e;
+    deps.log("delivery_refused", { job: job.id, error: String(e) });
+    await deps.outbox.fail({ ...base, error: `delivery_refused: ${String(e)}`, model: deps.model, ...(result.usage ? { usage: result.usage } : {}) });
+    return "failed";
+  }
   if (status !== 200) {
     // 409: the lease expired and another attempt owns the job; 404: the job is gone (user deleted).
     deps.log("delivery_dropped", { job: job.id, status });

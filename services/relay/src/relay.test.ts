@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chat, HermesError } from "./hermes.js";
-import type { DeferRequest, DeliverRequest, FailRequest, JobContext } from "./outbox.js";
+import { type DeferRequest, type DeliverRequest, type FailRequest, type JobContext, OutboxError } from "./outbox.js";
 import { HERMES_BOOT_MS, processJob, type RelayDeps, runOnce } from "./relay.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 
@@ -166,6 +166,29 @@ test("Hermes still not up after the boot window, or a sandbox the relay didn't j
   });
   assert.equal(await processJob(job(), d), "failed");
   assert.equal(log.deferred.length, 0);
+});
+
+test("a delivery refused as invalid is reported once, with the turn's spend, instead of left to expire", async () => {
+  let calls = 0;
+  const { d, log } = deps({
+    outbox: {
+      ...deps().d.outbox,
+      deliver: () => {
+        calls++;
+        return Promise.reject(new OutboxError("deliver failed: 400 {\"error\":\"invalid_input\"}", 400));
+      },
+    },
+  });
+  d.outbox.fail = (r) => {
+    log.failed.push(r);
+    return Promise.resolve(true);
+  };
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(calls, 1);
+  assert.equal(log.failed.length, 1);
+  assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
+  assert.deepEqual(log.failed[0].usage, { tokensInput: 900, tokensOutput: 60 });
+  assert.match(log.failed[0].error, /^delivery_refused: /);
 });
 
 test("a lost lease drops the result instead of retrying", async () => {
