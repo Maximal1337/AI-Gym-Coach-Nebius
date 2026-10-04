@@ -17,6 +17,12 @@ import { LIMIT_REACHED_ERROR, type TokenUsage } from "../_shared/assistant.ts";
  *       recorded; the job goes back to the queue until its attempts run out.
  * Success is reported to assistant-deliver, which stores the reply.
  *
+ * A claimed job that must not run at all ends before its context is built:
+ * the user's assistant flags are off (the kill switch, or the flag removed
+ * after the job was queued), or it's a check-in for a user without a
+ * subscription (assistant-send refuses those users' messages with 402; a
+ * check-in has no send). jobRefusal decides; the job is dropped, for good.
+ *
  * The sandbox manager in the relay (NH-55, NH-56) uses three more:
  *   {"action":"defer","job_id":1,"lease_token":"…","seconds":20,"reason":"capacity"}
  *     → {"ok":true|false}. The user's sandbox can't run the job yet (no free
@@ -32,7 +38,11 @@ export interface OutboxDeps {
   spendAllowed: (env: RelayEnvironment) => Promise<boolean>;
   claim: (env: RelayEnvironment, limit: number, leaseSeconds: number) => Promise<Record<string, unknown>[]>;
   context: (jobId: number) => Promise<Record<string, unknown>>;
-  fail: (jobId: number, leaseToken: string, error: string) => Promise<boolean>;
+  /** Why a claimed job must not run at all (jobRefusal), or null. Throws when it can't tell. */
+  refusal: (job: Record<string, unknown>) => Promise<string | null>;
+  /** Ends a leased job for good (assistant_drop_job). */
+  drop: (env: RelayEnvironment, jobId: number, leaseToken: string, reason: string) => Promise<boolean>;
+  fail: (env: RelayEnvironment, jobId: number, leaseToken: string, error: string) => Promise<boolean>;
   recordSpend: (env: RelayEnvironment, model: string, usage: Partial<TokenUsage> | undefined) => Promise<unknown>;
   defer: (env: RelayEnvironment, jobId: number, leaseToken: string, seconds: number, reason: string | null) => Promise<boolean>;
   recordAgent: (env: RelayEnvironment, userId: string, sandboxName: string, tokenHash: string) => Promise<string>;
@@ -103,6 +113,26 @@ export const LIST_AGENTS_SCHEMA: JsonSchema = {
   additionalProperties: false,
 };
 
+/** What jobRefusal needs to look up; each throws when it can't tell. */
+export interface RefusalChecks {
+  flagEnabled: (userId: string, flag: "assistant_chat" | "assistant_checkin") => Promise<boolean>;
+  entitled: (userId: string) => Promise<boolean>;
+}
+
+/**
+ * Why a claimed job must not run at all, or null. A chat job needs the user's
+ * assistant_chat flag; a check-in needs assistant_checkin too, and a
+ * subscription, since nothing else stands between it and a paid turn.
+ */
+export async function jobRefusal(job: Record<string, unknown>, checks: RefusalChecks): Promise<string | null> {
+  const userId = job.user_id as string;
+  if (!(await checks.flagEnabled(userId, "assistant_chat"))) return "assistant_disabled";
+  if (job.kind !== "checkin") return null;
+  if (!(await checks.flagEnabled(userId, "assistant_checkin"))) return "assistant_disabled";
+  if (!(await checks.entitled(userId))) return "subscription_required";
+  return null;
+}
+
 export const DEFAULT_CLAIM_LIMIT = 2;
 export const DEFAULT_LEASE_SECONDS = 180;
 
@@ -133,14 +163,22 @@ export async function handleOutbox(req: Request, deps: OutboxDeps): Promise<Resp
     );
     const jobs = [];
     for (const job of leased) {
+      const id = job.id as number;
+      const leaseToken = job.lease_token as string;
       try {
-        jobs.push({ id: job.id, lease_token: job.lease_token, leased_until: job.leased_until, ...(await deps.context(job.id as number)) });
+        const refusal = await deps.refusal(job);
+        if (refusal) {
+          console.log("assistant job dropped", { jobId: id, kind: job.kind, reason: refusal });
+          await deps.drop(env, id, leaseToken, refusal);
+          continue;
+        }
+        jobs.push({ id, lease_token: leaseToken, leased_until: job.leased_until, ...(await deps.context(id)) });
       } catch (e) {
-        // One job's context failing mustn't strand the rest of the batch until
-        // their leases run out. This one goes back now, its attempt spent, so a
-        // job whose context never loads still ends.
-        console.error("assistant_job_context failed", { jobId: job.id, error: String(e) });
-        await deps.fail(job.id as number, job.lease_token as string, `context_error: ${String(e)}`.slice(0, 2000)).catch(() => false);
+        // One job's checks or context failing mustn't strand the rest of the
+        // batch until their leases run out. This one goes back now, its attempt
+        // spent, so a job whose context never loads still ends.
+        console.error("assistant job not handed out", { jobId: id, error: String(e) });
+        await deps.fail(env, id, leaseToken, `context_error: ${String(e)}`.slice(0, 2000)).catch(() => false);
       }
     }
     return reply(200, { jobs });
@@ -150,7 +188,7 @@ export async function handleOutbox(req: Request, deps: OutboxDeps): Promise<Resp
     const invalid = validate(FAIL_SCHEMA, body, "body");
     if (invalid) return reply(400, { error: "invalid_input", detail: invalid });
     if (body.model) await deps.recordSpend(env, body.model as string, body.usage as Partial<TokenUsage> | undefined);
-    const ok = await deps.fail(body.job_id as number, body.lease_token as string, body.error as string);
+    const ok = await deps.fail(env, body.job_id as number, body.lease_token as string, body.error as string);
     return reply(200, { ok });
   }
 

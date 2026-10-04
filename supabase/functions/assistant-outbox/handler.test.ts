@@ -1,7 +1,7 @@
 // Tests for assistant-outbox (NH-52). Run: deno test --no-config supabase/functions/
 import { assertEquals } from "jsr:@std/assert@1";
 import { relayHeaders, verifyRelayRequest } from "../_shared/relay-auth.ts";
-import { DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS, handleOutbox, type OutboxDeps } from "./handler.ts";
+import { DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS, handleOutbox, jobRefusal, type OutboxDeps, type RefusalChecks } from "./handler.ts";
 
 const TOKEN = "5f0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
 const USER = "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
@@ -10,6 +10,7 @@ function deps(overrides: Partial<OutboxDeps> = {}) {
   const log = {
     claims: [] as unknown[][],
     fails: [] as unknown[][],
+    drops: [] as unknown[][],
     spend: [] as unknown[][],
     defers: [] as unknown[][],
     records: [] as unknown[][],
@@ -22,6 +23,11 @@ function deps(overrides: Partial<OutboxDeps> = {}) {
       return Promise.resolve([{ id: 7, lease_token: TOKEN, leased_until: "2026-10-10T12:03:00Z", status: "leased" }]);
     },
     context: (jobId) => Promise.resolve({ job: { id: jobId, kind: "chat" }, message: { text: "hi" }, history: [], facts: [] }),
+    refusal: () => Promise.resolve(null),
+    drop: (...args) => {
+      log.drops.push(args);
+      return Promise.resolve(true);
+    },
     fail: (...args) => {
       log.fails.push(args);
       return Promise.resolve(true);
@@ -91,7 +97,7 @@ Deno.test("fail: records the tokens spent, then returns the job to the queue", a
   }), d);
   assertEquals(await res.json(), { ok: true });
   assertEquals(log.spend, [["prod", "nemotron-super", { tokensInput: 100, tokensOutput: 5 }]]);
-  assertEquals(log.fails, [[7, TOKEN, "hermes timeout"]]);
+  assertEquals(log.fails, [["prod", 7, TOKEN, "hermes timeout"]]);
 });
 
 Deno.test("fail: without a model, nothing is charged (the call never reached the model)", async () => {
@@ -189,5 +195,51 @@ Deno.test("claim: a job whose context fails goes back at once; the rest of the b
   const res = await handleOutbox(post({ action: "claim" }), d);
   assertEquals(res.status, 200);
   assertEquals((await res.json()).jobs.map((j: { id: number }) => j.id), [8]);
-  assertEquals(log.fails, [[7, TOKEN, "context_error: Error: connection reset"]]);
+  assertEquals(log.fails, [["prod", 7, TOKEN, "context_error: Error: connection reset"]]);
+});
+
+Deno.test("claim: a job that must not run is dropped for good before its context is built; the rest go out", async () => {
+  const other = "6a0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
+  const contexts: number[] = [];
+  const { d, log } = deps({
+    claim: () =>
+      Promise.resolve([
+        { id: 7, user_id: USER, kind: "checkin", lease_token: TOKEN, leased_until: "2026-10-10T12:03:00Z", status: "leased" },
+        { id: 8, user_id: USER, kind: "chat", lease_token: other, leased_until: "2026-10-10T12:03:00Z", status: "leased" },
+      ]),
+    refusal: (job) => Promise.resolve(job.id === 7 ? "subscription_required" : null),
+    context: (jobId) => (contexts.push(jobId), Promise.resolve({ job: { id: jobId, kind: "chat" } })),
+  });
+  const res = await handleOutbox(post({ action: "claim" }), d);
+  assertEquals((await res.json()).jobs.map((j: { id: number }) => j.id), [8]);
+  assertEquals(log.drops, [["prod", 7, TOKEN, "subscription_required"]]);
+  assertEquals(contexts, [8]);
+  assertEquals(log.fails, []);
+});
+
+Deno.test("claim: when the checks can't tell, the job goes back as a failed attempt, never dropped", async () => {
+  const { d, log } = deps({ refusal: () => Promise.reject(new Error("feature_enabled: connection reset")) });
+  const res = await handleOutbox(post({ action: "claim" }), d);
+  assertEquals((await res.json()).jobs, []);
+  assertEquals(log.drops, []);
+  assertEquals(log.fails, [["prod", 7, TOKEN, "context_error: Error: feature_enabled: connection reset"]]);
+});
+
+Deno.test("jobRefusal: chat needs assistant_chat; a check-in needs assistant_checkin and a subscription too", async () => {
+  const checks = (flags: string[], entitled: boolean): RefusalChecks & { asked: string[] } => {
+    const asked: string[] = [];
+    return {
+      asked,
+      flagEnabled: (_u, flag) => (asked.push(flag), Promise.resolve(flags.includes(flag))),
+      entitled: () => (asked.push("subscription"), Promise.resolve(entitled)),
+    };
+  };
+  const chat = { user_id: USER, kind: "chat" };
+  const checkin = { user_id: USER, kind: "checkin" };
+  assertEquals(await jobRefusal(chat, checks(["assistant_chat"], false)), null, "a chat isn't held to the subscription here: assistant-send checked it");
+  assertEquals(await jobRefusal(chat, checks([], true)), "assistant_disabled");
+  assertEquals(await jobRefusal(checkin, checks(["assistant_chat", "assistant_checkin"], true)), null);
+  assertEquals(await jobRefusal(checkin, checks(["assistant_chat"], true)), "assistant_disabled");
+  assertEquals(await jobRefusal(checkin, checks(["assistant_checkin"], true)), "assistant_disabled");
+  assertEquals(await jobRefusal(checkin, checks(["assistant_chat", "assistant_checkin"], false)), "subscription_required");
 });
