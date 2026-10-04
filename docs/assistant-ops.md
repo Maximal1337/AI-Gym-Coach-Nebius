@@ -77,7 +77,7 @@ group by 1;
 
 ## Stuck work
 
-Pending jobs older than 5 minutes (the relay isn't pulling, or the environment is at its spend ceiling), and leases held past their expiry:
+Pending jobs older than 5 minutes (the relay isn't pulling, or the environment is at its spend ceiling), and leases held past their expiry. A job the relay keeps deferring (its sandbox stuck starting) fails on its own once it's 30 minutes old, with `last_error` `deferred too long: <reason>`, so it can't hold a user's later messages behind it; the app then offers to send it again:
 
 ```sql
 select environment, status, count(*) as jobs, min(created_at) as oldest
