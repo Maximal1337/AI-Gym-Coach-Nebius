@@ -193,6 +193,28 @@ Deno.test("the job context carries the message, earlier history, facts, persona 
   await db.close();
 });
 
+Deno.test("two messages in a row: the second turn's history has the reply to the first", async () => {
+  const db = await migratedDb();
+  const u = await createUser(db);
+  await send(db, u, "hi", "c1");
+  await send(db, u, "how was my week?", "c2");
+  await send(db, u, "and next week?", "c3");
+  const [first] = await claim(db);
+  await asService(db, (tx) => tx.query("select public.assistant_complete_job('prod', $1, $2, '{\"text\":\"Hey! What can I do?\"}')", [first.id, first.lease_token]));
+  const [second] = await claim(db);
+  const ctx = await asService(db, async (tx) =>
+    (await tx.query<{ c: Record<string, any> }>("select public.assistant_job_context($1) c", [second.id])).rows[0].c
+  );
+  assertEquals(ctx.message.text, "how was my week?");
+  // The reply was stored after the second message was sent, and the third
+  // message is a later turn: neither order of arrival may hide or leak them.
+  assertEquals(ctx.history.map((h: { role: string; text: string }) => `${h.role}: ${h.text}`), [
+    "user: hi",
+    "assistant: Hey! What can I do?",
+  ]);
+  await db.close();
+});
+
 Deno.test("check-ins: one per opted-in user a day, only with both flags, stale ones failed", async () => {
   const db = await migratedDb();
   const [both, chatOnly] = [await createUser(db), await createUser(db)];
