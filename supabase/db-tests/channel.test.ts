@@ -236,6 +236,62 @@ Deno.test("check-ins: one per opted-in user a day, only with both flags, stale o
   await db.close();
 });
 
+Deno.test("a check-in from an earlier day is failed by the claim, never sent late; today's goes out", async () => {
+  const db = await migratedDb();
+  const u = await createUser(db);
+  await db.query("insert into public.user_flags (user_id, flag) values ($1, 'assistant_chat'), ($1, 'assistant_checkin')", [u]);
+  const days = (await one<{ yesterday: string; today: string }>(
+    db,
+    "select ((now() at time zone 'utc')::date - 1)::text yesterday, (now() at time zone 'utc')::date::text today",
+  ))!;
+  const enqueue = (day: string) => asService(db, (tx) => tx.query("select public.assistant_enqueue_checkins($1::date)", [day]));
+  const statusOf = async (day: string) =>
+    (await one<{ status: string; last_error: string | null }>(db, "select status, last_error from public.assistant_jobs where dedup_key = $1", [`checkin:${day}`]))!;
+
+  // Held back past UTC midnight (the spend ceiling, a relay outage): never
+  // claimed, failed as stale, and it no longer holds the user's place in line.
+  await enqueue(days.yesterday);
+  await send(db, u, "a question", "c1");
+  const claimed = await claim(db);
+  assertEquals(claimed.map((j) => j.kind), ["chat"]);
+  assertEquals(await statusOf(days.yesterday), { status: "failed", last_error: "stale: not sent on its day" });
+  await ack(db, claimed[0], true);
+
+  // Today's check-in is claimed as usual.
+  await enqueue(days.today);
+  assertEquals((await claim(db)).map((j) => j.kind), ["checkin"]);
+  await db.close();
+});
+
+Deno.test("a stale check-in still being answered finishes; handed back or left to expire, it's failed", async () => {
+  const db = await migratedDb();
+  const [a, b] = [await createUser(db), await createUser(db)];
+  await db.query(
+    "insert into public.user_flags (user_id, flag) values ($1, 'assistant_chat'), ($1, 'assistant_checkin'), ($2, 'assistant_chat'), ($2, 'assistant_checkin')",
+    [a, b],
+  );
+  const yesterday = (await one<{ d: string }>(db, "select ((now() at time zone 'utc')::date - 1)::text d"))!.d;
+  // Leased on its day (set directly: a claim today would fail them), the
+  // leases still live after midnight: they're being answered and are left be.
+  await asService(db, (tx) => tx.query("select public.assistant_enqueue_checkins($1::date)", [yesterday]));
+  const [ja, jb] = await all<Job>(
+    db,
+    "update public.assistant_jobs set status = 'leased', attempts = 1, lease_token = gen_random_uuid(), leased_until = now() + interval '60 seconds' returning *",
+  ).then((rows) => rows.sort((x, y) => x.id - y.id));
+  assertEquals(await claim(db), []);
+  assertEquals((await all<{ status: string }>(db, "select status from public.assistant_jobs order by id")).map((r) => r.status), ["leased", "leased"]);
+  // a's is deferred (handed back to pending), b's lease runs out: the next claim fails both.
+  await asService(db, (tx) => tx.query("select public.assistant_defer_job('prod', $1, $2, 1, 'capacity')", [ja.id, ja.lease_token]));
+  await db.query("update public.assistant_jobs set not_before = now() - interval '1 second' where id = $1", [ja.id]);
+  await db.query("update public.assistant_jobs set leased_until = now() - interval '1 second' where id = $1", [jb.id]);
+  assertEquals(await claim(db), []);
+  assertEquals(
+    await all(db, "select status, last_error from public.assistant_jobs order by id"),
+    [{ status: "failed", last_error: "stale: not sent on its day" }, { status: "failed", last_error: "stale: not sent on its day" }],
+  );
+  await db.close();
+});
+
 Deno.test("the app sees only its own open chat jobs, without errors or leases", async () => {
   const db = await migratedDb();
   const [a, b] = [await createUser(db), await createUser(db)];
