@@ -65,6 +65,45 @@ Deno.test("anon reads only app_config and writes nothing", async () => {
   await db.close();
 });
 
+Deno.test("authenticated reads only these tables, all but two scoped to the caller's own rows", async () => {
+  const db = await migratedDb();
+  assertEquals((await all<{ t: string }>(db, readable("authenticated"))).map((r) => r.t), [
+    "app_config",
+    "assistant_actions",
+    "assistant_messages",
+    "coach_notes",
+    "coach_profiles",
+    "common_exercises",
+    "exercises",
+    "fitness_profiles",
+    "messages",
+    "push_tokens",
+    "session_exercise_skips",
+    "set_logs",
+    "studio_blocks",
+    "studio_custom_units",
+    "studio_exercises",
+    "studio_sessions",
+    "training_plans",
+    "usage_ledger",
+    "user_facts",
+    "users",
+    "workout_sessions",
+  ]);
+  // A select policy that doesn't key on auth.uid() shows its rows to every
+  // signed-in user: only the app's shared config and exercise library may.
+  const shared = await all<{ t: string }>(
+    db,
+    `select distinct c.relname t
+     from pg_policy pol join pg_class c on c.oid = pol.polrelid join pg_namespace n on n.oid = c.relnamespace
+     where n.nspname = 'public' and pol.polpermissive and pol.polcmd in ('r', '*') and ${appliesTo("authenticated")}
+       and coalesce(pg_get_expr(pol.polqual, pol.polrelid), '') not like '%auth.uid()%'
+     order by 1`,
+  );
+  assertEquals(shared.map((r) => r.t), ["app_config", "common_exercises"]);
+  await db.close();
+});
+
 Deno.test("authenticated writes only its own profile rows, and deletes its own facts", async () => {
   const db = await migratedDb();
   assertEquals((await all<{ w: string }>(db, writable("authenticated"))).map((r) => r.w), [
