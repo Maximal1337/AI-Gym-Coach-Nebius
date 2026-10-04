@@ -279,6 +279,24 @@ test("runOnce: one job's reporting failure doesn't sink the batch", async () => 
   assert.ok(log.events.includes("job_error"));
 });
 
+test("a turn Hermes couldn't finish isn't delivered as the coach's reply: the attempt fails with its spend", async () => {
+  for (const kind of ["chat", "checkin"] as const) {
+    const usage = { tokensInput: 1200, tokensOutput: 0 };
+    const { d, log } = deps({
+      chat: () => Promise.reject(new HermesError("hermes turn failed: HTTP 429: rate limited", true, false, usage)),
+    });
+    assert.equal(await processJob(job(kind), d), "failed");
+    assert.equal(log.delivered.length, 0, kind);
+    assert.deepEqual(log.failed, [{
+      job_id: 7,
+      lease_token: "lease-7",
+      error: "HermesError: hermes turn failed: HTTP 429: rate limited",
+      model: "nvidia/nemotron-3-super",
+      usage,
+    }]);
+  }
+});
+
 // ------------------------------------------------------------ hermes client
 
 function fakeFetch(respond: () => Promise<Response>) {
@@ -300,6 +318,42 @@ test("hermes: posts OpenAI-style messages with the sandbox key and maps usage", 
   assert.equal(headers.authorization, "Bearer sandbox-key");
   assert.equal(headers["x-hermes-session-key"], "u1");
   assert.equal(JSON.parse(calls[0].body as string).stream, false);
+});
+
+// The shape Hermes v2026.9.24's /v1/chat/completions sends for a turn the agent
+// couldn't finish (gateway/platforms/api_server_openai_routes.py): 200, its own
+// failure text as the content, finish_reason "error", the hermes extras.
+const FAILED_TURN = {
+  choices: [{
+    index: 0,
+    message: { role: "assistant", content: "Nebius Token Factory failed after 3 attempts — it looks temporarily unavailable. Send /retry …" },
+    finish_reason: "error",
+  }],
+  usage: { prompt_tokens: 1200, completion_tokens: 0 },
+  hermes: { completed: false, partial: false, failed: true, error: "HTTP 429: rate limited", error_code: "agent_error" },
+};
+
+test("hermes: a turn the agent couldn't finish is an error that may have spent, with its usage — never a reply", async () => {
+  for (const body of [FAILED_TURN, { ...FAILED_TURN, hermes: undefined }, { ...FAILED_TURN, choices: [{ ...FAILED_TURN.choices[0], finish_reason: "stop" }] }]) {
+    const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body), { headers: { "x-hermes-completed": "false" } })));
+    await assert.rejects(
+      () => chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f }),
+      (e: unknown) =>
+        e instanceof HermesError && e.mayHaveSpent && !e.notReady && /^hermes turn failed: /.test(e.message) &&
+        e.usage?.tokensInput === 1200 && e.usage?.tokensOutput === 0,
+    );
+  }
+});
+
+test("hermes: a reply cut short (finish_reason length) is still a reply", async () => {
+  const body = {
+    choices: [{ message: { content: "Here is the first half of your program…" }, finish_reason: "length" }],
+    usage: { prompt_tokens: 10, completion_tokens: 4000 },
+    hermes: { completed: false, partial: true, failed: false, error: "output truncated", error_code: "output_truncated" },
+  };
+  const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body))));
+  const r = await chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f });
+  assert.equal(r.text, "Here is the first half of your program…");
 });
 
 test("hermes: missing usage is left for the fallback charge", async () => {

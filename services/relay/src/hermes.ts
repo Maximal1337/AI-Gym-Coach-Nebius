@@ -24,8 +24,9 @@ export class HermesError extends Error {
    * notReady: nothing was listening — a refused connection, or the gateway's 502/503
    * for a sandbox port that isn't open yet. Hermes' API server comes up some time
    * after its sandbox does.
+   * usage: what the turn reported spending before it failed, when it got that far.
    */
-  constructor(message: string, readonly mayHaveSpent: boolean, readonly notReady = false) {
+  constructor(message: string, readonly mayHaveSpent: boolean, readonly notReady = false, readonly usage?: Usage) {
     super(message);
     this.name = "HermesError";
   }
@@ -70,7 +71,17 @@ export async function chat(endpoint: SandboxEndpoint, messages: ChatMessage[], o
     // 4xx is refused before the model runs (auth, bad request, too many runs); 5xx may be mid-turn.
     throw new HermesError(`hermes ${res.status}: ${JSON.stringify(body).slice(0, 300)}`, res.status >= 500, res.status === 502 || res.status === 503);
   }
-  const choice = (body.choices as Array<{ message?: { content?: unknown } }> | undefined)?.[0];
+  const choice = (body.choices as Array<{ message?: { content?: unknown }; finish_reason?: unknown }> | undefined)?.[0];
+  const hermes = body.hermes as { failed?: unknown; error?: unknown } | undefined;
+  // A turn the agent couldn't finish (the provider down or rate-limited, a
+  // billing or content-policy refusal) comes back as a 200 whose content is
+  // Hermes' own explanation, written for someone at a terminal: finish_reason
+  // "error", hermes.failed. It's a failed attempt, with what it spent, never a
+  // reply. A reply cut short (finish_reason "length") is still a reply.
+  if (choice?.finish_reason === "error" || hermes?.failed === true) {
+    const reason = typeof hermes?.error === "string" && hermes.error ? hermes.error : res.headers.get("x-hermes-error") ?? "no reason given";
+    throw new HermesError(`hermes turn failed: ${reason.slice(0, 300)}`, true, false, usageFrom(body));
+  }
   const text = typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
   if (!text) throw new HermesError("hermes returned an empty reply", true);
   return { text, usage: usageFrom(body) };

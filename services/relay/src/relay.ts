@@ -91,8 +91,9 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedA
       return "deferred";
     }
     const spent = e instanceof HermesError ? e.mayHaveSpent : true;
+    const usage = e instanceof HermesError ? e.usage : undefined;
     deps.log("turn_failed", { job: job.id, error: String(e), spent });
-    await deps.outbox.fail({ ...base, error: String(e), ...(spent ? { model: deps.model } : {}) });
+    await deps.outbox.fail({ ...base, error: String(e), ...(spent ? { model: deps.model, ...(usage ? { usage } : {}) } : {}) });
     return "failed";
   }
 
