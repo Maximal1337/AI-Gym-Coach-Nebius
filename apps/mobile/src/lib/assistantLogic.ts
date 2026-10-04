@@ -132,14 +132,38 @@ export const SLOW_REPLY_MS = 120_000;
 /**
  * What the coach is doing with the unanswered messages: "typing" once the
  * relay has picked one up, "queued" before that, "slow" when the oldest open
- * one has waited past SLOW_REPLY_MS.
+ * one was sent more than SLOW_REPLY_MS ago. Timed from the message, not the
+ * job: a job's updated_at moves on every claim, retry and deferral, so a
+ * reply stuck behind a cold sandbox would never read as slow. A message not
+ * fetched yet falls back to its job's updated_at.
  */
-export function replyStatus(jobs: OpenJob[], now: number): ReplyStatus {
+export function replyStatus(jobs: OpenJob[], rows: AssistantRow[], now: number): ReplyStatus {
   const open = jobs.filter((j) => j.status === 'pending' || j.status === 'leased');
   if (open.length === 0) return 'idle';
-  const oldest = Math.min(...open.map((j) => Date.parse(j.updated_at)));
+  const sentAt = new Map(rows.map((r) => [r.id, r.created_at]));
+  const oldest = Math.min(...open.map((j) => Date.parse(sentAt.get(j.message_id) ?? j.updated_at)));
   if (Number.isFinite(oldest) && now - oldest > SLOW_REPLY_MS) return 'slow';
   return open.some((j) => j.status === 'leased') ? 'typing' : 'queued';
+}
+
+/**
+ * User messages whose job failed for good and that haven't been sent again,
+ * for buildItems. Sent again means tapped on this device this session
+ * (`resent`), or a later message of the user's with the same text: that one
+ * survives an app restart and shows on every device, where `resent` doesn't.
+ */
+export function failedMessageIds(jobs: OpenJob[], rows: AssistantRow[], resent: ReadonlySet<string>): Set<string> {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const users = rows.filter((r) => r.role === 'user');
+  const ids = new Set<string>();
+  for (const j of jobs) {
+    if (j.status !== 'failed' || resent.has(j.message_id)) continue;
+    const failed = byId.get(j.message_id);
+    const sentAgain = failed !== undefined &&
+      users.some((r) => r.id !== failed.id && compareRows(r, failed) > 0 && r.doc.text.trim() === failed.doc.text.trim());
+    if (!sentAgain) ids.add(j.message_id);
+  }
+  return ids;
 }
 
 /** Poll for the reply only while one is expected — push and foregrounding cover the rest. */
