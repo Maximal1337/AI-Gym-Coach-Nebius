@@ -292,6 +292,25 @@ Deno.test("a stale check-in still being answered finishes; handed back or left t
   await db.close();
 });
 
+Deno.test("a check-in's history ends when it was queued: a message sent while it waited is its own turn", async () => {
+  const db = await migratedDb();
+  const u = await createUser(db);
+  await db.query("insert into public.user_flags (user_id, flag) values ($1, 'assistant_chat'), ($1, 'assistant_checkin')", [u]);
+  await db.query("insert into public.assistant_messages (user_id, role, doc, created_at) values ($1, 'user', '{\"text\":\"yesterday\"}', now() - interval '1 day')", [u]);
+  await db.query("insert into public.assistant_messages (user_id, role, doc, created_at) values ($1, 'assistant', '{\"text\":\"see you\"}', now() - interval '23 hours')", [u]);
+  await asService(db, (tx) => tx.query("select public.assistant_enqueue_checkins()"));
+  await db.query("update public.assistant_jobs set created_at = now() - interval '1 minute' where kind = 'checkin'");
+  await send(db, u, "what's my workout today?", "c1");
+  const [job] = await claim(db);
+  assertEquals(job.kind, "checkin");
+  const ctx = await asService(db, async (tx) =>
+    (await tx.query<{ c: Record<string, any> }>("select public.assistant_job_context($1) c", [job.id])).rows[0].c
+  );
+  assertEquals(ctx.message, null);
+  assertEquals(ctx.history.map((h: { role: string; text: string }) => `${h.role}: ${h.text}`), ["user: yesterday", "assistant: see you"]);
+  await db.close();
+});
+
 Deno.test("the app sees only its own open chat jobs, without errors or leases", async () => {
   const db = await migratedDb();
   const [a, b] = [await createUser(db), await createUser(db)];
