@@ -98,7 +98,9 @@ test("the sandbox is released after the turn, whatever happened", async () => {
     await processJob(job(), d);
     assert.equal(log.released, 1);
   }
-  const { d, log } = deps({ outbox: { ...deps().d.outbox, deliver: () => Promise.reject(new Error("down")) } });
+  const { d, log } = deps({
+    outbox: { ...deps().d.outbox, deliver: () => Promise.reject(new Error("down")), fail: () => Promise.reject(new Error("down")) },
+  });
   await assert.rejects(() => processJob(job(), d));
   assert.equal(log.released, 1, "released even when reporting throws");
 });
@@ -191,9 +193,57 @@ test("a delivery refused as invalid is reported once, with the turn's spend, ins
   assert.match(log.failed[0].error, /^delivery_refused: /);
 });
 
-test("a lost lease drops the result instead of retrying", async () => {
-  const { d } = deps({ outbox: { ...deps().d.outbox, deliver: () => Promise.resolve({ status: 409, body: { error: "lease_lost" } }) } });
-  assert.equal(await processJob(job(), d), "dropped");
+test("a lost lease or a deleted job drops the result; assistant-deliver has charged it, so the relay doesn't", async () => {
+  for (const [status, error] of [[409, "lease_lost"], [404, "job_not_found"]] as const) {
+    let calls = 0;
+    const { d, log } = deps();
+    d.outbox.deliver = () => (calls++, Promise.resolve({ status, body: { error } }));
+    assert.equal(await processJob(job(), d), "dropped");
+    assert.equal(calls, 1, "not retried");
+    assert.equal(log.failed.length, 0);
+  }
+});
+
+test("a 404 that isn't assistant-deliver's (the function missing) is charged through fail, not taken as charged", async () => {
+  const { d, log } = deps();
+  d.outbox.deliver = () => Promise.resolve({ status: 404, body: { code: "NOT_FOUND", message: "Requested function was not found" } });
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(log.failed.length, 1);
+  assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
+  assert.deepEqual(log.failed[0].usage, { tokensInput: 900, tokensOutput: 60 });
+  assert.match(log.failed[0].error, /^delivery_refused: 404 /);
+});
+
+test("deliveries that keep failing are charged through fail, which puts the job back", async () => {
+  let calls = 0;
+  const { d, log } = deps();
+  d.outbox.deliver = () => (calls++, Promise.reject(new OutboxError("deliver failed: 500 {}", 500)));
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(calls, 3);
+  assert.equal(log.failed.length, 1);
+  assert.equal(log.failed[0].model, "nvidia/nemotron-3-super");
+  assert.deepEqual(log.failed[0].usage, { tokensInput: 900, tokensOutput: 60 });
+  assert.match(log.failed[0].error, /^delivery_failed: OutboxError: deliver failed: 500/);
+});
+
+test("a reply with nothing storable left isn't sent to be refused: the turn is charged and the job goes back", async () => {
+  const { d, log } = deps({ chat: () => Promise.resolve({ text: "\u0000 \n\u0000", usage: { tokensInput: 900, tokensOutput: 2 } }) });
+  assert.equal(await processJob(job(), d), "failed");
+  assert.equal(log.delivered.length, 0);
+  assert.deepEqual(log.failed, [{
+    job_id: 7,
+    lease_token: "lease-7",
+    error: "hermes returned an empty reply",
+    model: "nvidia/nemotron-3-super",
+    usage: { tokensInput: 900, tokensOutput: 2 },
+  }]);
+});
+
+test("NUL characters and a bare https:// source don't sink a reply: it's cleaned and delivered", async () => {
+  const { d, log } = deps({ chat: () => Promise.resolve({ text: "Done\u0000. Every link starts with https://, see https://example.org/x." }) });
+  assert.equal(await processJob(job(), d), "delivered");
+  assert.equal(log.delivered[0].reply!.text, "Done. Every link starts with https://, see https://example.org/x.");
+  assert.deepEqual(log.delivered[0].reply!.sources, [{ url: "https://example.org/x" }]);
 });
 
 test("delivery is retried on transient errors (it's idempotent)", async () => {
@@ -217,16 +267,16 @@ test("runOnce: a paused queue is logged and runs nothing", async () => {
 
 test("runOnce: one job's reporting failure doesn't sink the batch", async () => {
   const base = deps().d.outbox;
-  const { d } = deps({
+  const { d, log } = deps({
     outbox: {
       ...base,
-      claim: () => Promise.resolve({ jobs: [job("chat", "u1"), job("chat", "u2")] }),
-      deliver: (r) => (r.job_id === 7 && r.reply ? Promise.reject(new Error("down")) : Promise.resolve({ status: 200, body: {} })),
+      claim: () => Promise.resolve({ jobs: [job("chat", "u1"), { ...job("chat", "u2"), id: 8 }] }),
+      deliver: (r) => (r.job_id === 7 ? Promise.reject(new Error("down")) : Promise.resolve({ status: 200, body: {} })),
+      fail: () => Promise.reject(new Error("down")),
     },
   });
-  const outcomes = await runOnce(d, 2, 180);
-  assert.equal(outcomes.length, 2);
-  assert.ok(outcomes.every((o) => o === "failed"));
+  assert.deepEqual(await runOnce(d, 2, 180), ["failed", "delivered"]);
+  assert.ok(log.events.includes("job_error"));
 });
 
 // ------------------------------------------------------------ hermes client

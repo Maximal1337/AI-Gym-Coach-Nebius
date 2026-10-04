@@ -15,6 +15,10 @@ import type { TokenUsage } from "../_shared/assistant.ts";
  * Then the turn's spend is recorded (reported usage, or the conservative
  * fallback — _shared/assistant.ts) and the user gets a push notification.
  * 409 lease_lost: another attempt owns the job now; the relay drops its result.
+ * 404 job_not_found: the job is gone (its user was deleted). The model ran
+ * either way, so both still record the turn's spend (D-34); a delivery
+ * refused as invalid (400) records nothing, and the relay charges that one
+ * through assistant-outbox's fail.
  */
 export interface DeliverDeps {
   verify: (req: Request, body: string) => Promise<RelayEnvironment | null>;
@@ -100,9 +104,16 @@ export async function handleDeliver(req: Request, deps: DeliverDeps): Promise<Re
 
   const result = await deps.complete(env, body.job_id as number, body.lease_token as string, replyDoc ?? null, skip);
   if ("refusal" in result) {
-    if (result.refusal === "lease_lost") return reply(409, { error: "lease_lost" });
-    if (result.refusal === "job_not_found") return reply(404, { error: "job_not_found" });
-    throw new Error(`assistant_complete_job: unexpected refusal ${result.refusal}`);
+    if (result.refusal !== "lease_lost" && result.refusal !== "job_not_found") {
+      throw new Error(`assistant_complete_job: unexpected refusal ${result.refusal}`);
+    }
+    // The result is dropped; the tokens it took were spent all the same.
+    try {
+      await deps.recordSpend(env, body.model as string, body.usage as Partial<TokenUsage> | undefined);
+    } catch (e) {
+      console.error("assistant spend not recorded", { jobId: body.job_id, error: String(e) });
+    }
+    return reply(result.refusal === "lease_lost" ? 409 : 404, { error: result.refusal });
   }
 
   const done = result.data;

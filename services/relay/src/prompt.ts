@@ -122,8 +122,18 @@ export const REPLY_MAX_CHARS = 8000;
  * cut short rather than refused, which would throw the paid turn away.
  */
 export function replyText(text: string): string {
-  const plain = text.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
-  return clip(plain || text.trim(), REPLY_MAX_CHARS);
+  const clean = storableText(text);
+  const plain = clean.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
+  return clip(plain || clean.trim(), REPLY_MAX_CHARS);
+}
+
+/**
+ * A model's text, made storable: Postgres' jsonb refuses NUL characters and
+ * unpaired surrogates, so a reply holding either would fail its delivery
+ * (a 500) on every attempt.
+ */
+export function storableText(text: string): string {
+  return text.replace(/\u0000/g, "").replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
 }
 
 /**
@@ -140,17 +150,35 @@ function clip(text: string, max: number): string {
   return `${out.trimEnd()}…`;
 }
 
+/**
+ * What assistant-deliver's DELIVER_SCHEMA accepts for sources
+ * (supabase/functions/assistant-deliver/handler.ts): one source it refuses
+ * sinks the whole reply.
+ */
+export const SOURCE_LIMITS = { count: 10, urlMin: 9, urlMax: 500, title: 200 } as const;
+
+/** https, with a host, within the length limits — "https://" alone, left by "see https://.", isn't. */
+function isSourceUrl(url: string): boolean {
+  if (!url.startsWith("https://") || url.length < SOURCE_LIMITS.urlMin || url.length > SOURCE_LIMITS.urlMax) return false;
+  try {
+    return new URL(url).hostname !== "";
+  } catch {
+    return false;
+  }
+}
+
 /** Links in a reply, as sources for the app: markdown links first, then bare https URLs. */
 export function extractSources(text: string): Array<{ title?: string; url: string }> {
   const out: Array<{ title?: string; url: string }> = [];
   const seen = new Set<string>();
   const add = (url: string, title?: string) => {
     const clean = url.replace(/[).,;:!?]+$/, "");
-    if (!clean.startsWith("https://") || clean.length > 500 || seen.has(clean) || out.length >= 10) return;
+    if (!isSourceUrl(clean) || seen.has(clean) || out.length >= SOURCE_LIMITS.count) return;
     seen.add(clean);
-    out.push(title ? { title: title.slice(0, 200), url: clean } : { url: clean });
+    out.push(title ? { title: clip(title, SOURCE_LIMITS.title), url: clean } : { url: clean });
   };
-  for (const m of text.matchAll(/\[([^\]]{1,200})\]\((https:\/\/[^\s)]+)\)/g)) add(m[2], m[1]);
-  for (const m of text.matchAll(/https:\/\/[^\s<>"'\])]+/g)) add(m[0]);
+  const clean = storableText(text);
+  for (const m of clean.matchAll(/\[([^\]]{1,200})\]\((https:\/\/[^\s)]+)\)/g)) add(m[2], m[1]);
+  for (const m of clean.matchAll(/https:\/\/[^\s<>"'\])]+/g)) add(m[0]);
   return out;
 }

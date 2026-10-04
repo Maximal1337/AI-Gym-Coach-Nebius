@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText, SOURCE_LIMITS, storableText } from "./prompt.js";
 
 const NOW = new Date("2026-10-10T08:00:00Z");
 
@@ -129,4 +129,24 @@ test("a reply too long to store is cut short, between characters, never mid-emoj
   }
   const fits = "b".repeat(REPLY_MAX_CHARS);
   assert.equal(replyText(fits), fits);
+});
+
+// The other half of this contract is in supabase/functions/assistant-deliver/handler.test.ts:
+// change both sides together.
+test("contract: the reply and source limits are assistant-deliver's DELIVER_SCHEMA limits", () => {
+  assert.deepEqual({ text: REPLY_MAX_CHARS, ...SOURCE_LIMITS }, { text: 8000, count: 10, urlMin: 9, urlMax: 500, title: 200 });
+});
+
+test("reply text: NUL characters and unpaired surrogates, which jsonb refuses, are made storable", () => {
+  assert.equal(replyText("a\u0000b"), "ab");
+  assert.equal(replyText("lone \uD83D here"), "lone \uFFFD here");
+  assert.equal(replyText("lone \uDE00 here"), "lone \uFFFD here");
+  assert.equal(replyText("pair 💪 kept"), "pair 💪 kept");
+  assert.equal(storableText("ok"), "ok");
+});
+
+test("sources: only links assistant-deliver accepts — a host, within the length limits", () => {
+  assert.deepEqual(extractSources("see https://. and https:// and [ACSM](https://.) and https://example.org/x)."), [{ url: "https://example.org/x" }]);
+  assert.deepEqual(extractSources(`https://a.example/${"p".repeat(SOURCE_LIMITS.urlMax)}`), []);
+  assert.deepEqual(extractSources("[Guide](https://a.example/\u0000g)"), [{ title: "Guide", url: "https://a.example/g" }]);
 });

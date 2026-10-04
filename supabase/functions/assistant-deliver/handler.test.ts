@@ -1,6 +1,6 @@
 // Tests for assistant-deliver (NH-53). Run: deno test --no-config supabase/functions/
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
-import { type DeliverDeps, handleDeliver, pushPreview } from "./handler.ts";
+import { DELIVER_SCHEMA, type DeliverDeps, handleDeliver, pushPreview } from "./handler.ts";
 
 const TOKEN = "5f0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
 const REPLY = { text: "Solid week: 3 sessions.", sources: [{ title: "USDA", url: "https://fdc.nal.usda.gov/" }] };
@@ -65,11 +65,12 @@ Deno.test("missing usage is still charged (the fallback lives in recordSpend)", 
   assertEquals(log.spend, [["prod", "nemotron-super", undefined]]);
 });
 
-Deno.test("a lost lease is 409 and an unknown job 404 — nothing charged or pushed", async () => {
+Deno.test("a lost lease is 409 and an unknown job 404 — nothing pushed, the spent tokens still charged", async () => {
   for (const [refusal, status] of [["lease_lost", 409], ["job_not_found", 404]] as const) {
     const { d, log } = deps({ refusal });
     assertEquals((await handleDeliver(post(good), d)).status, status);
-    assertEquals(log.spend.length + log.pushes.length, 0);
+    assertEquals(log.pushes.length, 0);
+    assertEquals(log.spend, [["prod", "nemotron-super", { tokensInput: 900, tokensOutput: 80 }]]);
   }
 });
 
@@ -116,4 +117,16 @@ Deno.test("a stored reply is still pushed and answered 200 when recording its sp
   assertEquals(res.status, 200);
   assertEquals(await res.json(), { status: "delivered", message_id: "m9" });
   assertEquals(log.pushes.length, 1);
+});
+
+// The other half of this contract is REPLY_MAX_CHARS and SOURCE_LIMITS in services/relay/src/prompt.ts
+// (and its test): the relay cuts every reply to these limits, so change both sides together.
+Deno.test("contract: DELIVER_SCHEMA's reply limits are the relay's", () => {
+  const reply = DELIVER_SCHEMA.properties!.reply;
+  const sources = reply.properties!.sources;
+  const source = sources.items!.properties!;
+  assertEquals(
+    { text: reply.properties!.text.maxLength, count: sources.maxItems, urlMin: source.url.minLength, urlMax: source.url.maxLength, title: source.title.maxLength },
+    { text: 8000, count: 10, urlMin: 9, urlMax: 500, title: 200 },
+  );
 });

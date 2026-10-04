@@ -41,11 +41,11 @@ const DELIVER_ATTEMPTS = 3;
  */
 export const HERMES_BOOT_MS = 120_000;
 
-async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promise<number> {
+async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promise<{ status: number; body: Record<string, unknown> }> {
   let lastError: unknown;
   for (let attempt = 1; attempt <= DELIVER_ATTEMPTS; attempt++) {
     try {
-      return (await deps.outbox.deliver(request)).status;
+      return await deps.outbox.deliver(request);
     } catch (e) {
       // Safe to retry: a delivery is idempotent per job (assistant_complete_job).
       // A request refused as invalid would only be refused again.
@@ -96,28 +96,51 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedA
     return "failed";
   }
 
+  // From here on the model has run: every way out charges the turn (D-34).
+  const charge = { model: deps.model, ...(result.usage ? { usage: result.usage } : {}) };
   const skip = job.job.kind === "checkin" && isCheckinSkip(result.text);
-  const request: DeliverRequest = {
-    ...base,
-    model: deps.model,
-    ...(result.usage ? { usage: result.usage } : {}),
-    ...(skip ? { skip: true } : { reply: { text: replyText(result.text), sources: extractSources(result.text) } }),
-  };
-  let status: number;
-  try {
-    status = await deliverWithRetry(deps, request);
-  } catch (e) {
-    // Refused as invalid, it would be refused again: report the attempt, with
-    // its spend, rather than let the lease run out and the turn go unrecorded.
-    if (!(e instanceof OutboxError && e.status === 400)) throw e;
-    deps.log("delivery_refused", { job: job.id, error: String(e) });
-    await deps.outbox.fail({ ...base, error: `delivery_refused: ${String(e)}`, model: deps.model, ...(result.usage ? { usage: result.usage } : {}) });
+  const text = skip ? "" : replyText(result.text);
+  if (!skip && !text) {
+    // Nothing storable was left (the reply was only NUL characters), which
+    // deliver would refuse: the same as an empty reply from Hermes.
+    deps.log("turn_failed", { job: job.id, error: "empty reply", spent: true });
+    await deps.outbox.fail({ ...base, error: "hermes returned an empty reply", ...charge });
     return "failed";
   }
-  if (status !== 200) {
-    // 409: the lease expired and another attempt owns the job; 404: the job is gone (user deleted).
-    deps.log("delivery_dropped", { job: job.id, status });
+  const request: DeliverRequest = {
+    ...base,
+    ...charge,
+    ...(skip ? { skip: true } : { reply: { text, sources: extractSources(result.text) } }),
+  };
+  let delivery: { status: number; body: Record<string, unknown> };
+  try {
+    delivery = await deliverWithRetry(deps, request);
+  } catch (e) {
+    // Refused as invalid (400), it would be refused again; any other error has
+    // already been retried. Either way, report the attempt with its spend
+    // rather than let the lease run out and the turn go unrecorded. Should a
+    // retried attempt have reached the database after all, its response lost,
+    // the job is done already and the charge counts twice: an overcount,
+    // never a lost one.
+    const refused = e instanceof OutboxError && e.status === 400;
+    deps.log(refused ? "delivery_refused" : "delivery_failed", { job: job.id, error: String(e) });
+    await deps.outbox.fail({ ...base, error: `${refused ? "delivery_refused" : "delivery_failed"}: ${String(e)}`, ...charge });
+    return "failed";
+  }
+  const refusal = delivery.body.error;
+  if ((delivery.status === 409 && refusal === "lease_lost") || (delivery.status === 404 && refusal === "job_not_found")) {
+    // The lease was lost to another attempt, or the job is gone (user
+    // deleted). assistant-deliver charged the turn all the same.
+    deps.log("delivery_dropped", { job: job.id, status: delivery.status });
     return "dropped";
+  }
+  if (delivery.status !== 200) {
+    // A 404 or 409 that isn't assistant-deliver's own answer (the function not
+    // deployed, say): nothing charged the turn. Charge it and put the job back.
+    const detail = JSON.stringify(delivery.body).slice(0, 300);
+    deps.log("delivery_refused", { job: job.id, status: delivery.status, detail });
+    await deps.outbox.fail({ ...base, error: `delivery_refused: ${delivery.status} ${detail}`, ...charge });
+    return "failed";
   }
   return skip ? "skipped" : "delivered";
 }
