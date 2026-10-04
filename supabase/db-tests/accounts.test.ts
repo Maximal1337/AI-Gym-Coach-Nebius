@@ -55,6 +55,17 @@ Deno.test("re-seeding a demo account clears its coach chat, jobs, actions and fa
     `insert into public.user_facts (user_id, doc) values ($1, '{"text":"wedding in June","category":"goal","importance":4,"stability":"temporary","evidence":"explicit"}')`,
     [u],
   );
+  // An action from a write tool, and a check-in: a job with no message, so the
+  // message delete's cascade can't be what clears it.
+  await asService(db, (tx) =>
+    tx.query(
+      "select public.assistant_save_note($1, (select id from public.training_plans where user_id = $1 and status = 'active' order by created_at limit 1), null, 'deload next week')",
+      [u],
+    )
+  );
+  await db.query("insert into public.assistant_jobs (user_id, environment, kind, dedup_key) values ($1, 'prod', 'checkin', 'checkin:2026-10-01')", [u]);
+  const before = await rowsOf(db, u);
+  assertEquals([before.assistant_actions, before.assistant_jobs, before.coach_notes > 0], [1, 2, true]);
   const r = await seed(db, "judge-1@example.test");
   assertEquals(r!.r.assistant_cleared, true);
   const rows = await rowsOf(db, u);
