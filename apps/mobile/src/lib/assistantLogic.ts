@@ -146,24 +146,26 @@ export function replyStatus(jobs: OpenJob[], rows: AssistantRow[], now: number):
   return open.some((j) => j.status === 'leased') ? 'typing' : 'queued';
 }
 
+/** The client id "send again" gives the new copy of a failed message: it names the original. */
+export function resendClientId(originalRowId: string, fresh: string): string {
+  return `again:${originalRowId}:${fresh}`;
+}
+
 /**
  * User messages whose job failed for good and that haven't been sent again,
  * for buildItems. Sent again means tapped on this device this session
- * (`resent`), or a later message of the user's with the same text: that one
- * survives an app restart and shows on every device, where `resent` doesn't.
+ * (`resent`), or a fetched row whose client id names it (resendClientId):
+ * that survives an app restart and shows on every device, where `resent`
+ * doesn't, and unlike matching the text it can't mistake a later "Yes" for
+ * a resend of an earlier one.
  */
 export function failedMessageIds(jobs: OpenJob[], rows: AssistantRow[], resent: ReadonlySet<string>): Set<string> {
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const users = rows.filter((r) => r.role === 'user');
-  const ids = new Set<string>();
-  for (const j of jobs) {
-    if (j.status !== 'failed' || resent.has(j.message_id)) continue;
-    const failed = byId.get(j.message_id);
-    const sentAgain = failed !== undefined &&
-      users.some((r) => r.id !== failed.id && compareRows(r, failed) > 0 && r.doc.text.trim() === failed.doc.text.trim());
-    if (!sentAgain) ids.add(j.message_id);
-  }
-  return ids;
+  const resentIds = new Set(
+    rows.map((r) => /^again:([^:]+):/.exec(r.client_message_id ?? '')?.[1]).filter((id): id is string => !!id),
+  );
+  return new Set(
+    jobs.filter((j) => j.status === 'failed' && !resent.has(j.message_id) && !resentIds.has(j.message_id)).map((j) => j.message_id),
+  );
 }
 
 /** Poll for the reply only while one is expected — push and foregrounding cover the rest. */

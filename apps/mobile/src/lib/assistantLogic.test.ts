@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  buildItems, classifySendFailure, factCategoryKey, failedMessageIds, mergeRows, pruneLocal, replyStatus, shouldPoll, SLOW_REPLY_MS,
+  buildItems, classifySendFailure, factCategoryKey, failedMessageIds, mergeRows, pruneLocal, replyStatus, resendClientId, shouldPoll,
+  SLOW_REPLY_MS,
   sortFacts, sourceLabel, validSources, type AssistantRow, type FactRow, type OpenJob,
 } from './assistantLogic';
 
@@ -94,18 +95,21 @@ test('failedMessageIds: a failed message sent again is no longer offered, on any
   const rows = [
     row('m1', 'user', '2026-10-01T10:00:00Z', { doc: { text: 'Plan for Friday?' } }),
     row('m2', 'user', '2026-10-01T10:02:00Z', { doc: { text: 'Other question' } }),
-    row('m3', 'user', '2026-10-01T10:03:00Z', { doc: { text: ' Plan for Friday? ' } }),
+    row('m3', 'user', '2026-10-01T10:03:00Z', { doc: { text: 'Plan for Friday?' }, client_message_id: resendClientId('m1', 'x1') }),
   ];
   const jobs = [failed('m1'), failed('m2'), { message_id: 'm3', status: 'pending' as const, updated_at: '2026-10-01T10:03:00Z' }];
   assert.deepEqual([...failedMessageIds(jobs, rows, new Set())], ['m2'], 'm1 was sent again as m3');
   assert.deepEqual([...failedMessageIds(jobs, rows, new Set(['m2']))], [], 'm2 tapped on this device');
-  // The same text sent before the failed one isn't a resend of it.
-  const earlier = [row('m0', 'user', '2026-10-01T09:00:00Z', { doc: { text: 'Plan for Friday?' } }), rows[0]];
-  assert.deepEqual([...failedMessageIds([failed('m1')], earlier, new Set())], ['m1']);
+  // The same short text sent later for another reason isn't a resend.
+  const yes = [
+    row('y1', 'user', '2026-10-01T08:00:00Z', { doc: { text: 'Yes' } }),
+    row('y2', 'user', '2026-10-01T15:00:00Z', { doc: { text: 'Yes' }, client_message_id: 'c-afternoon' }),
+  ];
+  assert.deepEqual([...failedMessageIds([failed('y1')], yes, new Set())], ['y1']);
   // A failed job whose message isn't fetched yet still counts as failed.
   assert.deepEqual([...failedMessageIds([failed('m9')], rows, new Set())], ['m9']);
+  assert.ok(resendClientId('3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b', '6a0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b').length <= 100, 'fits assistant-send\'s 100 characters');
 });
-
 test('shouldPoll: while a reply is expected or a send is in flight', () => {
   assert.equal(shouldPoll('idle', []), false);
   assert.equal(shouldPoll('idle', [{ clientMessageId: 'c', text: 't', state: 'unsent' }]), false);
