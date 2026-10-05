@@ -65,7 +65,7 @@ Deno.test("anon reads only app_config and writes nothing", async () => {
   await db.close();
 });
 
-Deno.test("authenticated reads only these tables, all but two scoped to the caller's own rows", async () => {
+Deno.test("authenticated reads only these tables, each through exactly these policies", async () => {
   const db = await migratedDb();
   assertEquals((await all<{ t: string }>(db, readable("authenticated"))).map((r) => r.t), [
     "app_config",
@@ -90,17 +90,43 @@ Deno.test("authenticated reads only these tables, all but two scoped to the call
     "users",
     "workout_sessions",
   ]);
-  // A select policy that doesn't key on auth.uid() shows its rows to every
-  // signed-in user: only the app's shared config and exercise library may.
-  const shared = await all<{ t: string }>(
+  // Every select policy that applies to a signed-in user, as Postgres prints
+  // it: own rows only, but for the app's shared config and exercise library.
+  // A new or loosened one (using (true), or auth.uid() is not null) fails
+  // here until it's reviewed and added on purpose.
+  const policies = await all<{ p: string }>(
     db,
-    `select distinct c.relname t
+    `select c.relname || ': ' || regexp_replace(coalesce(pg_get_expr(pol.polqual, pol.polrelid), ''), '\\s+', ' ', 'g') p
      from pg_policy pol join pg_class c on c.oid = pol.polrelid join pg_namespace n on n.oid = c.relnamespace
      where n.nspname = 'public' and pol.polpermissive and pol.polcmd in ('r', '*') and ${appliesTo("authenticated")}
-       and coalesce(pg_get_expr(pol.polqual, pol.polrelid), '') not like '%auth.uid()%'
-     order by 1`,
+     order by c.relname, pol.polname`,
   );
-  assertEquals(shared.map((r) => r.t), ["app_config", "common_exercises"]);
+  const own = (table: string, column = "user_id") => `${table}: (${column} = ( SELECT auth.uid() AS uid))`;
+  const viaSession = (table: string, parent: string, column: string) =>
+    `${table}: (EXISTS ( SELECT 1 FROM ${parent} WHERE ((${parent.split(" ")[1]}.id = ${table}.${column}) AND (${parent.split(" ")[1]}.user_id = ( SELECT auth.uid() AS uid)))))`;
+  assertEquals(policies.map((r) => r.p), [
+    "app_config: true",
+    own("assistant_actions"),
+    own("assistant_messages"),
+    own("coach_notes"),
+    own("coach_profiles"),
+    "common_exercises: true",
+    viaSession("exercises", "training_plans p", "plan_id"),
+    own("fitness_profiles"),
+    own("messages"),
+    own("push_tokens"),
+    viaSession("session_exercise_skips", "workout_sessions s", "session_id"),
+    viaSession("set_logs", "workout_sessions s", "session_id"),
+    viaSession("studio_blocks", "studio_sessions s", "session_id"),
+    own("studio_custom_units"),
+    "studio_exercises: (EXISTS ( SELECT 1 FROM (studio_blocks b JOIN studio_sessions s ON ((s.id = b.session_id))) WHERE ((b.id = studio_exercises.block_id) AND (s.user_id = ( SELECT auth.uid() AS uid)))))",
+    own("studio_sessions"),
+    own("training_plans"),
+    own("usage_ledger"),
+    own("user_facts"),
+    own("users", "id"),
+    own("workout_sessions"),
+  ]);
   await db.close();
 });
 
