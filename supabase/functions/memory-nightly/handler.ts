@@ -38,8 +38,12 @@ export interface MemoryDeps {
   due: (limit: number) => Promise<string[]>;
   sources: (userId: string) => Promise<MemorySources>;
   spendAllowed: () => Promise<boolean>;
-  /** One model call; a failure may carry `spent` and `usage`. */
-  extract: (system: string, user: string) => Promise<{ content: string; usage?: TokenUsage }>;
+  /**
+   * One model call. `retriedSpent`, on the result or a failure, counts retried
+   * attempts that may have run the model; a failure may also carry `spent`
+   * and `usage` for its own attempt.
+   */
+  extract: (system: string, user: string) => Promise<{ content: string; usage?: TokenUsage; retriedSpent?: number }>;
   recordSpend: (usage: TokenUsage | undefined) => Promise<unknown>;
   apply: (userId: string, write: MemoryWrite, watermark: string | null) => Promise<unknown>;
   markFailed: (userId: string, error: string) => Promise<void>;
@@ -72,19 +76,26 @@ export async function processUser(userId: string, deps: MemoryDeps, summary: Run
   const stored: StoredFact[] = src.facts.filter((f) => isValidFactDoc(f.doc));
   const wrote = src.messages.some((m) => m.role === "user");
 
+  // Retried attempts the client counted as possibly spent, at the fallback charge.
+  const chargeRetries = async (n: number | undefined) => {
+    for (let i = 0; i < (n ?? 0); i++) await deps.recordSpend(undefined);
+  };
+
   let write: MemoryWrite;
   if (!wrote) {
     write = buildMemoryWrite(stored, [], [], now);
   } else {
-    let reply: { content: string; usage?: TokenUsage };
+    let reply: { content: string; usage?: TokenUsage; retriedSpent?: number };
     try {
       reply = await deps.extract(systemPrompt(src.language), userPrompt({ facts: stored, messages: src.messages, language: src.language }));
     } catch (e) {
-      const err = e as { spent?: boolean; usage?: TokenUsage };
+      const err = e as { spent?: boolean; usage?: TokenUsage; retriedSpent?: number };
+      await chargeRetries(err.retriedSpent);
       if (err.spent !== false) await deps.recordSpend(err.usage);
       await deps.markFailed(userId, `model: ${String(e)}`);
       return "failed";
     }
+    await chargeRetries(reply.retriedSpent);
     await deps.recordSpend(reply.usage);
     try {
       const { operations, dropped } = parseOperations(reply.content, stored.length, src.messages.length);

@@ -13,6 +13,16 @@ import { handleMemoryRun, type MemorySources } from "./handler.ts";
  * (member B's key, D-24), MEMORY_MODEL (the Nemotron model id on Token Factory).
  */
 
+// An Edge Function gets 150 s of wall-clock time on Supabase's free plan (400 s
+// on paid plans); the job assumes the lower. A user is started only while
+// their model call, at its full timeout, still ends inside it with room for
+// the writes, and the call stops retrying at the same deadline. A function cut
+// off mid-user would record no spend and no run, and the next call would pay
+// for that user again.
+const WALL_CLOCK_MS = 150_000;
+const MODEL_TIMEOUT_MS = 60_000;
+const MARGIN_MS = 15_000;
+
 function sameSecret(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let diff = 0;
@@ -48,7 +58,8 @@ Deno.serve(withSentry((req) => {
         jsonSchema: { name: "memory_operations", schema: OPERATIONS_SCHEMA },
         // Thinking stays on for this job (D-03); the budget leaves room for it and the JSON.
         maxTokens: 8_000,
-        timeoutMs: 60_000,
+        timeoutMs: MODEL_TIMEOUT_MS,
+        deadlineMs: started + WALL_CLOCK_MS - MARGIN_MS,
       }),
     recordSpend: (usage) => recordSpend(db, "memory", model, usage),
     apply: (userId, write, watermark) =>
@@ -64,7 +75,7 @@ Deno.serve(withSentry((req) => {
     },
     now: () => new Date(),
     elapsedMs: () => Date.now() - started,
-    budgetMs: 100_000,
+    budgetMs: WALL_CLOCK_MS - MODEL_TIMEOUT_MS - MARGIN_MS,
     batch: 50,
     log: (event, fields) => console.log(JSON.stringify({ event, ...fields })),
   });

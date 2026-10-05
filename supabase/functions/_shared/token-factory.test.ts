@@ -70,3 +70,33 @@ Deno.test("network errors are retried", async () => {
   assertEquals((await tokenFactoryChat({ ...base, fetch: f })).content, "back");
   assertEquals(calls.length, 2);
 });
+
+Deno.test("a timeout isn't retried: the model was running, and a retry would pay for it again", async () => {
+  const { f, calls } = scripted([() => Promise.reject(Object.assign(new Error("signal timed out"), { name: "TimeoutError" })), ok("late")]);
+  const e = await assertRejects(() => tokenFactoryChat({ ...base, fetch: f }), TokenFactoryError);
+  assertEquals([e.spent, e.retriedSpent, calls.length], [true, 0, 1]);
+});
+
+Deno.test("no retry starts that couldn't end before the deadline", async () => {
+  const { f, calls } = scripted([status(503), ok("too late")]);
+  const e = await assertRejects(
+    () => tokenFactoryChat({ ...base, fetch: f, timeoutMs: 60_000, now: () => 0, deadlineMs: 60_000 }),
+    TokenFactoryError,
+  );
+  assertEquals([e.status, e.retriedSpent, calls.length], [503, 0, 1]);
+  const { f: f2, calls: calls2 } = scripted([status(503), ok("in time")]);
+  assertEquals((await tokenFactoryChat({ ...base, fetch: f2, timeoutMs: 60_000, now: () => 0, deadlineMs: 61_000 })).content, "in time");
+  assertEquals(calls2.length, 2);
+});
+
+Deno.test("retried attempts that may have spent are counted, on the result and on the error", async () => {
+  const { f } = scripted([status(500), status(429), ok("done")]);
+  const r = await tokenFactoryChat({ ...base, fetch: f });
+  assertEquals([r.content, r.retriedSpent], ["done", 1]);
+  const { f: f2 } = scripted([status(502)]);
+  const e = await assertRejects(() => tokenFactoryChat({ ...base, fetch: f2 }), TokenFactoryError);
+  // Three attempts: two retried, and the last one is the error's own.
+  assertEquals([e.spent, e.retriedSpent], [true, 2]);
+  const { f: f3 } = scripted([ok("first time")]);
+  assertEquals("retriedSpent" in (await tokenFactoryChat({ ...base, fetch: f3 })), false);
+});

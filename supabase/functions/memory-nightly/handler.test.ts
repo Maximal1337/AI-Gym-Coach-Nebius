@@ -165,3 +165,12 @@ Deno.test("only the cron's secret gets in, and only by POST", async () => {
   assertEquals((await handleMemoryRun(new Request("https://example.test/", { method: "GET" }), d)).status, 405);
   assertEquals(log.applied.length, 0);
 });
+
+Deno.test("attempts the client retried after they may have spent are charged too", async () => {
+  const { d, log } = deps({ extract: () => Promise.resolve({ content: MODEL_REPLY, usage: { tokensInput: 2000, tokensOutput: 400 }, retriedSpent: 2 }) });
+  assertEquals((await run(d)).updated, 1);
+  assertEquals(log.spend, [undefined, undefined, { tokensInput: 2000, tokensOutput: 400 }]);
+  const failing = deps({ extract: () => Promise.reject(Object.assign(new Error("token factory 502"), { spent: true, retriedSpent: 1 })) });
+  assertEquals((await run(failing.d)).failed, 1);
+  assertEquals(failing.log.spend, [undefined, undefined]);
+});
