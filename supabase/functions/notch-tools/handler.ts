@@ -1,4 +1,4 @@
-import { handleMcp, JSONRPC, type McpServer } from "../_shared/mcp.ts";
+import { handleMcp, JSONRPC, type McpServer, ToolError } from "../_shared/mcp.ts";
 
 /**
  * HTTP layer of notch-tools (NH-42): authentication and the MCP Streamable
@@ -62,4 +62,24 @@ export async function handleToolsRequest<Ctx>(req: Request, deps: ToolsDeps<Ctx>
 
   const result = await handleMcp(deps.server, body, deps.context(userId));
   return result === null ? reply(202, null) : reply(200, result);
+}
+
+export const RATE_LIMITED = "Too many tool calls in the last minute. Wait a moment before trying again.";
+export const NOT_SUBSCRIBED =
+  "The user's Notch subscription isn't active, so their training data can't be used. Tell them they can renew in the app.";
+
+/**
+ * Runs before every tool call: the user's rate limit, then their
+ * subscription. `entitled` must throw when it can't tell: a database error
+ * read as "not subscribed" would have the agent tell a paying user to renew.
+ * A throw that isn't a ToolError reaches the agent as an unexpected failure.
+ */
+export function toolGate<Ctx>(deps: {
+  allowRate: (ctx: Ctx) => Promise<boolean>;
+  entitled: (ctx: Ctx) => Promise<boolean>;
+}): (tool: unknown, ctx: Ctx) => Promise<void> {
+  return async (_tool, ctx) => {
+    if (!(await deps.allowRate(ctx))) throw new ToolError(RATE_LIMITED);
+    if (!(await deps.entitled(ctx))) throw new ToolError(NOT_SUBSCRIBED);
+  };
 }

@@ -739,7 +739,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Backend, Type/Feature · **Blocked by:** NH-10, NH-11, NH-41
 
 - [x] Streamable HTTP MCP server running as a Supabase Edge Function: `supabase/functions/notch-tools`, stateless JSON responses, the protocol core in `_shared/mcp.ts`; `verify_jwt` off in `config.toml` (deploy with `--no-verify-jwt`), since the sandbox authenticates with its tool token
-- [x] Every call resolves the token to a user, checks flags, entitlement (`subscriptionAccess`) and rate limits; unknown browser origins are refused (DNS-rebinding rule); a tool never takes a user id from its arguments
+- [x] Every call resolves the token to a user, checks flags, entitlement (`subscriptionAccess`) and rate limits; unknown browser origins are refused (DNS-rebinding rule); a tool never takes a user id from its arguments. Since 2026-10-05 a failed subscription read is an unexpected failure, not "the subscription isn't active", which had the agent tell a paying user to renew
 - [x] Tool errors return safe messages: no stack traces, no secrets — only `ToolError` messages reach the agent
 - [ ] A test tool is callable from a sandbox in `notch-dev` — `notch_ping` is ready; needs the VPS
 

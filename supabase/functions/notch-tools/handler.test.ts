@@ -1,7 +1,7 @@
 // HTTP boundary tests for notch-tools (NH-42). Run: deno test --no-config supabase/functions/
-import { assertEquals, assertFalse } from "jsr:@std/assert@1";
-import type { McpServer } from "../_shared/mcp.ts";
-import { bearerToken, handleToolsRequest, MAX_BODY_BYTES, type ToolsDeps } from "./handler.ts";
+import { assertEquals, assertFalse, assertRejects } from "jsr:@std/assert@1";
+import { type McpServer, ToolError } from "../_shared/mcp.ts";
+import { bearerToken, handleToolsRequest, MAX_BODY_BYTES, NOT_SUBSCRIBED, RATE_LIMITED, toolGate, type ToolsDeps } from "./handler.ts";
 
 interface Ctx {
   userId: string;
@@ -137,4 +137,13 @@ Deno.test("bearerToken parses only a single Bearer credential", () => {
   assertEquals(bearerToken(req("Bearer")), null);
   assertEquals(bearerToken(req()), null);
   assertFalse(bearerToken(req(`Token ${TOKEN}`)) === TOKEN);
+});
+
+Deno.test("the gate: rate limit first, then the subscription; a failed read is no reason to tell the user to renew", async () => {
+  const gate = (rate: boolean, entitled: () => Promise<boolean>) => toolGate<Ctx>({ allowRate: () => Promise.resolve(rate), entitled });
+  await gate(true, () => Promise.resolve(true))(null, { userId: "u" });
+  await assertRejects(() => gate(false, () => Promise.resolve(true))(null, { userId: "u" }), ToolError, RATE_LIMITED);
+  await assertRejects(() => gate(true, () => Promise.resolve(false))(null, { userId: "u" }), ToolError, NOT_SUBSCRIBED);
+  const e = await assertRejects(() => gate(true, () => Promise.reject(new Error("users: connection reset")))(null, { userId: "u" }));
+  assertFalse(e instanceof ToolError, "an unexpected failure, not the subscription message");
 });
