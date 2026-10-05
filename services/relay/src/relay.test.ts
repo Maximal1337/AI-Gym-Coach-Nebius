@@ -345,15 +345,59 @@ test("hermes: a turn the agent couldn't finish is an error that may have spent, 
   }
 });
 
-test("hermes: a reply cut short (finish_reason length) is still a reply", async () => {
-  const body = {
-    choices: [{ message: { content: "Here is the first half of your program…" }, finish_reason: "length" }],
-    usage: { prompt_tokens: 10, completion_tokens: 4000 },
-    hermes: { completed: false, partial: true, failed: false, error: "output truncated", error_code: "output_truncated" },
-  };
+// What Hermes v2026.9.24 sends with finish_reason "length" (agent/turn_truncation.py,
+// gateway/platforms/api_server_openai_routes.py): only the stitched reply is the model's.
+const lengthTurn = (content: string, error: string) => ({
+  choices: [{ message: { content }, finish_reason: "length" }],
+  usage: { prompt_tokens: 3000, completion_tokens: 16000 },
+  hermes: { completed: false, partial: true, failed: false, error, error_code: "output_truncated" },
+});
+
+test("hermes: a reply stitched from continuations that kept hitting the output limit is still a reply", async () => {
+  const body = lengthTurn("Week 1: squat 3×5 … Week 6: deload", "Response remained truncated after 4 continuation attempts");
   const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body))));
   const r = await chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f });
-  assert.equal(r.text, "Here is the first half of your program…");
+  assert.equal(r.text, "Week 1: squat 3×5 … Week 6: deload");
+});
+
+test("hermes: Hermes' own notices sent as \"length\" — the repetition abort, the ceiling with no text — are failed turns", async () => {
+  for (const body of [
+    lengthTurn(
+      "⚠️ **Response Stopped — Repetition Detected**\n\nThe model fell into a repetition loop while writing this response, " +
+        "so continuing would only produce more repeated text. The partial response was discarded.\n\n→ Switch to a different model with `/model`",
+      "Model output entered a repetition loop and was truncated mid-loop; refusing to continue a degenerate response.",
+    ),
+    lengthTurn(
+      "⚠️ **No visible answer was produced.** The model hit its output-token limit on every continuation attempt — " +
+        "its reasoning consumed the entire budget each time.",
+      "Response remained truncated after 4 continuation attempts",
+    ),
+    { ...lengthTurn("Some text", "x"), hermes: undefined },
+  ]) {
+    const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body))));
+    await assert.rejects(
+      () => chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f }),
+      (e: unknown) => e instanceof HermesError && e.mayHaveSpent && /^hermes turn failed: /.test(e.message) && e.usage?.tokensOutput === 16000,
+    );
+  }
+});
+
+test("hermes: an iteration-budget summary (completed false, finish_reason stop) is the model's own reply", async () => {
+  const body = {
+    choices: [{ message: { content: "I ran out of steps; here's where we are: …" }, finish_reason: "stop" }],
+    hermes: { completed: false, partial: false, failed: false, error: null, error_code: "agent_error" },
+  };
+  const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body))));
+  assert.equal((await chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f })).text, "I ran out of steps; here's where we are: …");
+});
+
+test("hermes: an empty reply keeps the usage it reported, so it's charged the real spend", async () => {
+  const body = { choices: [{ message: { content: "" }, finish_reason: "stop" }], usage: { prompt_tokens: 22000, completion_tokens: 300 } };
+  const { f } = fakeFetch(() => Promise.resolve(new Response(JSON.stringify(body))));
+  await assert.rejects(
+    () => chat(ENDPOINT, [], { sessionKey: "u1", timeoutMs: 1000, fetch: f }),
+    (e: unknown) => e instanceof HermesError && e.message === "hermes returned an empty reply" && e.usage?.tokensInput === 22000,
+  );
 });
 
 test("hermes: missing usage is left for the fallback charge", async () => {
