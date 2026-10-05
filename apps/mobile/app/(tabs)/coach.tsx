@@ -13,8 +13,8 @@ import {
   setAssistantChatFocused,
 } from '../../src/lib/assistant';
 import {
-  buildItems, classifySendFailure, failedMessageIds, MAX_ASSISTANT_MESSAGE, mergeRows, pruneLocal, replyStatus, shouldPoll,
-  sourceLabel,
+  buildItems, classifySendFailure, failedMessageIds, MAX_ASSISTANT_MESSAGE, mergeRows, pruneLocal, replyStatus, resendClientId,
+  shouldPoll, sourceLabel,
   type AssistantRow, type ChatItem, type LocalSend, type OpenJob, type SendFailure,
 } from '../../src/lib/assistantLogic';
 import { generateMessageId } from '../../src/lib/messages';
@@ -191,8 +191,12 @@ export default function CoachAssistant() {
 
   function sendAgain(item: Extract<ChatItem, { from: 'me' }>) {
     track('assistant_send_again_tapped');
-    if (item.rowId) setResent((s) => new Set(s).add(item.rowId!));
-    void send(item.text);
+    if (!item.rowId) {
+      void send(item.text);
+      return;
+    }
+    setResent((s) => new Set(s).add(item.rowId!));
+    void send(item.text, resendClientId(item.rowId, generateMessageId()));
   }
 
   const textAlign = (dir === 'rtl' ? 'right' : 'left') as 'right' | 'left';
