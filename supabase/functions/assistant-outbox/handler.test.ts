@@ -1,5 +1,5 @@
 // Tests for assistant-outbox (NH-52). Run: deno test --no-config supabase/functions/
-import { assertEquals } from "jsr:@std/assert@1";
+import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { relayHeaders, verifyRelayRequest } from "../_shared/relay-auth.ts";
 import { DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS, handleOutbox, jobRefusal, type OutboxDeps, type RefusalChecks } from "./handler.ts";
 
@@ -242,4 +242,16 @@ Deno.test("jobRefusal: chat needs assistant_chat; a check-in needs assistant_che
   assertEquals(await jobRefusal(checkin, checks(["assistant_chat"], true)), "assistant_disabled");
   assertEquals(await jobRefusal(checkin, checks(["assistant_checkin"], true)), "assistant_disabled");
   assertEquals(await jobRefusal(checkin, checks(["assistant_chat", "assistant_checkin"], false)), "subscription_required");
+});
+
+Deno.test("jobRefusal: a subscription lookup that fails throws, so the claim retries the check-in rather than dropping it", async () => {
+  const checks: RefusalChecks = {
+    flagEnabled: () => Promise.resolve(true),
+    entitled: () => Promise.reject(new Error("users: upstream connect error")),
+  };
+  await assertRejects(() => jobRefusal({ user_id: USER, kind: "checkin" }, checks), Error, "users: upstream connect error");
+  const { d, log } = deps({ refusal: (job) => jobRefusal({ ...job, user_id: USER, kind: "checkin" }, checks) });
+  await handleOutbox(post({ action: "claim" }), d);
+  assertEquals(log.drops, []);
+  assertEquals(log.fails, [["prod", 7, TOKEN, "context_error: Error: users: upstream connect error"]]);
 });

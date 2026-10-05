@@ -35,7 +35,7 @@ Deno.serve(withSentry((req) => {
           if (error) throw new Error(`feature_enabled: ${error.message}`);
           return data === true;
         },
-        entitled: async (userId) => (await subscriptionAccess(db, userId)).ok,
+        entitled: async (userId) => (await subscriptionAccess(db, userId, { throwOnError: true })).ok,
       }),
     drop: async (env, jobId, leaseToken, reason) => {
       const { data, error } = await db.rpc("assistant_drop_job", {
