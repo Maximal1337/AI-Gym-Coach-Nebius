@@ -73,16 +73,38 @@ export async function chat(endpoint: SandboxEndpoint, messages: ChatMessage[], o
   }
   const choice = (body.choices as Array<{ message?: { content?: unknown }; finish_reason?: unknown }> | undefined)?.[0];
   const hermes = body.hermes as { failed?: unknown; error?: unknown } | undefined;
-  // A turn the agent couldn't finish (the provider down or rate-limited, a
-  // billing or content-policy refusal) comes back as a 200 whose content is
-  // Hermes' own explanation, written for someone at a terminal: finish_reason
-  // "error", hermes.failed. It's a failed attempt, with what it spent, never a
-  // reply. A reply cut short (finish_reason "length") is still a reply.
-  if (choice?.finish_reason === "error" || hermes?.failed === true) {
+  const text = typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
+  if (isFailedTurn(choice?.finish_reason, hermes, text)) {
     const reason = typeof hermes?.error === "string" && hermes.error ? hermes.error : res.headers.get("x-hermes-error") ?? "no reason given";
     throw new HermesError(`hermes turn failed: ${reason.slice(0, 300)}`, true, false, usageFrom(body));
   }
-  const text = typeof choice?.message?.content === "string" ? choice.message.content.trim() : "";
-  if (!text) throw new HermesError("hermes returned an empty reply", true);
+  if (!text) throw new HermesError("hermes returned an empty reply", true, false, usageFrom(body));
   return { text, usage: usageFrom(body) };
+}
+
+/** What Hermes v2026.9.24 sets as hermes.error when a reply ran out of continuation attempts (agent/turn_truncation.py). */
+const CONTINUATION_CEILING_ERROR = "Response remained truncated after";
+/** The notice it answers with instead when those attempts produced no text at all. */
+const CEILING_NO_TEXT = "⚠️ **No visible answer was produced.**";
+
+/**
+ * Whether a 200 from /v1/chat/completions is a turn the agent couldn't
+ * finish, whose content is Hermes' own explanation written for someone at a
+ * terminal rather than a reply: a failed attempt, never the coach's answer.
+ *
+ * - finish_reason "error", or hermes.failed: the provider down or
+ *   rate-limited, a billing or content-policy refusal, a cut-off tool call.
+ * - finish_reason "length": Hermes sends it for any incomplete turn whose error
+ *   mentions truncation. The only one that is the model's own text is a reply
+ *   that kept hitting the output limit, stitched from its continuations;
+ *   the repetition-loop abort and the ceiling with no text are notices.
+ *
+ * An iteration-budget summary (completed false, finish_reason "stop") is the
+ * model's own text, and goes through as a reply.
+ */
+function isFailedTurn(finishReason: unknown, hermes: { failed?: unknown; error?: unknown } | undefined, text: string): boolean {
+  if (finishReason === "error" || hermes?.failed === true) return true;
+  if (finishReason !== "length") return false;
+  const stitched = typeof hermes?.error === "string" && hermes.error.startsWith(CONTINUATION_CEILING_ERROR);
+  return !stitched || text.startsWith(CEILING_NO_TEXT);
 }
