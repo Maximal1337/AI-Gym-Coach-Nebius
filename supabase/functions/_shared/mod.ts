@@ -133,6 +133,10 @@ export async function budgetRemaining(
 export async function subscriptionAccess(
   db: SupabaseClient,
   userId: string,
+  // Throw when the users row can't be read, instead of reading that as "not
+  // entitled". Off by default, so the existing callers behave as before;
+  // assistant-outbox needs it, since its answer ends a job for good.
+  options: { throwOnError?: boolean } = {},
 ): Promise<{ ok: boolean; status: string; trialEndsAt: string | null }> {
   // Global kill switch (Supabase secret, not a per-row column): the app
   // launched free, no paywall yet — everyone is entitled regardless of
@@ -142,11 +146,12 @@ export async function subscriptionAccess(
   if (Deno.env.get("SUBSCRIPTION_PAUSED") === "true") {
     return { ok: true, status: "paused", trialEndsAt: null };
   }
-  const { data } = await db
+  const { data, error } = await db
     .from("users")
     .select("subscription_status, trial_ends_at, subscription_expires_at")
     .eq("id", userId)
     .maybeSingle();
+  if (error && options.throwOnError) throw new Error(`users: ${error.message}`);
   if (!data) return { ok: false, status: "expired", trialEndsAt: null };
 
   const now = Date.now();
