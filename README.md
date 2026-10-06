@@ -16,12 +16,14 @@ thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 - **Demo video:** *link added at submission*
 - **Judge accounts:** in the Devpost testing instructions (never in this public repository)
 
-> **Status on 2026-09-30.** Everything on the Supabase side, the relay, the
+> **Status on 2026-10-06.** Everything on the Supabase side, the relay, the
 > sandbox manager, the memory pipeline, the Hermes coach profile, the cluster
-> manifests and the app screens is written and tested in CI. What's left needs
-> the Nebius VPS: bringing the cluster up, building the Hermes sandbox image
-> and running the whole path end to end. This README is updated as those land;
-> [the plan](docs/nebius-hackathon-plan.md) tracks every item.
+> manifests and the app screens is written and tested in CI. CI builds both
+> images after every green run on `main` (the relay, and the Hermes sandbox
+> image on NemoClaw's) and publishes them on GHCR. What's left needs the Nebius
+> VPS: bringing the cluster up and running the whole path end to end. This
+> README is updated as those land; [the plan](docs/nebius-hackathon-plan.md)
+> tracks every item.
 
 ## What the Coach assistant does
 
@@ -289,7 +291,7 @@ a fake `kubectl` (`deploy/ops/test`).
 ## What changed during the submission period (after 2026-08-26)
 
 The app itself was built between 2026-07-26 and 2026-08-20. Everything below
-is new since 2026-08-26 — about 30 commits and 14 migrations, all additive:
+is new since 2026-08-26, and every migration in that period is additive:
 
 - **The Coach assistant**, end to end: the chat channel and job queue, the
   relay, per-user OpenShell sandboxes with Hermes and their lifecycle, and the
