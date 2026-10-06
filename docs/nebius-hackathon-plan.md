@@ -986,9 +986,9 @@ Script, shot list and recording rules drafted in [`submission.md`](./submission.
 #### NH-92 · Pre-submission check of the public repository
 **Priority:** Urgent · **Estimate:** 1 · **Labels:** Area/Security, Area/Docs, Type/Chore · **Blocked by:** NH-04, NH-05, NH-06
 
-- [ ] Final gitleaks run over the full history is clean
-- [ ] Branch protection enabled on `main`; CI required before merge — it must still let the Images workflow push its tag commit (NH-37), e.g. through a deploy key allowed to bypass it, or deploys stop
-- [ ] License visible in the GitHub **About** panel
+- [ ] Final gitleaks run over the full history is clean — run on 2026-10-06 over a full clone (all 267 commits on every branch; earlier scans had run on a shallow clone): one false positive in the oldest history, the same local storage entry name already ignored in later commits, now in `.gitleaksignore`; clean otherwise. A shallow clone hides the oldest commits, so run it after `git fetch --unshallow`, or through the Secret scan workflow's manual run (`fetch-depth: 0`)
+- [ ] Branch protection enabled on `main` (off as of 2026-10-06); CI required before merge — it must still let the Images workflow push its tag commit (NH-37), e.g. through a deploy key allowed to bypass it, or deploys stop
+- [x] License visible in the GitHub **About** panel — GitHub detects the root LICENSE as MIT (checked 2026-10-06)
 
 #### NH-93 · Devpost submission
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Docs, Type/Chore · **Blocked by:** NH-72, NH-90, NH-91, NH-92
