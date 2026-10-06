@@ -8,7 +8,7 @@ For the **Nebius × NVIDIA Global AI Hackathon (Personal AI track)** we added
 the **Coach assistant**: an always-on personal coach you can talk to between
 workouts. It remembers what matters about you across sessions, looks things
 up on the web with sources, changes your training plan when you ask — and lets
-you undo it — and checks in every morning on its own. Every user gets their
+you undo it — and checks in every day on its own. Every user gets their
 own agent: **Hermes Agent running in their own NVIDIA OpenShell sandbox**,
 thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 
@@ -33,7 +33,7 @@ thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 | **Remembers you** | A nightly job distils short, typed facts from your chats and workouts — injuries, goals, schedule, equipment, preferences. *What the coach remembers* lists them; delete any and the coach stops using it. |
 | **Acts on your behalf** | Saves notes for your next workout and changes an exercise's sets, rep range, rest, intensity or warm-up — never the movement itself. Every change is recorded, stated exactly, and undoable for 24 hours. |
 | **Looks things up** | Web search through Tavily for nutrition facts, substitutions and equipment, with sources you can tap. The coach's rules keep personal details out of every query. |
-| **Checks in** | A daily morning message about today's workout and one thing it remembers — or nothing, when there's nothing useful to say. |
+| **Checks in** | A daily message at 06:00 UTC about today's workout and one thing it remembers — or nothing, when there's nothing useful to say. |
 | **Stays private** | Your agent runs in its own sandbox; its memory, skills and sessions are yours alone. It never holds an API key, and it reaches your training data only through tools that check every read and write against the database. |
 
 ## How Nemotron and Token Factory are used

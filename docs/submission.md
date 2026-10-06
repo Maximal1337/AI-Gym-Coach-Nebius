@@ -62,7 +62,7 @@ eas submit --platform ios --id <build id> --non-interactive
 > for the Nebius × NVIDIA Global AI Hackathon: a personal coach you can talk
 > to between workouts, which remembers what matters about you, can change
 > your training plan when you ask (and undo it), looks things up on the web
-> with sources, and checks in each morning. It is available on the hackathon's
+> with sources, and checks in every day. It is available on the hackathon's
 > demo and judge accounts.
 
 **What to Test**
@@ -71,7 +71,7 @@ eas submit --platform ios --id <build id> --non-interactive
 > open the Assistant tab. Ask what the coach knows about you; ask it to change
 > an exercise's sets or reps, then to undo it; ask a nutrition question and tap
 > a source; open "What the coach remembers" and delete a fact. Allow
-> notifications to receive the morning check-in.
+> notifications to receive the daily check-in.
 
 ## The Devpost form
 
@@ -94,7 +94,7 @@ links filled in, the license visible in GitHub's **About** panel (NH-92).
 
 ## Elevator pitch
 
-> A strength coach that remembers you, changes your plan when asked and checks in each morning — every user's own Hermes agent in an NVIDIA OpenShell sandbox, on Nemotron via Token Factory.
+> A strength coach that remembers you, changes your plan when asked and checks in every day — every user's own Hermes agent in an NVIDIA OpenShell sandbox, on Nemotron via Token Factory.
 
 (187 characters; Devpost allows 200.)
 
@@ -122,8 +122,8 @@ The **Coach assistant** is a new tab in the Notch app:
   itself. Every change is stated exactly, recorded, and undoable for 24 hours.
 - **It looks things up.** Web search through Tavily, with sources you can tap;
   the coach's rules keep personal details out of the queries.
-- **It checks in on its own.** A morning message about today's workout and one
-  thing it remembers — or nothing, when there's nothing useful to say.
+- **It checks in on its own.** A daily message (06:00 UTC) about today's
+  workout and one thing it remembers — or nothing, when there's nothing useful to say.
 - **It's private by construction.** Every user has their own agent in their own
   sandbox; its memory, skills and sessions belong to that user alone. The agent
   never holds an API key and reaches training data only through tools that
@@ -253,7 +253,7 @@ and only after the check in the form table above.
 >
 > Each judge has their own account with two weeks of training history, and
 > each account has its own agent, isolated from the others like any real
-> user's. Allow notifications to see the morning check-in.
+> user's. Allow notifications to get the daily check-in.
 >
 > **Try the Assistant tab:**
 >
@@ -265,8 +265,9 @@ and only after the check in the form table above.
 >    answer with sources you can tap.
 > 4. Delete a fact on the memory screen, then ask about it: the coach no longer
 >    uses it.
-> 5. A check-in arrives around 06:00 UTC as a notification, when there's
->    something worth saying.
+> 5. Once a day at 06:00 UTC (the night before in the Americas) the coach
+>    checks in on its own as a notification, when there's something worth
+>    saying. If it comes while you sleep, it's waiting in the chat.
 >
 > **Good to know.** A reply usually takes ⟨p50⟩ seconds; if your agent was
 > asleep, the first one takes up to ⟨cold start⟩ seconds while it starts, and
