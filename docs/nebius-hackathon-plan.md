@@ -662,7 +662,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 #### NH-36 · Argo CD and cluster layout
 **Priority:** High · **Estimate:** 5 · **Labels:** Area/Infra, Type/Feature · **Blocked by:** NH-27
 
-- [x] A bash bootstrap script in the repo installs k3s and Argo CD core on a fresh Ubuntu 24.04 host — the same script is used for the move (NH-96) — `deploy/bootstrap/bootstrap.sh`: pinned versions, k3s without traefik, servicelb and metrics-server, secrets encrypted at rest; refuses to run without an active ufw, because k3s listens on 6443 everywhere (D-27)
+- [x] A bash bootstrap script in the repo installs k3s and Argo CD core on a fresh Ubuntu 24.04 host — the same script is used for the move (NH-96) — `deploy/bootstrap/bootstrap.sh`: pinned versions, k3s without traefik, servicelb and metrics-server, secrets encrypted at rest; refuses to run without an active ufw that denies incoming by default and doesn't open 6443 or every port to anywhere, because k3s listens on 6443 everywhere (D-27; the default policy and the allow-all rule checked since 2026-10-06)
 - [x] App-of-apps in the repo: the platform (Agent Sandbox controller, OpenShell), `notch-dev` and `notch-prod` — `deploy/argocd`, ordered by sync waves; two AppProjects, and only `platform` may create cluster-scoped objects
 - [x] NetworkPolicy isolates `notch-dev` and `notch-prod` from each other — from the ingress side, without ever widening OpenShell's own sandbox policies (NetworkPolicies add up)
 - [x] Secrets never in Git: Sealed Secrets, or `kubectl create secret` documented step by step — `deploy/bootstrap/secrets.sh` from a root-only env file on the VPS; no Sealed Secrets controller, which saves RAM

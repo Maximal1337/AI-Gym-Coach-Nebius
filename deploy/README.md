@@ -38,7 +38,9 @@ Agent Sandbox `v1.0.4` (platform/agent-sandbox), OpenShell chart `0.1.2`
 
 On the VPS, as the `claude` user (sudo), in a clone of this repository.
 The host must already be hardened (NH-31): the script refuses to install k3s
-without an active ufw, because k3s listens on 6443 on every interface.
+without an active ufw that denies incoming traffic by default and has no rule
+opening 6443 (or every port) to anywhere, because k3s listens on 6443 on every
+interface.
 
 ```bash
 sudo deploy/bootstrap/bootstrap.sh

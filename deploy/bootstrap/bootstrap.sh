@@ -46,8 +46,10 @@ esac
 if [[ ${ALLOW_NO_FIREWALL:-0} != 1 ]]; then
   command -v ufw >/dev/null || die "ufw is not installed — harden the host first (NH-31), or set ALLOW_NO_FIREWALL=1"
   ufw status | grep -q '^Status: active' || die "ufw is inactive — harden the host first (NH-31), or set ALLOW_NO_FIREWALL=1"
-  if ufw status | grep -qE '^6443(/tcp)? +ALLOW +Anywhere'; then
-    die "ufw allows 6443 from anywhere; remove that rule (D-27)"
+  ufw status verbose | grep -qE '^Default: (deny|reject) \(incoming\)' \
+    || die "ufw lets incoming traffic in by default; run 'ufw default deny incoming' (D-27)"
+  if ufw status | grep -qE '^(6443(/tcp)?|Anywhere)( \(v6\))? +ALLOW( IN)? +Anywhere'; then
+    die "ufw allows 6443 (or every port) from anywhere; remove that rule (D-27)"
   fi
 fi
 
