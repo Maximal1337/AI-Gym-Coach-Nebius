@@ -273,7 +273,9 @@ and only after the check in the form table above.
 > asleep, the first one takes up to ⟨cold start⟩ seconds while it starts, and
 > when many judges write at once a message may show "waiting" before its turn.
 > New facts from today's chat appear after the nightly run (00:00–03:00 UTC).
-> Each account can send up to 100 messages a day. The Workout tab is Notch's
+> Each account can send up to 100 messages a day. If the coach says it has
+> reached today's limit, the demo's shared daily budget is spent: it's back at
+> 00:00 UTC. The Workout tab is Notch's
 > existing in-workout coach; the hackathon work is the Assistant tab.
 >
 > Questions: ⟨team contact⟩.
@@ -386,6 +388,12 @@ Every week from 2026-10-30 to 2026-12-15, one owner per week ⟨names⟩:
       so a build uploaded by 2026-10-16 lasts past 2026-12-15 — a newer upload
       restarts the clock.
 - [ ] Credits and spend: the Monday check in [`budget-runbook.md`](./budget-runbook.md), both accounts.
+- [ ] Prod didn't run into its daily ceiling, which stops every judge's coach
+      until 00:00 UTC and isn't an alert (the relay only logs `paused`). Days
+      that came close, with the default $1 ceiling:
+      `select day, round(cost_cents) as cents from public.assistant_spend where bucket = 'prod' and day > current_date - 7 and cost_cents >= 90 order by day;`
+      If judges hit it, raise `ASSISTANT_SPEND_CEILING_CENTS_PROD` as far as
+      the Monday forecast allows.
 - [ ] Judge accounts untouched: **never re-seed during judging** — it wipes
       what a judge did. The last re-seed is on submission day, after the final
       demo run.
