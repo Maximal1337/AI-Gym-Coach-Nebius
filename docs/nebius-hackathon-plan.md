@@ -951,7 +951,7 @@ Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testfl
   - Tavily answer with sources
   - personalized reply using facts
   - a write tool changes the plan, and undo reverts it
-  - delete a fact, and the next reply doesn't use it
+  - delete a fact, and the next reply doesn't use it — a known limit, left as is on 2026-10-06: the agent sees the last 20 chat messages, so a fact the chat itself mentioned (for example in the answer to "What do you know about me?") can still come back from that history after it's deleted
   - push notification received
 - [ ] Every issue found is filed in Linear
 
