@@ -317,6 +317,8 @@ check "fixed: back to a success ping" eq "$(cat "$T/pings/2.conf")" 'url = "http
 
 printf '%s\n' '{"event":"job_error"}' '{"event":"poll_error"}' '{"event":"sandbox_error"}' '{"event":"fatal"}' '{"event":"turn_failed"}' > "$K/relay-notch-prod.log"
 check "relay errors over the limit" fails_with "relay notch-prod: 5 errors in 10 minutes (limit 5)" bash "$OPS/health.sh"
+printf '%s\n' '{"event":"delivery_refused"}' '{"event":"delivery_failed"}' '{"event":"delivery_refused"}' '{"event":"delivery_failed"}' '{"event":"delivery_refused","status":404}' > "$K/relay-notch-prod.log"
+check "replies that can't be stored count as relay errors" fails_with "relay notch-prod: 5 errors in 10 minutes (limit 5)" bash "$OPS/health.sh"
 : > "$K/relay-notch-prod.log"
 
 { sandbox_pod notch-dev d1 ""; sandbox_pod notch-dev d2 ""; sandbox_pod notch-dev d3 ""; } | jq -s '{items: .}' > "$K/pods.json"

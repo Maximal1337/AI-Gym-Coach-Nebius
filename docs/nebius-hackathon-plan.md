@@ -714,7 +714,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
 
 - [x] Uptime ping and host health (CPU, RAM, disk) with alerts — `deploy/ops/health.sh` every 5 minutes, reporting to a free healthchecks.io check that emails both members on a problem and when the pings stop; also k3s, workloads, Argo CD, crash loops, the sandbox cap, relay errors and backup age. A problem counts once two runs in a row see it
-- [x] Running sandbox count, queue length and relay errors visible — sandboxes, memory per pod and relay errors in the health report; the queue in Supabase ([`assistant-ops.md`](./assistant-ops.md), "Queue right now")
+- [x] Running sandbox count, queue length and relay errors visible — sandboxes, memory per pod and relay errors in the health report — since 2026-10-06 including replies that couldn't be stored (`delivery_failed`, `delivery_refused`), which it had missed, and a relay test fails when the relay logs an error event the health check doesn't count; the queue in Supabase ([`assistant-ops.md`](./assistant-ops.md), "Queue right now")
 - [ ] Per-sandbox RSS watchdog restarts a sandbox above the threshold from NH-25 (Hermes gateway memory growth) — the mechanism is `SANDBOX_MEMORY` (OpenShell makes it the pod's memory limit; the relay starts a killed sandbox again on the next message); the value waits for NH-25
 - [ ] Nebius billing alerts verified — set up per the [budget runbook](./budget-runbook.md), checked after the VPS's first day
 - [ ] On the VPS: the healthchecks.io check created, and stopping k3s produces an alert email

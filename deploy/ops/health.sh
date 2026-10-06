@@ -152,12 +152,14 @@ else
       | .[] | "memory \(.pod): \(.bytes / 1048576 | floor) MiB"' <<<"$stats")
   fi
 
-  # The relay's own error events (services/relay/src/main.ts, sandbox-manager.ts).
+  # The relay's own error events (services/relay/src; health-events.test.ts there
+  # fails when the relay logs an error event this list misses).
   for ns in "${NOTCH_NAMESPACES[@]}"; do
     kubectl -n "$ns" get deployment notch-relay > /dev/null 2>&1 || continue
     errors="$(kubectl -n "$ns" logs deployment/notch-relay --since=10m 2> /dev/null \
       | jq -R -c 'fromjson? | objects | select(.event | IN("fatal", "poll_error", "job_error", "turn_failed", "sandbox_error", "sweep_failed",
-                                                "sandbox_stop_failed", "sandbox_delete_failed", "provider_delete_failed", "delivery_dropped"))' || true)"
+                                                "sandbox_stop_failed", "sandbox_delete_failed", "provider_delete_failed",
+                                                "delivery_failed", "delivery_refused", "delivery_dropped"))' || true)"
     count=0
     if [[ -n $errors ]]; then count="$(wc -l <<<"$errors")"; fi
     if (( count > 0 )); then
