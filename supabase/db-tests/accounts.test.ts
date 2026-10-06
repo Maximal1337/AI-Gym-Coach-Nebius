@@ -76,6 +76,17 @@ Deno.test("re-seeding a demo account clears its coach chat, jobs, actions and fa
   await db.close();
 });
 
+Deno.test("a seeded demo account gets the daily check-in, as the judges' instructions promise", async () => {
+  const db = await migratedDb();
+  const u = await demoAccount(db);
+  await seed(db, "judge-1@example.test");
+  const queued = await asService(db, (tx) => tx.query<{ n: number }>("select public.assistant_enqueue_checkins() n"));
+  assertEquals(queued.rows[0].n, 1);
+  const job = await one<{ kind: string; environment: string }>(db, "select kind, environment from public.assistant_jobs where user_id = $1", [u]);
+  assertEquals(job, { kind: "checkin", environment: "prod" });
+  await db.close();
+});
+
 Deno.test("deleting an account removes every row of that user, and only that user", async () => {
   const db = await migratedDb();
   const u = await demoAccount(db);

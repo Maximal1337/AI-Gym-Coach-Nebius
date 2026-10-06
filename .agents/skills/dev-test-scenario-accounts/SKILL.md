@@ -91,8 +91,8 @@ git-ignored `secrets/` folder, never in the repo.
 ## Demo and judge accounts
 
 Demo and judge accounts get two weeks of realistic history — plan, eight
-workouts, workout chat, saved notes, and the `assistant_chat` /
-`assistant_memory` feature flags — from `private.seed_demo_account(email)`
+workouts, workout chat, saved notes, and the `assistant_chat`,
+`assistant_memory` and `assistant_checkin` feature flags — from `private.seed_demo_account(email)`
 (migration `20260918140000_demo_accounts.sql`). The function wipes the
 account's plans, workouts, notes, studio sessions and usage first, so it only
 runs for addresses registered in `private.demo_accounts`. It also refuses QA
