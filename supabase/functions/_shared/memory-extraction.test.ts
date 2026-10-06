@@ -206,6 +206,15 @@ Deno.test("apply: an add that repeats a current fact becomes a reinforce", () =>
   assertEquals(w.update.find((x) => x.id === "id-1")!.doc!.mention_count, 2);
 });
 
+Deno.test("apply: the same new fact added twice in one reply is stored once", () => {
+  const add: Operation = { op: "add", text: "Gym has no barbells", category: "equipment", importance: 4, stability: "long_term", evidence: "explicit" };
+  const w = buildMemoryWrite(FACTS, [{ ...add, messages: ["m1"] }, { ...add, text: "gym has no barbells.", messages: ["m3"] }], MESSAGES, NOW);
+  assertEquals(w.insert.length, 1);
+  const d = w.insert[0].doc;
+  assertEquals([d.text, d.mention_count], ["Gym has no barbells", 2]);
+  assertEquals(d.source_message_ids, ["msg-a", "msg-c"]);
+});
+
 Deno.test("apply: the cap still holds — a weak 16th fact is rejected, a strong one evicts the weakest", () => {
   const full = Array.from({ length: MAX_FACTS }, (_, i) =>
     stored(`id-${String(i).padStart(2, "0")}`, `Fact ${i}`, { category: "other", importance: i === 4 ? 1 : 5, stability: "permanent" })

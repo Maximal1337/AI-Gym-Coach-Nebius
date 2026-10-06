@@ -348,6 +348,17 @@ export function buildMemoryWrite(
         reinforce(twin.id, op.messages);
         continue;
       }
+      // So is one this reply already added: the first stands, the repeat counts as a mention.
+      const i = candidates.findIndex((c) => normalized(c.text) === normalized(op.text!));
+      if (i !== -1) {
+        const first = candidates[i];
+        candidates[i] = {
+          ...first,
+          mention_count: first.mention_count + 1,
+          source_message_ids: withSources(first.source_message_ids, op.messages, messages),
+        };
+        continue;
+      }
       candidates.push({
         text: op.text!,
         category: op.category!,

@@ -852,7 +852,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Memory, Type/Feature · **Blocked by:** NH-22
 
 - [x] Prompt and JSON schema: input is current facts + new messages; output is a list of operations `ADD | UPDATE(id) | REINFORCE(id) | CONTRADICT(id) | EXPIRE(id)` with `category`, `importance` (1–5), `stability` (temporary / long-term / permanent), `evidence` (explicit / inferred) — `_shared/memory-extraction.ts`; facts are written in the user's language; the model sees short references (f1, m1), never database ids
-- [x] Invalid JSON or unknown fact IDs are rejected, never applied — each operation is validated on its own; an add that repeats a current fact becomes a reinforce
+- [x] Invalid JSON or unknown fact IDs are rejected, never applied — each operation is validated on its own; an add that repeats a current fact becomes a reinforce, and the same fact added twice in one reply is stored once (fixed 2026-10-06)
 - [x] Facts stored as short neutral statements (≤ 140 characters) that never contain instructions — one line, no links or markup, instruction-like text refused
 - [ ] Run against Nemotron on Token Factory with the NH-65 golden set (needs NH-01 keys); the client is `_shared/token-factory.ts`
 

@@ -186,7 +186,7 @@ function lowestUnpinned(entries: Entry[]): Entry | undefined {
 /**
  * Plans the next state of a user's memory from their stored facts and the
  * new candidate facts (already validated, already de-duplicated against
- * stored facts by the extraction step).
+ * stored facts and each other by the extraction step).
  */
 export function planMemory(stored: StoredFact[], candidates: FactDoc[], now: Date): MemoryPlan {
   const plan: MemoryPlan = { remove: [], insert: [], keep: [], rejected: [] };
