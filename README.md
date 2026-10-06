@@ -126,8 +126,8 @@ flowchart LR
 
 ## What we built, and what we build on
 
-OpenShell, Hermes Agent and NemoClaw's Hermes blueprint are the runtime; the
-product is the software around them. None of the upstream source is vendored
+OpenShell, Hermes Agent and NemoClaw's Hermes sandbox image are the runtime;
+the product is the software around them. None of the upstream source is vendored
 in this repository: each piece is pulled at a pinned version, under its own
 license.
 
@@ -148,7 +148,7 @@ license.
 |---|---|---|
 | [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) | Apache-2.0 | Gateway Helm chart 0.1.2 and the `openshell` CLI (shipped in the relay image with its LICENSE and THIRD-PARTY-NOTICES) |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox |
-| [NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw) | Apache-2.0 | Its Hermes blueprint is the base of the sandbox image |
+| [NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw) | Apache-2.0 | Its published Hermes sandbox image (v0.0.130, pinned by digest) is the base of ours; we add the coach's profile and our own start command |
 | [Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | Apache-2.0 | The Sandbox CRD and controller OpenShell runs on, v1.0.4 |
 | [k3s](https://github.com/k3s-io/k3s), [Argo CD](https://github.com/argoproj/argo-cd) | Apache-2.0 | The cluster and its GitOps sync |
 
@@ -316,8 +316,8 @@ is new since 2026-08-26 — about 30 commits and 14 migrations, all additive:
   holds credentials outside the agent and enforces network policy. It has
   nothing to do with Microsoft PowerShell; only the name is similar.
 - **NVIDIA NemoClaw** — NVIDIA's reference stack for running agents in
-  OpenShell. We reuse its Hermes blueprint (sandbox image and policy presets),
-  not its host installer.
+  OpenShell. We build on its published Hermes sandbox image (Hermes patched to
+  run inside OpenShell); not its host installer, start script or policies.
 - **Hermes Agent** — the open-source agent by Nous Research that runs inside
   each sandbox.
 - **Nebius Token Factory** — Nebius' hosted inference, OpenAI-compatible; where

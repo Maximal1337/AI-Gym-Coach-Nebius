@@ -160,7 +160,7 @@ The **Coach assistant** is a new tab in the Notch app:
   from Git; CI builds the images after green tests. The whole deployment fits
   inside our hackathon credits.
 - **Ours versus upstream.** OpenShell, Hermes Agent and NemoClaw's Hermes
-  blueprint are the runtime, pulled at pinned versions under their own
+  sandbox image are the runtime, pulled at pinned versions under their own
   licenses. The relay, the sandbox manager, the tools, the memory pipeline, the
   coach's rules, the deployment and the app are ours.
 
@@ -209,8 +209,7 @@ workout itself, so it can log sets and adjust the session live.
 ### Built with
 
 nvidia-nemotron · nebius-token-factory · nebius-ai-cloud · nvidia-openshell ·
-hermes-agent · ⟨nvidia-nemoclaw, if the image is built from its blueprint
-(NH-21)⟩ · tavily · model-context-protocol · supabase · postgresql · deno ·
+hermes-agent · nvidia-nemoclaw · tavily · model-context-protocol · supabase · postgresql · deno ·
 typescript · node.js · react-native · expo · kubernetes · k3s · argo-cd ·
 github-actions
 
@@ -328,7 +327,16 @@ runs; cut what turns out not to be true.
 
 **NVIDIA NemoClaw and Nemotron**
 
-- ⟨NemoClaw's Hermes blueprint as the base image (NH-21).⟩
+- Publishing the built Hermes sandbox image, multi-arch and pinnable by
+  digest, meant our image is NemoClaw's plus the coach's profile: nothing of
+  theirs to build.
+- The `hermes` wrapper's secret boundary is a good default: it refuses to start
+  the gateway while a raw secret sits in the environment. It matches variable
+  names, so our model id under `TOKEN_FACTORY_MODEL` counted as a secret too,
+  and we learned the one place the API server key may live (a 0640 `.env` in
+  `HERMES_HOME`) from the validator's source. ⟨If NemoClaw's Hermes guide
+  still doesn't cover it:⟩ a section on the boundary would save the next team
+  that read.
 - ⟨Nemotron's replies in the user's language, tool-call accuracy, cost per
   conversation (NH-25).⟩
 

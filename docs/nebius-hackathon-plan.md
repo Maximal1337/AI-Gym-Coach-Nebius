@@ -139,7 +139,7 @@ What we submit:
 
 **Glossary** — the names are easy to mix up:
 - **NVIDIA OpenShell** — a Linux sandbox runtime for AI agents. It isolates each agent with Linux kernel features (Landlock, seccomp, network namespaces), holds credentials outside the agent, and enforces network policy. It has nothing to do with Microsoft PowerShell; only the name is similar.
-- **NVIDIA NemoClaw** — NVIDIA's reference stack for running agents in OpenShell. We reuse its Hermes blueprint (sandbox image and policy presets), not its host installer.
+- **NVIDIA NemoClaw** — NVIDIA's reference stack for running agents in OpenShell. We build on its published Hermes sandbox image (Hermes patched to run inside OpenShell); not its host installer, start script or policies (since 2026-10-04, NH-21).
 - **Hermes Agent** — the open-source agent by Nous Research that runs inside each sandbox.
 
 ---
