@@ -389,8 +389,8 @@ Every week from 2026-10-30 to 2026-12-15, one owner per week ⟨names⟩:
       restarts the clock.
 - [ ] Credits and spend: the Monday check in [`budget-runbook.md`](./budget-runbook.md), both accounts.
 - [ ] Prod didn't run into its daily ceiling, which stops every judge's coach
-      until 00:00 UTC and isn't an alert (the relay only logs `paused`). Days
-      that came close, with the default $1 ceiling:
+      until 00:00 UTC. The health check alerts while it lasts; days that came
+      close, with the default $1 ceiling:
       `select day, round(cost_cents) as cents from public.assistant_spend where bucket = 'prod' and day > current_date - 7 and cost_cents >= 90 order by day;`
       If judges hit it, raise `ASSISTANT_SPEND_CEILING_CENTS_PROD` as far as
       the Monday forecast allows.

@@ -152,14 +152,22 @@ else
       | .[] | "memory \(.pod): \(.bytes / 1048576 | floor) MiB"' <<<"$stats")
   fi
 
-  # The relay's own error events (services/relay/src; health-events.test.ts there
+  # The relay's own events (services/relay/src; health-events.test.ts there
   # fails when the relay logs an error event this list misses).
   for ns in "${NOTCH_NAMESPACES[@]}"; do
     kubectl -n "$ns" get deployment notch-relay > /dev/null 2>&1 || continue
-    errors="$(kubectl -n "$ns" logs deployment/notch-relay --since=10m 2> /dev/null \
-      | jq -R -c 'fromjson? | objects | select(.event | IN("fatal", "poll_error", "job_error", "turn_failed", "sandbox_error", "sweep_failed",
-                                                "sandbox_stop_failed", "sandbox_delete_failed", "provider_delete_failed",
-                                                "delivery_failed", "delivery_refused", "delivery_dropped"))' || true)"
+    events="$(kubectl -n "$ns" logs deployment/notch-relay --since=10m 2> /dev/null | jq -R -c 'fromjson? | objects' || true)"
+    errors="$(jq -c 'select(.event | IN("fatal", "poll_error", "job_error", "turn_failed", "sandbox_error", "sweep_failed",
+                                       "sandbox_stop_failed", "sandbox_delete_failed", "provider_delete_failed",
+                                       "delivery_failed", "delivery_refused", "delivery_dropped"))' <<<"$events" || true)"
+    # At the environment's D-34 spend ceiling the outbox hands out no work and
+    # the relay logs `paused`: every user of the environment waits until 00:00
+    # UTC, without a single error. In prod that's every judge (a problem); in
+    # dev, the team's own testing (a note).
+    if [[ -n "$(jq -c 'select(.event == "paused")' <<<"$events" || true)" ]]; then
+      msg="relay $ns: paused at the daily spend ceiling until 00:00 UTC"
+      if [[ $ns == notch-prod ]]; then problem "paused:$ns" "$msg"; else note "$msg"; fi
+    fi
     count=0
     if [[ -n $errors ]]; then count="$(wc -l <<<"$errors")"; fi
     if (( count > 0 )); then

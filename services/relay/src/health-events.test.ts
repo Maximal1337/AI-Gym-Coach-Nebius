@@ -48,3 +48,10 @@ test("health.sh counts only events the relay still logs", () => {
   const stale = [...healthEvents()].filter((e) => !logged.has(e));
   assert.deepEqual(stale, [], "renamed or removed in services/relay/src");
 });
+
+test("health.sh's spend-ceiling check reads an event the relay still logs", () => {
+  const script = readFileSync(repo("deploy/ops/health.sh"), "utf8");
+  const watched = [...script.matchAll(/select\(\.event == "([a-z_]+)"\)/g)].map((m) => m[1]);
+  assert.deepEqual(watched, ["paused"]);
+  assert.ok(loggedEvents().has("paused"), "the relay no longer logs paused; health.sh's spend-ceiling check would never fire");
+});
