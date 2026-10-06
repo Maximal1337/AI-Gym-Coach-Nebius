@@ -885,7 +885,7 @@ Eviction, with a cap of 15 facts per user:
 - [x] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34): `checkSpend('memory')` before each user, `recordSpend` after each call
 - [x] Stays on Supabase Cron per D-23; every call logs a `memory_run` summary with its duration
 - [ ] First real run on Token Factory (needs keys); record the measured duration here so "it outgrew the Edge Function limit" stays a checkable trigger
-- [x] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean — the original seed is wrapped, not copied; the first run then builds facts from the seeded history
+- [x] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean — the original seed is wrapped, not copied; the first run then builds facts from the seeded history — run it the day of the seed: the oldest seeded workout, the one with the shoulder, leaves the 14-day window by the second night (runbook in the `dev-test-scenario-accounts` skill)
 
 #### NH-64 · Facts injection into the agent
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Memory, Area/Agent, Type/Feature · **Blocked by:** NH-54, NH-63

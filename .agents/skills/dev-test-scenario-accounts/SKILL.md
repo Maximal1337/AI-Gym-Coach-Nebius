@@ -111,6 +111,24 @@ History is placed relative to `now()`. Right before judging, re-seed every
 account so the two weeks line up with the judging window and anything a
 tester changed is reset:
 `select email, private.seed_demo_account(email) from private.demo_accounts order by email;`
+
+Build their facts the same day: run `memory-nightly` right after the re-seed
+(`docs/assistant-ops.md`, "Run it now"), don't wait for the night. The job
+reads 14 days back and the oldest seeded workout is 13 days old, 17:30 UTC —
+the one where the user mentions the left shoulder. By the second night it's
+out of reach (27 of the 32 messages left), so a night that fails or is skipped
+loses the demo's pinned health fact for good, silently. Then check every
+account has facts, a pinned health one among them; if not, re-seed and run
+again:
+
+```sql
+select d.email, count(f.id) as facts,
+       coalesce(bool_or(f.pinned and f.doc ->> 'category' = 'health'), false) as pinned_health
+from private.demo_accounts d
+left join auth.users u on lower(u.email) = lower(d.email)
+left join public.user_facts f on f.user_id = u.id
+group by d.email order by d.email;
+```
 The in-app language choice is device-local, so a first launch on a new
 device still shows the language screen once.
 

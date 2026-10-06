@@ -401,8 +401,10 @@ Every week from 2026-10-30 to 2026-12-15, one owner per week ⟨names⟩:
 Fixed dates:
 
 - **2026-10-26:** re-seed every demo and judge account
-  (`dev-test-scenario-accounts` skill), let the nightly job build their facts,
-  then submit.
+  (`dev-test-scenario-accounts` skill), run the memory job at once and check
+  every account has facts with a pinned health one (the skill has the query;
+  the oldest seeded workout leaves the job's 14-day window by the second
+  night), then submit.
 - **2026-11-15:** the move to member B's credits (NH-96), a week-long check
   after it.
 - **2026-12-01:** resize to 4 vCPU / 16 GiB; confirm the prod sync windows are
