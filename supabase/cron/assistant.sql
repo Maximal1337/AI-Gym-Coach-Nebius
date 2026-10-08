@@ -37,7 +37,8 @@ select cron.schedule(
 );
 
 -- The proactive daily check-in (NH-66): queue one per opted-in user at 06:00
--- UTC (09:00 in Tel Aviv). Pure SQL, no HTTP; the relay picks the jobs up.
+-- UTC (09:00 in Tel Aviv until 2026-10-25, 08:00 after: all of judging).
+-- Pure SQL, no HTTP; the relay picks the jobs up.
 select cron.schedule(
   'assistant-checkins',
   '0 6 * * *',
