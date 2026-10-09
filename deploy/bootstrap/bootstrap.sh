@@ -116,12 +116,22 @@ fi
 
 # ------------------------------------------------------ admin kubeconfig
 # The sudo user (e.g. `claude`) gets their own copy, namespace argocd, so
-# `kubectl` and `argocd --core` work without sudo.
+# `kubectl` and `argocd --core` work without sudo. k3s' kubectl ignores
+# ~/.kube/config while /etc/rancher/k3s/k3s.yaml exists, even though only root
+# can read that file, so login shells point KUBECONFIG at the copy.
 if [[ -n ${SUDO_USER:-} && $SUDO_USER != root ]]; then
   home="$(getent passwd "$SUDO_USER" | cut -d: -f6)"
   install -d -m 0700 -o "$SUDO_USER" -g "$SUDO_USER" "$home/.kube"
   install -m 0600 -o "$SUDO_USER" -g "$SUDO_USER" /etc/rancher/k3s/k3s.yaml "$home/.kube/config"
   sudo -u "$SUDO_USER" env KUBECONFIG="$home/.kube/config" kubectl config set-context --current --namespace=argocd >/dev/null
+  cat > /etc/profile.d/notch-kubeconfig.sh <<'EOF'
+# Written by deploy/bootstrap/bootstrap.sh: k3s' kubectl reads the root-only
+# /etc/rancher/k3s/k3s.yaml unless KUBECONFIG says otherwise.
+if [ -z "${KUBECONFIG:-}" ] && [ "$(id -u)" -ne 0 ] && [ -r "$HOME/.kube/config" ]; then
+  export KUBECONFIG="$HOME/.kube/config"
+fi
+EOF
+  chmod 0644 /etc/profile.d/notch-kubeconfig.sh
 fi
 
 # --------------------------------------------------------------- root app

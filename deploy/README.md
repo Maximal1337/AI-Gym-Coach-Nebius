@@ -46,6 +46,12 @@ interface.
 sudo deploy/bootstrap/bootstrap.sh
 ```
 
+It gives the sudo user their own admin kubeconfig, `~/.kube/config`, and
+points `KUBECONFIG` at it in login shells (`/etc/profile.d/notch-kubeconfig.sh`):
+k3s' bundled `kubectl` otherwise reads `/etc/rancher/k3s/k3s.yaml`, which only
+root can. Open a new SSH session after the first run. In a non-login shell, such
+as `ssh <vps> 'kubectl …'`, run `export KUBECONFIG=~/.kube/config` first.
+
 Then the secrets, one env file per environment, written on the VPS only:
 
 ```bash
