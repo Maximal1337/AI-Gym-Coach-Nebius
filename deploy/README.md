@@ -86,6 +86,17 @@ argocd --core app list
 kubectl get pods -A
 ```
 
+The gateways (`openshell-dev`, `openshell-prod`) sync only after both relays
+are healthy, and a relay can't start before its secrets exist. If the secrets
+come more than about an hour after `bootstrap.sh`, the root Application has
+given up by then (`SyncError`, "retried 10 times"), and Argo CD doesn't try
+the same commit again. Once `notch-dev` and `notch-prod` are Healthy, start it
+by hand:
+
+```bash
+argocd --core app sync root
+```
+
 ## Day to day
 
 - **Deploying** is pushing to `main`. After CI passes, the Images workflow
