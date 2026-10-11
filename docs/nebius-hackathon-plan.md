@@ -13,6 +13,8 @@ How to use this document:
 
 ## 0. Status — 2026-09-27
 
+**What runs on the VPS today**, the deviations from this plan and who does what next: [`deploy-status.md`](./deploy-status.md), updated with every spike item.
+
 **What changed in v1.2:**
 - **Runtime:** NVIDIA OpenShell + Hermes Agent instead of NanoClaw (D-25). NanoClaw isn't in the hackathon's materials; OpenShell, Hermes Agent and NemoClaw are named as the Personal AI track's suggested tools.
 - **Isolation:** every user gets their own sandbox with their own Hermes (D-26). No shared spaces, ever — when capacity runs out, requests wait in a queue.
@@ -41,6 +43,7 @@ How to use this document:
 - 2026-10-04 … 05, a second review pass over the channel, the relay and the chat screen (13 commits, each reproduced first; relay 106, Deno 189 and SQL 45 checks pass): every turn whose reply can't be stored is now charged — after failed deliveries, a 404 or 409 from `assistant-deliver`, a reply with a NUL or an unpaired surrogate, or a source without a host; Hermes' own failure notices (Token Factory down or refusing, the repetition-loop abort, "no visible answer"), which it sends as a 200 reply, now fail the attempt instead of reaching the user as the coach's words; a check-in from an earlier UTC day is failed at claim, never sent late, and no longer answers a message the user sent while it waited; a job deferred for 30 minutes fails instead of holding the user's later messages for ever; work already queued is dropped when the kill switch, the user's flag or the paywall rules it out (check-ins now need a subscription, as `assistant-send` does), and a failed read retries instead of dropping; the chat shows a slow reply as slow, and "send again" links the new copy to the original by client id; `access.test.ts` pins every select policy `authenticated` reads through. D-17: `subscriptionAccess` in `_shared/mod.ts` gained an optional `throwOnError`, off by default, so the live coaching functions behave as before; `assistant-outbox` turns it on.
 - 2026-10-04, the review's second half: a reply over the 8,000 characters `assistant-deliver` and `assistant_messages` accept — reachable when a user asks for a detailed program, since nothing caps Hermes' output — was refused, the relay let its lease run out, and each of the five attempts ran a paid turn that was never recorded against D-34. The relay now cuts a reply to fit (never mid-emoji: Postgres refuses a lone surrogate), and a delivery refused as invalid is reported at once as a failed attempt with its spend. The gateway route, `assistant-send`, `assistant-outbox`, `assistant-deliver` and `notch-tools` read clean otherwise.
 - 2026-10-04, NH-21 without the VPS: NemoClaw publishes its built Hermes sandbox image (`ghcr.io/nvidia/nemoclaw/hermes-sandbox`, v0.0.130, 590 MiB compressed), so option 1 needs nothing of theirs built. Reading their wrapper showed our sandboxes would never have started: it refuses `hermes gateway` when the environment holds a raw secret-shaped value, and ours had two. The model id now reaches the sandbox as `NOTCH_MODEL`, and the API key — now 64 hex characters — goes into `$HERMES_HOME/.env` (mode 0640) before Hermes starts, the one place their boundary accepts it; their `validate-env-secret-boundary.py` refused the old environment and accepts the new one, in its strict installed mode too. Our Dockerfile adds the profile to their image, and both gateways default to it.
+- 2026-10-09 … 11, on the VPS: the cluster is up — bootstrap, NH-28 (Super, Ultra and Lightning pass; Nano doesn't), both environments synced and healthy against a temporary test Supabase project, backups and the health check running — and NH-21 with O-11 is done: a sandbox made the way the manager makes one starts, and its Hermes answers through the gateway with the sandbox's key. Getting there took three changes the plan didn't have (the user a sandbox pod runs as, Hermes started without NemoClaw's wrapper, a second header for the API key); they and the rest of the spike are in [`deploy-status.md`](./deploy-status.md).
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -59,8 +62,8 @@ Everything here is quick; it unblocks the whole critical path. Commands are bash
 **@Maximal1337**
 - [ ] Claim the Tavily key (NH-03).
 - [ ] Look up the Supabase project's region in the dashboard (the privacy page says Asia-Pacific) and pick the Nebius region (O-02).
-- [ ] Create the VPS (NH-30): Ubuntu 24.04 LTS, non-GPU preset 2 vCPU / 8 GiB, 60 GiB network SSD boot disk, a public IPv4, your own SSH key; security group inbound TCP 22 from your IP only. Note the public IP price — it isn't on the pricing page.
-- [ ] Give Claude its own login (Claude generates the key pair on the laptop and hands over the public key):
+- [x] Create the VPS (NH-30): Ubuntu 24.04 LTS, non-GPU preset 2 vCPU / 8 GiB, 60 GiB network SSD boot disk, a public IPv4, your own SSH key; security group inbound TCP 22 from your IP only. Note the public IP price — it isn't on the pricing page. — created; the security group is open and the host firewall does the restricting ([`deploy-status.md`](./deploy-status.md#2-deviations-from-the-plan)); the price is still to note
+- [x] Give Claude its own login (Claude generates the key pair on the laptop and hands over the public key):
 
   ```bash
   sudo adduser --disabled-password --gecos "" claude
@@ -73,7 +76,7 @@ Everything here is quick; it unblocks the whole critical path. Commands are bash
   ```
 
   Revoke at any time with `sudo deluser --remove-home claude`.
-- [ ] Put the agent `dev` Token Factory key on the VPS for NH-28 — never on the laptop or in the repo:
+- [x] Put the agent `dev` Token Factory key on the VPS for NH-28 — never on the laptop or in the repo:
 
   ```bash
   sudo install -d -m 700 -o claude -g claude /home/claude/.config/notch
@@ -218,6 +221,7 @@ As of 2026-09-27:
 | D-32 | **GitOps.** After green tests, CI builds the images (relay, Hermes sandbox) for `linux/amd64`, pushes them to GHCR and commits the new tags to the manifests. Argo CD auto-syncs both namespaces from `main`. A sync window blocks `notch-prod` syncs from 2026-12-01 to 2026-12-15. No secrets in Git (Sealed Secrets, or `kubectl create secret` by hand). No self-hosted GitHub runner on the VPS | Confirmed | 2026-09-27 | Only CI changes an image tag, so untested code never reaches the cluster. Both namespaces track `main`, so dev doesn't catch a break before prod — CI and tests are the gate. Self-hosted runners are unsafe on public repositories |
 | D-33 | **Linux only.** The VPS runs Ubuntu 24.04, CI runs on `ubuntu-latest`, images are `linux/amd64`. Scripts are bash/POSIX or Node; no `.ps1` files or Windows-specific tooling. The laptop is an editor, a git client and an SSH client | Confirmed | 2026-09-27 | One target platform; nothing depends on the developer's OS |
 | D-34 | **Hard Token Factory ceilings.** Agent keys (dev and prod, @Maximal1337): $1.5 a day in total — prod $1, dev $0.5 — at most ≈ $117 of $150. Nightly memory (@dorhaimbob-web): $0.5 a run, at most ≈ $39 of $150. `_shared/assistant.ts` counts actual token spend; at the ceiling the assistant says the daily limit is reached. Spend is checked every Monday; if the forecast exceeds 90% of credits, dev goes off first, then the ceilings come down | Confirmed | 2026-09-27 | No out-of-pocket spend; a worst case is bounded by construction, not by hope |
+| D-35 | **SSH on the VPS is open to any address.** The Nebius security group lets inbound traffic in; the host firewall (ufw) denies everything except SSH and rate-limits it, sshd takes keys only, and fail2ban bans repeated failures. This replaces NH-31's "source IPs restricted". D-27 stands: nothing but SSH answers from outside | **Proposed** — until @dorhaimbob-web confirms | 2026-10-11 | Neither of us has a fixed address to allow |
 
 ---
 
@@ -229,7 +233,6 @@ As of 2026-09-27:
 |---|---|---|---|---|
 | O-02 | Supabase project region → Nebius region | @Maximal1337 | 2026-09-29 | The privacy page says Asia-Pacific; pick the Nebius region with the lowest measured latency to the Supabase project |
 | O-10 | Extra AI Cloud credits from the organizers | @Maximal1337 | 2026-10-01 | Ask in the Nebius Discord (draft in §0). The plan doesn't count on it; if granted, keep 4 vCPU / 16 GiB for the whole run |
-| O-11 | Can two OpenShell gateways (dev and prod) share one cluster, given the Agent Sandbox controller is cluster-wide? As objects, yes: the chart's cluster-scoped names carry the release namespace (checked in chart 0.1.2); `deploy/` is laid out that way. What's left is runtime behaviour | @Maximal1337 | 2026-10-04 (NH-21) | One gateway with separate sandbox namespaces, providers and policies per environment |
 | O-12 | Does 2 vCPU / 8 GiB hold 4 running prod sandboxes plus 2 dev? | @Maximal1337 | 2026-10-04 (NH-25) | Shorter idle timeout first, then 4 vCPU / 16 GiB within the credits (D-31) |
 
 **Resolved on 2026-09-27:**
@@ -243,6 +246,7 @@ As of 2026-09-27:
 | O-06 | Owner per milestone | See §9 |
 | O-07 | The repository has been public since 2026-09-16 with personal data in its history | It stays public; the exposure is accepted. `app-store-connect-form.md` stays where it is — the creator's call. NH-06 rollout is urgent so the old instant-sign-in addresses stop working |
 | O-09 | Capacity and scope | 20–30 hours a week each. The team commits to the full plan without cuts and accepts the risk of not finishing everything (§9) |
+| O-11 | Can two OpenShell gateways (dev and prod) share one cluster, given the Agent Sandbox controller is cluster-wide? | Yes, one per environment (NH-21, 2026-10-11). As objects: the chart's cluster-scoped names carry the release namespace. At runtime: both run side by side, and a sandbox of the same name in each is independent of the other |
 
 ---
 
@@ -384,11 +388,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 40 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **139 remaining ≈ 49 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
+**Scope:** **179 points** in total, 49 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-28, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **130 remaining ≈ 46 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 129 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 120 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -526,18 +530,18 @@ Everything runs on the VPS; nothing is installed on a laptop (D-33). Claude runs
 #### NH-30 · Provision the VPS
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-01
 
-- [ ] Ubuntu 24.04 LTS, 2 vCPU / 8 GiB, 60 GiB network SSD, in the region from O-02, on member A's account
-- [ ] `claude` user with its own SSH key and sudo (§0); the owner's own user separate
+- [x] Ubuntu 24.04 LTS, 2 vCPU / 8 GiB, 60 GiB network SSD, in the region from O-02, on member A's account — as the host reports it (2026-10-09)
+- [x] `claude` user with its own SSH key and sudo (§0); the owner's own user separate
 - [ ] Hourly cost checked against §7, public IP price recorded
 
-#### NH-31 · Harden the VPS
+#### NH-31 · Harden the VPS ✅
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Infra, Area/Security, Type/Chore · **Blocked by:** NH-30
 
-- [ ] SSH with keys only, source IPs restricted, password login and root login disabled
-- [ ] No inbound ports other than SSH, in the security group and in the host firewall
-- [ ] fail2ban and unattended security upgrades enabled
+- [x] SSH with keys only, source IPs restricted, password login and root login disabled — keys only. Accepted deviation (D-35, [`deploy-status.md` §2](./deploy-status.md#2-deviations-from-the-plan)): source IPs are not restricted; SSH is rate-limited by ufw and watched by fail2ban instead
+- [x] No inbound ports other than SSH, in the security group and in the host firewall — accepted deviation (D-35, [`deploy-status.md` §2](./deploy-status.md#2-deviations-from-the-plan)): in the host firewall only, the security group lets everything in. From outside only port 22 answers (checked 2026-10-10)
+- [x] fail2ban and unattended security upgrades enabled
 
-#### NH-28 · Raw Token Factory smoke test: Nemotron tool calling
+#### NH-28 · Raw Token Factory smoke test: Nemotron tool calling ✅
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-01, NH-30
 
 Runs **first**, on the VPS, before any runtime wiring, so a model problem can't be mistaken for a harness problem. Two known failure modes to rule out: a reasoning model spending `max_tokens` on thinking and returning empty `content`, and tool calls breaking on reasoning models.
@@ -549,24 +553,35 @@ sudo apt-get install -y nodejs          # Node 18 from Ubuntu; nothing else
 node scripts/token-factory-smoke.mjs    # or --model <id>, repeatable
 ```
 
-- [ ] `GET /v1/models` lists the Nemotron IDs we plan to use (Super, Ultra, Nano/Lightning)
-- [ ] A full two-step tool call (request → `tool_calls` → tool result → final answer) succeeds on the interactive model with `reasoning_effort: "none"`
-- [ ] `tool_choice: "required"` and a `response_format: json_schema` call both succeed — the memory job depends on schema output
-- [ ] Recorded per model: latency, tokens, and whether `reasoning_content` ever arrives instead of `content`
-- [ ] If every Nemotron fails at tool calling: decide between a different Nemotron variant or keeping tool calling in our own loop, and ask in the Nebius Discord
+- [x] `GET /v1/models` lists the Nemotron IDs we plan to use (Super, Ultra, Nano/Lightning) — four of the key's 25 models
+- [x] A full two-step tool call (request → `tool_calls` → tool result → final answer) succeeds on the interactive model with `reasoning_effort: "none"` — Super, and Ultra and Lightning too
+- [x] `tool_choice: "required"` and a `response_format: json_schema` call both succeed — the memory job depends on schema output — on Super, Ultra and Lightning
+- [x] Recorded per model: latency, tokens, and whether `reasoning_content` ever arrives instead of `content` — the table below
+- [x] ~~If every Nemotron fails at tool calling: decide between a different Nemotron variant or keeping tool calling in our own loop, and ask in the Nebius Discord~~ — not needed: three of four pass
+
+**Result (2026-10-09 09:30 UTC).** Checks 1–3 run with `reasoning_effort: "none"`; times and tokens are summed over each check's calls.
+
+| Model | 1. Tool round trip | 2. `tool_choice: required` | 3. JSON schema | 4. Default thinking, 64 tokens |
+|---|---|---|---|---|
+| `nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B` | ❌ no tool call (finish stop, content "") | ❌ no tool call (finish tool_calls) | ❌ not JSON: "" | ⚠️ content empty, thinking used the budget (finish length) |
+| `nvidia/Nemotron-3-Ultra-550b-a55b` | ✅ 0.8 s, 922→74 tok | ✅ 0.5 s, 403→29 tok | ✅ 1.1 s, 48→62 tok | ✅ answered, 28 tok, with reasoning |
+| `nvidia/Nemotron-3_5-Lightning` | ✅ 0.6 s, 1108→70 tok | ✅ 0.3 s, 374→39 tok | ✅ 0.4 s, 48→48 tok | ✅ answered, 64 tok |
+| `nvidia/nemotron-3-super-120b-a12b` | ✅ 1.3 s, 1002→76 tok | ✅ 0.4 s, 435→37 tok | ✅ 0.6 s, 48→51 tok | ⚠️ content empty, thinking used the budget (finish length) |
+
+Nano returns reasoning although `reasoning_effort` is "none", so it's out. Super with its default thinking spends a small budget on reasoning and leaves `content` empty: interactive turns must send `reasoning_effort: "none"` (NH-22 checks that it survives the inference router). `TOKEN_FACTORY_MODEL` is `nvidia/nemotron-3-super-120b-a12b` (D-03).
 
 #### NH-20 · Agree spike go/no-go thresholds ✅
 **Priority:** High · **Estimate:** 1 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** —
 
 - [x] O-04 resolved; thresholds recorded in §5
 
-#### NH-21 · k3s, OpenShell through Helm, and the Hermes sandbox image
+#### NH-21 · k3s, OpenShell through Helm, and the Hermes sandbox image ✅
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Agent, Area/Infra, Type/Spike · **Blocked by:** NH-31
 
-- [ ] k3s installed without traefik, servicelb and metrics-server; versions pinned
-- [ ] Agent Sandbox controller and the OpenShell Helm chart installed per the OpenShell Kubernetes setup guide; versions pinned
-- [ ] Hermes sandbox image built for `linux/amd64` from NemoClaw's Hermes blueprint plus our config; a test sandbox answers through the Hermes API — prepared 2026-09-30 from NemoClaw's own Dockerfile and start script ([the image README](../deploy/images/hermes-sandbox/README.md#for-the-dockerfile-nh-21)). Their start script refuses a config that doesn't match a hash pinned at build time, and it also runs a dashboard. So the first option is their image as the base with our own start command: install the profile, then `hermes gateway run` in the foreground. The relay's default command said `hermes gateway` and now says that. 2026-10-04: option 1 is in — `deploy/images/hermes-sandbox/Dockerfile` is NemoClaw's published `hermes-sandbox:v0.0.130`, pinned by digest, plus our profile, built by CI and set as both gateways' default sandbox image. Their `hermes` wrapper would have refused to start Hermes with our environment (a raw `API_SERVER_KEY`, and `TOKEN_FACTORY_MODEL` read as a secret); fixed and checked with their own guard script, details in the image README. Left: a test sandbox answering through the Hermes API on the cluster.
-- [ ] O-11 answered: two gateways in one cluster, or one gateway with per-environment namespaces
+- [x] k3s installed without traefik, servicelb and metrics-server; versions pinned — `v1.36.4+k3s1`, on the VPS since 2026-10-09
+- [x] Agent Sandbox controller and the OpenShell Helm chart installed per the OpenShell Kubernetes setup guide; versions pinned — `v1.0.4` and chart `0.1.2`, through Argo CD since 2026-10-10
+- [x] Hermes sandbox image built for `linux/amd64` from NemoClaw's Hermes blueprint plus our config; a test sandbox answers through the Hermes API — prepared 2026-09-30 from NemoClaw's own Dockerfile and start script ([the image README](../deploy/images/hermes-sandbox/README.md#for-the-dockerfile-nh-21)). Their start script refuses a config that doesn't match a hash pinned at build time, and it also runs a dashboard. So the first option is their image as the base with our own start command: install the profile, then `hermes gateway run` in the foreground. The relay's default command said `hermes gateway` and now says that. 2026-10-04: option 1 is in — `deploy/images/hermes-sandbox/Dockerfile` is NemoClaw's published `hermes-sandbox:v0.0.130`, pinned by digest, plus our profile, built by CI and set as both gateways' default sandbox image. Their `hermes` wrapper would have refused to start Hermes with our environment (a raw `API_SERVER_KEY`, and `TOKEN_FACTORY_MODEL` read as a secret); fixed and checked with their own guard script, details in the image README. Left: a test sandbox answering through the Hermes API on the cluster. 2026-10-11, on the cluster: a sandbox created the way the manager creates one is ready in 27 s, and 40 s after the create Hermes' API answers through the gateway — `/health`, and `/v1/models` and `/v1/toolsets` with the sandbox's key (401 without it). A model's reply is NH-22. It took three things the cluster showed: sandbox pods run as the image's user through namespace annotations (`5fb5dc5`, with a sandbox policy that can read `/opt/notch`); Hermes starts from our `start-hermes.sh` as `hermes.real`, because their wrapper refuses a Kubernetes volume's ownership of `/sandbox` (`eb75c58`); and since OpenShell 0.1.2's gateway strips `Authorization` on the way to a sandbox, the image patches Hermes to take its key from `X-Hermes-Api-Key` as well, and the relay sends both (`eb75c58`, `00000ff`)
+- [x] O-11 answered: two gateways in one cluster, or one gateway with per-environment namespaces — two gateways: a sandbox of the same name in dev and prod, each independent of the other (2026-10-11)
 - [x] After the first Images run that pushes it, the `notch-hermes-sandbox` package set to public in GHCR, or the cluster can't pull it (`deploy/README.md`, "Adding the Hermes sandbox image") — it came out public from its first build on 2026-10-04 (`sha-4655445706c5`, pulled without credentials), like the relay's
 - [x] Upstream licenses (OpenShell, NemoClaw, Hermes) recorded for the README — README, "What we built, and what we build on": OpenShell and NemoClaw Apache-2.0, Hermes MIT, with the pinned versions (2026-10-06)
 
@@ -601,8 +616,8 @@ node scripts/token-factory-smoke.mjs    # or --model <id>, repeatable
 - [ ] The relay reaches its gateway and the sandboxes' Hermes ports. Written 2026-09-30 from the OpenShell docs and chart (`services/relay/src/gateway.ts`, 4 tests including a real TLS exchange):
   - **No token.** On Kubernetes a user call to the gateway carries an OIDC token or none. We run no identity provider, so user calls come without one (`allowUnauthenticatedUsers`), but TLS still requires the chart's client certificate. The relay mounts it from `openshell-client-tls`; only its own namespace can reach the gateway.
   - **CLI registration.** At startup the relay registers its CLI with `openshell gateway add <endpoint> --local`.
-  - **Service URLs.** A sandbox's service URL (`<sandbox>.openshell.localhost`, covered by the gateway certificate) goes to the gateway's address, with that hostname as SNI and Host.
-  - **To confirm here:** the service URL's form, and that `gateway add --local` takes the mounted bundle.
+  - **Service URLs.** A sandbox's service URL (`default--<sandbox>.openshell.localhost`, covered by the gateway certificate) goes to the gateway's address, with that hostname as SNI and Host.
+  - **Confirmed in NH-21 (2026-10-11):** the service URL's form, which the relay now builds itself — CLI 0.1.2 can't print it as JSON; `gateway add --local` takes the copied bundle, in a configuration directory the relay created (both relays log `Status: Connected`); and a request sent that way reaches the sandbox's port. The gateway strips `Authorization` on that path, so the sandbox's key also travels in `X-Hermes-Api-Key`. Left for NH-24: the relay's own turn through it.
 
 #### NH-25 · Measure latency, tokens, RAM, cold start and the leak
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-22, NH-24, NH-29
@@ -670,7 +685,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 - [x] Secrets never in Git: Sealed Secrets, or `kubectl create secret` documented step by step — `deploy/bootstrap/secrets.sh` from a root-only env file on the VPS; no Sealed Secrets controller, which saves RAM
 - [x] Sync window blocks `notch-prod` syncs from 2026-12-01 to 2026-12-15 (D-32) — on `notch-prod` and `openshell-prod`; a manual sync stays possible for incidents
 - [x] Argo CD UI and API not exposed; the CLI works over SSH — core install; `argocd --core`, and `argocd admin dashboard` through an SSH tunnel when a UI is needed
-- [ ] Bootstrapped on the VPS, both environments synced and healthy, the isolation checked (NH-26)
+- [ ] Bootstrapped on the VPS, both environments synced and healthy, the isolation checked (NH-26) — bootstrapped on 2026-10-09, all six applications synced and healthy since 2026-10-10; the isolation check is left
 
 #### NH-37 · CI: images to GHCR and tag updates ✅
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Feature · **Blocked by:** NH-21
@@ -692,7 +707,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 #### NH-33 · OpenShell gateways for dev and prod through Argo CD
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-36
 
-- [ ] Gateway (or per-environment configuration, per O-11) for `notch-dev` and `notch-prod` deployed from Git
+- [x] Gateway (or per-environment configuration, per O-11) for `notch-dev` and `notch-prod` deployed from Git — one gateway per environment, healthy since 2026-10-10
 - [ ] Provider profiles imported (`deploy/platform/openshell/profiles`: `token-factory`, `tavily`, `notch-tools`, written with NH-55) and the shared providers `token-factory` and `tavily` created in each environment
 - [ ] Separate Token Factory keys per environment (D-34), injected by the gateway
 - [ ] Everything comes back after a VPS reboot
@@ -709,7 +724,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-33
 
 - [x] Scheduled backups of the sandbox volumes (the only state on the VPS; everything else is in Git or Supabase) — and, found while writing NH-36, each gateway's own volume (its SQLite database of sandboxes and encrypted provider credentials) plus its `openshell-credential-kek` Secret, without which the restored credentials can't be decrypted (`secrets.sh --restore-kek`), and the relay's `SANDBOX_KEY_SECRET` (NH-55), without which it can't call the existing sandboxes — `deploy/ops/backup.sh`, nightly at 01:30 UTC: every volume in `notch-dev` and `notch-prod`, SQLite copied through its online backup so nothing is stopped, one archive encrypted with age to the team's key, 7 kept on the VPS and optionally a copy in Nebius Object Storage. The KEKs, the env files and the backup key are kept off the VPS by the team, never in an archive (table in `deploy/README.md`)
-- [ ] Installed on the VPS (`deploy/ops/install.sh`) and the first archive opened with the team's key
+- [x] Installed on the VPS (`deploy/ops/install.sh`) and the first archive opened with the team's key — installed on 2026-10-10. The backup key was created again, because the first one had been saved wrongly, and a fresh archive was decrypted with the new one; archives under the first key can't be read and leave with the rotation
 - [ ] Restore tested once on a fresh host with the NH-36 bootstrap script — the rehearsal for NH-96. Written: `bootstrap.sh --no-root-app`, then `deploy/ops/restore.sh`, which puts each volume back under its old claim, pre-bound, before Argo CD starts anything. The drill settles whether a restored gateway takes its sandboxes back; if not, the fallback in `deploy/README.md` starts it empty, and users lose only Hermes' own memories — chat and facts are in Supabase (D-30)
 
 #### NH-35 · Monitoring and alerts
@@ -719,7 +734,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 - [x] Running sandbox count, queue length and relay errors visible — sandboxes, memory per pod and relay errors in the health report — since 2026-10-06 including replies that couldn't be stored (`delivery_failed`, `delivery_refused`), which it had missed, and a relay test fails when the relay logs an error event the health check doesn't count; prod paused at its daily spend ceiling is a problem too (every judge waits until 00:00 UTC without a single error), dev's a note; the queue in Supabase ([`assistant-ops.md`](./assistant-ops.md), "Queue right now")
 - [ ] Per-sandbox RSS watchdog restarts a sandbox above the threshold from NH-25 (Hermes gateway memory growth) — the mechanism is `SANDBOX_MEMORY` (OpenShell makes it the pod's memory limit; the relay starts a killed sandbox again on the next message); the value waits for NH-25
 - [ ] Nebius billing alerts verified — set up per the [budget runbook](./budget-runbook.md), checked after the VPS's first day
-- [ ] On the VPS: the healthchecks.io check created, and stopping k3s produces an alert email
+- [x] On the VPS: the healthchecks.io check created, and stopping k3s produces an alert email — 2026-10-10
 
 ### M4 — Coach profile and tools · target 2026-10-12
 
@@ -1027,7 +1042,7 @@ The weekly checklist and the fixed dates are in [`submission.md`](./submission.m
 
 | Risk | Impact | Mitigation | Related |
 |---|---|---|---|
-| Scope exceeds team capacity (139 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
+| Scope exceeds team capacity (130 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
 | OpenShell and Hermes are alpha; the Kubernetes path is less traveled than NemoClaw's host installer | Spike slips, runtime unstable | NH-21 first thing after the VPS; versions pinned; go/no-go on Oct 4 | NH-21, NH-27 |
 | 2 vCPU / 8 GiB doesn't hold the platform plus sandboxes | Long queues | Measured in NH-25 (O-12); shorter idle timeout, then a temporary 4/16 within the credits; never shared spaces | NH-25, D-31 |
 | Hermes gateway memory grows over hours (upstream issue) | OOM, sandboxes killed | Idle sandboxes stop after 10 minutes; per-sandbox RSS watchdog | NH-25, NH-35 |
