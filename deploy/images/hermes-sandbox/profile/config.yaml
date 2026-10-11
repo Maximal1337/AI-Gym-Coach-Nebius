@@ -120,6 +120,19 @@ gateway:
     # A `model` in the request body (the relay sends "hermes-agent") is
     # ignored unless direct_model_requests is on; it stays off.
 
+security:
+  # tirith scans terminal commands, and the terminal toolset is off (D-29).
+  # Left on, the gateway tries to download its binary from GitHub Releases at
+  # every start (seen in the spike, NH-21, and refused by the policy).
+  tirith_enabled: false
+
+model_catalog:
+  # Hermes' gateway otherwise refreshes the /model picker's catalogs every 20
+  # minutes, from hermes-agent.nousresearch.com, openrouter.ai and
+  # portal.nousresearch.com (seen in the spike, NH-21: the sandbox's policy
+  # refused each one). Nobody opens the picker here.
+  enabled: false
+
 updates:
   check: false
 

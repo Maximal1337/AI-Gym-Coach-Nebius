@@ -131,7 +131,10 @@ flowchart LR
 OpenShell, Hermes Agent and NemoClaw's Hermes sandbox image are the runtime;
 the product is the software around them. None of the upstream source is vendored
 in this repository: each piece is pulled at a pinned version, under its own
-license.
+license. One upstream file is changed, when our sandbox image is built: Hermes'
+API server gets five lines so that it also takes its key from an
+`X-Hermes-Api-Key` header
+([why](deploy/images/hermes-sandbox/README.md#our-patch-to-hermes)).
 
 | Ours (MIT, this repository) | Where |
 |---|---|
@@ -139,7 +142,7 @@ license.
 | The chat channel: queue with leases, deferral and per-user ordering, signed relay endpoints, idempotent delivery | `supabase/functions/assistant-*`, `_shared/relay-auth.ts` |
 | The relay and the per-user sandbox manager | `services/relay` |
 | The memory pipeline: extraction with per-operation validation, scoring and eviction in code, nightly job, evaluation set | `_shared/memory-*.ts`, `supabase/functions/memory-nightly`, `supabase/eval/memory` |
-| The coach's character and rules, the tool allowlist | `deploy/images/hermes-sandbox/profile` |
+| The coach's character and rules, the tool allowlist, the sandbox's start script, the patch to Hermes' key check | `deploy/images/hermes-sandbox` |
 | Spend ceilings, the kill switch, operations runbooks | `_shared/assistant.ts`, `docs/assistant-ops.md`, `docs/budget-runbook.md` |
 | GitOps: bootstrap, Argo CD app of apps, NetworkPolicies, image pipeline | `deploy/`, `.github/workflows/images.yml` |
 | Encrypted nightly backups, the restore onto a new host, the health check | `deploy/ops` |
@@ -149,8 +152,8 @@ license.
 | Upstream | License | How it's used |
 |---|---|---|
 | [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) | Apache-2.0 | Gateway Helm chart 0.1.2 and the `openshell` CLI (shipped in the relay image with its LICENSE and THIRD-PARTY-NOTICES) |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox |
-| [NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw) | Apache-2.0 | Its published Hermes sandbox image (v0.0.130, pinned by digest) is the base of ours; we add the coach's profile and our own start command |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox, as NemoClaw's image ships it (v0.21.3), with our one patch to its API server's key check |
+| [NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw) | Apache-2.0 | Its published Hermes sandbox image (v0.0.130, pinned by digest) is the base of ours; we add the coach's profile and start Hermes with our own script, not with its start script or its `hermes` wrapper |
 | [Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | Apache-2.0 | The Sandbox CRD and controller OpenShell runs on, v1.0.4 |
 | [k3s](https://github.com/k3s-io/k3s), [Argo CD](https://github.com/argoproj/argo-cd) | Apache-2.0 | The cluster and its GitOps sync |
 
