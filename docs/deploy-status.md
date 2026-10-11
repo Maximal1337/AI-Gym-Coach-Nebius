@@ -13,8 +13,9 @@ manager.
 
 ## 1. Current state — 2026-10-11
 
-Spike item 1 of 9 is done (NH-21 and O-11). Next: item 2, the provider
-profiles.
+Spike items 1 and 2 of 9 are done: NH-21 with O-11, and the provider profiles
+on the dev gateway. Next: item 3, the `token-factory` provider, which starts
+with Max entering the dev key.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -39,8 +40,8 @@ gateways.
 | Relay mode | `RELAY_SANDBOXES=static`, no sandbox mapped | The same |
 | Relay to Supabase | Polling, no errors | The same |
 | Relay to its gateway | Registered (`Status: Connected`) | The same |
-| Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` | **Not set** |
-| Provider profiles | None imported | None |
+| Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml`; kept across gateway restarts | **Not set** |
+| Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | None |
 | Providers | None | None |
 | Sandboxes | None | None |
 
@@ -88,8 +89,9 @@ supervisor pod (NH-21). The real numbers come from NH-25.
 
 **Doesn't work yet**
 
-- The agent has no model, no search and no tools: neither gateway has provider
-  profiles or providers (spike items 2–4).
+- The agent has no model, no search and no tools: the dev gateway has the
+  provider profiles but no providers yet, the prod gateway has neither (spike
+  items 3–4).
 - Nobody can chat: both relays are static with an empty map, and the sandbox
   manager is off (items 5–6).
 - A sandbox in `notch-prod` wouldn't start: no global policy there.
@@ -128,12 +130,11 @@ Owners: **Max** (@Maximal1337), **partner** (@dorhaimbob-web), **Claude**
 targets proposed on 2026-10-11 and not agreed yet; the others are the plan's.
 
 **The spike**, in this order. Each item ends with a short report and an update
-of this file.
+of this file. Items 1 and 2 are done.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
-| 2 | Provider profiles imported into the dev gateway, `openshell profile lint` clean | NH-33 | Claude | — | *10-12* |
-| 3 | `token-factory` provider in dev: a Nemotron reply, an MCP tool end to end, `reasoning_effort: "none"` reaching the model through the router | NH-22 | Claude; Max enters the key and checks the usage page in Token Factory | Item 2 | *10-12* |
+| 3 | `token-factory` provider in dev: a Nemotron reply, an MCP tool end to end, `reasoning_effort: "none"` reaching the model through the router | NH-22 | Claude; Max enters the key and checks the usage page in Token Factory | Max's SSH session for the key | *10-12* |
 | 4 | `tavily` provider: `web_extract` unavailable, an answer that cites its sources | NH-23 | Claude; Max enters the key | Item 3; the Tavily key (NH-03) | *10-12* |
 | 5 | Relay to sandbox in static mode: a full round trip for test account A | NH-24 | Claude; Max edits `dev.env` and sends the message | Item 3 | *10-12* |
 | 6 | The sandbox manager in dev: create, stop and start keeping the memory, delete, idempotency | NH-29 | Claude; Max removes the static map from `dev.env` afterwards | Item 5 | *10-13* |
@@ -146,7 +147,7 @@ of this file.
 | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|
 | The global policy, profiles, providers and the manager in prod | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-15* |
-| One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command | NH-33 | Claude | Items 2–4, which settle what it has to do | *10-15* |
+| One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command. From item 2: `profile import` refuses an id the gateway has, so the script updates those with their current `resource_version` | NH-33 | Claude | Items 3–4, which settle the rest of what it has to do | *10-15* |
 | TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | 10-16 |
 | The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project | *10-17*, before NH-73 |
 | The nightly memory job on Token Factory: first real run, the golden set | NH-61, NH-63, NH-65 | Max; partner provides the key (D-24) | Item 3; the main Supabase project | 10-18 |
@@ -175,6 +176,9 @@ of this file.
 
 - Do the network rules a provider adds still apply under a global policy?
   (item 3)
+- Is `/usr/bin/python3.13`, the binary the profiles name, what the sandbox's
+  proxy sees Hermes as? A wrong one fails closed: no credential, traffic
+  denied. (item 3)
 - Does Hermes look anything up outside Token Factory during a turn, such as a
   model's context length? (item 3)
 - How does a new sandbox image reach sandboxes that already exist? (item 6)

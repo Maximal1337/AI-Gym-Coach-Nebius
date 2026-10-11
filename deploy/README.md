@@ -193,10 +193,27 @@ first. Before that, per environment:
    `openshell policy get --global` shows what's loaded. Sandboxes take it
    whatever their `sandbox create` says; without it they get OpenShell's
    default, which can't read `/opt`, and Hermes never starts.
-2. Import the provider profiles in `platform/openshell/profiles/`, replacing
+2. Import the provider profiles in `platform/openshell/profiles/`, with
    `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and `@HERMES_BINARY@` (the
-   interpreter that runs Hermes in the image), then check them with
-   `openshell profile lint`.
+   interpreter that runs Hermes in the image: `/usr/bin/python3.13` in the
+   pinned one) filled in. Lint first, then import (dev shown):
+
+   ```bash
+   P=$(mktemp -d)
+   for f in deploy/platform/openshell/profiles/*.yaml; do
+     sed -e 's|@SUPABASE_HOST@|<project-ref>.supabase.co|' \
+         -e 's|@HERMES_BINARY@|/usr/bin/python3.13|' "$f" > "$P/$(basename "$f")"
+   done
+   tar -C "$P" -cf - . | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
+     'rm -rf /tmp/profiles && mkdir /tmp/profiles && tar -C /tmp/profiles -xf - &&
+      openshell profile lint --from /tmp/profiles && openshell profile import --from /tmp/profiles'
+   ```
+
+   `openshell profile list` then shows the three, in the relay's workspace
+   (`default`), and `openshell profile export <id>` what the gateway keeps.
+   An import refuses an id the gateway already has. To change a profile, put
+   `resource_version: <n>` — the number its export shows — at the top of the
+   filled-in file and run `openshell profile update --file <file> <id>`.
 3. Create the shared providers `token-factory` (that environment's key, D-34)
    and `tavily` (NH-33).
 4. Add `SANDBOX_KEY_SECRET` to `/etc/notch/<env>.env` and rerun `secrets.sh`.

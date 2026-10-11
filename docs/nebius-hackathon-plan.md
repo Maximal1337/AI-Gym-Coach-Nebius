@@ -708,7 +708,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-36
 
 - [x] Gateway (or per-environment configuration, per O-11) for `notch-dev` and `notch-prod` deployed from Git — one gateway per environment, healthy since 2026-10-10
-- [ ] Provider profiles imported (`deploy/platform/openshell/profiles`: `token-factory`, `tavily`, `notch-tools`, written with NH-55) and the shared providers `token-factory` and `tavily` created in each environment
+- [ ] Provider profiles imported (`deploy/platform/openshell/profiles`: `token-factory`, `tavily`, `notch-tools`, written with NH-55) and the shared providers `token-factory` and `tavily` created in each environment — the three profiles imported into the dev gateway on 2026-10-11, lint clean (`deploy/README.md`, "Sandboxes", step 2); the providers and prod are left
 - [ ] Separate Token Factory keys per environment (D-34), injected by the gateway
 - [ ] Everything comes back after a VPS reboot
 
