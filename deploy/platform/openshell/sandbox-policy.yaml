@@ -1,0 +1,31 @@
+# The policy every Notch sandbox runs under (NH-21, D-29). It is set as each
+# gateway's global policy, so it applies to every sandbox of that environment
+# whatever a `sandbox create` passes (../../README.md, "Sandboxes").
+#
+# Filesystem: OpenShell's built-in default, plus the two directories of the
+# Hermes image that the default doesn't cover — the coach profile and Hermes
+# itself. Nothing else under /opt is readable. Without them Landlock refuses to
+# run the start command (exit status 126, seen in the spike). The sandbox's own
+# volume, /sandbox, is the working directory and stays writable.
+#
+# Network: no rule here on purpose. A sandbox reaches a host only through a
+# provider attached to it (profiles/, D-28); everything else is refused and
+# logged.
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+    - /bin
+    - /usr
+    - /lib
+    - /proc
+    - /dev/urandom
+    - /etc
+    - /var/log
+    - /opt/notch
+    - /opt/hermes
+  read_write:
+    - /tmp
+    - /dev/null
+landlock:
+  compatibility: best_effort

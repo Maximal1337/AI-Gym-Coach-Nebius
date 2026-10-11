@@ -4,3 +4,10 @@ metadata:
   name: notch-prod
   labels:
     notch.app/environment: prod
+  annotations:
+    # What every sandbox pod here runs as. OpenShell's Kubernetes driver reads
+    # the UID and GID from these two (10001 without them), and the Hermes image
+    # owns /sandbox as its `sandbox` user, 998:999 — under any other UID the
+    # first start can't copy /sandbox onto the sandbox's volume (NH-21).
+    openshift.io/sa.scc.uid-range: 998/1
+    openshift.io/sa.scc.supplemental-groups: 999/1

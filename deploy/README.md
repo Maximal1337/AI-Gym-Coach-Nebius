@@ -181,15 +181,35 @@ It stays off until the spike has proved it on this cluster: each overlay sets
 `RELAY_SANDBOXES=static` (the spike's hand-made map). Turn dev to `manager`
 first. Before that, per environment:
 
-1. Import the provider profiles in `platform/openshell/profiles/`, replacing
+1. Set `platform/openshell/sandbox-policy.yaml` as the gateway's global
+   policy, and again after every change to the file (dev shown):
+
+   ```bash
+   kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
+     'cat > /tmp/sandbox-policy.yaml && openshell policy set --global --policy /tmp/sandbox-policy.yaml --yes' \
+     < deploy/platform/openshell/sandbox-policy.yaml
+   ```
+
+   `openshell policy get --global` shows what's loaded. Sandboxes take it
+   whatever their `sandbox create` says; without it they get OpenShell's
+   default, which can't read `/opt`, and Hermes never starts.
+2. Import the provider profiles in `platform/openshell/profiles/`, replacing
    `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and `@HERMES_BINARY@` (the
    interpreter that runs Hermes in the image), then check them with
    `openshell profile lint`.
-2. Create the shared providers `token-factory` (that environment's key, D-34)
+3. Create the shared providers `token-factory` (that environment's key, D-34)
    and `tavily` (NH-33).
-3. Add `SANDBOX_KEY_SECRET` to `/etc/notch/<env>.env` and rerun `secrets.sh`.
+4. Add `SANDBOX_KEY_SECRET` to `/etc/notch/<env>.env` and rerun `secrets.sh`.
    Back it up with the gateway key (NH-34): losing it locks the relay out of
    every existing sandbox.
+
+**What a sandbox pod runs as.** OpenShell's Kubernetes driver runs every
+sandbox pod as one non-root UID and GID, which it reads from the namespace's
+`openshift.io/sa.scc.uid-range` and `openshift.io/sa.scc.supplemental-groups`
+annotations (10001 without them). The Hermes image owns `/sandbox` as its
+`sandbox` user, 998:999, so each overlay's `namespace.yaml` sets `998/1` and
+`999/1`. Under another UID a sandbox's first start fails copying `/sandbox`
+onto its volume.
 
 **How the relay reaches its gateway** (NH-29, `services/relay/src/gateway.ts`):
 on Kubernetes, OpenShell authenticates users with OIDC or not at all, and we
