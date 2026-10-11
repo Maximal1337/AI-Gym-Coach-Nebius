@@ -13,15 +13,16 @@ const d29 = [
 const serve = (body: unknown, status = 200) => (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
 
 test("toolsets: exactly D-29's four passes; the request carries the sandbox's key", async () => {
-  let auth = "";
+  let sent: Record<string, string> = {};
   const fetch = (async (_url: string, init: RequestInit) => {
-    auth = (init.headers as Record<string, string>).authorization;
+    sent = init.headers as Record<string, string>;
     return new Response(JSON.stringify(d29));
   }) as unknown as typeof globalThis.fetch;
   const r = await checkToolsets(endpoint, fetch);
   assert.equal(r.ok, true);
   assert.deepEqual(r.enabled, ["mcp-notch", "memory", "search", "skills"]);
-  assert.equal(auth, "Bearer sandbox-api-key-value");
+  // Both headers, as the relay sends them: only the second gets through the gateway.
+  assert.deepEqual(sent, { authorization: "Bearer sandbox-api-key-value", "x-hermes-api-key": "sandbox-api-key-value" });
   // Wrapped lists and disabled entries are read too.
   const wrapped = await checkToolsets(endpoint, serve({ toolsets: [...d29, { name: "terminal", enabled: false, tools: ["terminal"] }] }));
   assert.equal(wrapped.ok, true);

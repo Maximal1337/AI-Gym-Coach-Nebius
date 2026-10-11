@@ -92,10 +92,13 @@ spec:
           volumeMounts:
             - name: tmp
               mountPath: /tmp
-            # The OpenShell CLI keeps its gateway registration here; the relay
-            # writes it at startup (src/gateway.ts).
+            # The OpenShell CLI keeps its gateway registration in
+            # ~/.config/openshell; the relay writes it at startup (src/gateway.ts).
+            # Mounted one level up: `openshell gateway add` sets the mode of
+            # its own directory and fails on one that is the volume's root,
+            # which belongs to root.
             - name: openshell-config
-              mountPath: /home/node/.config/openshell
+              mountPath: /home/node/.config
             # The gateway's client certificate (NH-29): the CLI's and the relay's
             # own requests to sandbox ports present it.
             - name: openshell-client-tls

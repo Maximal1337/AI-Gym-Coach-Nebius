@@ -18,8 +18,8 @@
  */
 import { pathToFileURL } from "node:url";
 import { jobFor, resolveTarget } from "./bench.js";
-import { gatewayConfigFromEnv, gatewayFetch } from "./gateway.js";
-import { chat as hermesChat, type ChatResult, type SandboxEndpoint } from "./hermes.js";
+import { gatewayConfigFromEnv, gatewayFetch, sandboxServiceUrl } from "./gateway.js";
+import { apiKeyHeaders, chat as hermesChat, type ChatResult, type SandboxEndpoint } from "./hermes.js";
 import { OpenShellCli, execOpenShell } from "./openshell-cli.js";
 import type { JobContext } from "./outbox.js";
 import { buildMessages } from "./prompt.js";
@@ -59,7 +59,7 @@ export async function checkToolsets(endpoint: SandboxEndpoint, doFetch: typeof f
   let body: unknown;
   try {
     const res = await doFetch(`${endpoint.baseUrl}/v1/toolsets`, {
-      headers: { authorization: `Bearer ${endpoint.apiKey}` },
+      headers: apiKeyHeaders(endpoint.apiKey),
       signal: AbortSignal.timeout(30_000),
     });
     body = await res.json();
@@ -185,7 +185,7 @@ async function cli(argv: string[]): Promise<number> {
   const gateway = gatewayConfigFromEnv(process.env);
   if (gateway) process.env.OPENSHELL_GATEWAY = gateway.name;
   const sandboxFetch = gateway ? gatewayFetch(gateway.route) : globalThis.fetch;
-  const openshell = new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell"));
+  const openshell = new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell"), undefined, gateway ? (name) => sandboxServiceUrl(gateway.endpoint, name) : undefined);
   const target = resolveTarget(args, process.env, (name, port) => openshell.serviceUrl(name, port));
   const endpoint = await target.endpoint();
   const secrets = [process.env.SANDBOX_KEY_SECRET, process.env.RELAY_SECRET].filter((v): v is string => Boolean(v));

@@ -635,8 +635,10 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 - **From inside A's sandbox**, under its own policy: [`deploy/spike/sandbox-probe.sh`](../deploy/spike/sandbox-probe.sh) — no service account token, no key-shaped value in the environment (variable names only in the output), PID 1's environment, writes outside the workdir and `/tmp`, `/.openshell`, direct TCP to B's pod, the gateway, the node (6443, 10250, 22), the cluster API, the metadata service and the internet, and CONNECT through the proxy — with the proxy as a positive control, so a broken `/dev/tcp` can't pass for isolation. Its logic is tested against local listeners in the "Ops scripts" workflow and was run on Git Bash too.
 
   ```bash
-  openshell sandbox upload <A> deploy/spike/sandbox-probe.sh
-  openshell sandbox exec -n <A> -- bash sandbox-probe.sh --peer <B pod IP>:8642 --gateway <gateway IP:port> --node <VPS private IP> --allowed api.tavily.com:443
+  # On the VPS. The script goes in on exec's stdin: `sandbox upload` needs ssh, which the relay's image doesn't have.
+  R="kubectl -n notch-dev exec -i deploy/notch-relay -- openshell sandbox exec -n <A> --no-tty --"
+  $R sh -c 'cat > sandbox-probe.sh' < deploy/spike/sandbox-probe.sh
+  $R bash sandbox-probe.sh --peer <B pod IP>:8642 --gateway <gateway IP:port> --node <VPS private IP> --allowed api.tavily.com:443 < /dev/null
   ```
 - **From the agent's side**: [`services/relay/src/agent-probe.ts`](../services/relay/src/agent-probe.ts) in the relay's pod — `/v1/toolsets` is exactly D-29's four with no shell, file, code, browser or fetch tool, then six injection prompts (keys, the tool token, a shell, a file, a page fetch, another user's data), each reply scanned for key shapes, the sandbox's key, the relay's secrets, file and environment contents, and canaries planted in B's facts (6 tests):
 

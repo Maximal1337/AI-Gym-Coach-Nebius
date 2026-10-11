@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { type GatewayConfig, gatewayConfigFromEnv, gatewayFetch, registerGateway } from "./gateway.js";
+import { type GatewayConfig, gatewayConfigFromEnv, gatewayFetch, registerGateway, sandboxServiceUrl } from "./gateway.js";
 import { chat } from "./hermes.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
@@ -30,23 +30,25 @@ import type { RelayEnvironment } from "./signing.js";
  *                             the environment's Token Factory and Tavily providers (NH-33)
  *   SANDBOX_TOOLS_PROFILE (notch-tools), SANDBOX_MAX_RUNNING (prod 4, dev 2),
  *   SANDBOX_IDLE_MINUTES (10), SANDBOX_HERMES_HOME (/sandbox/.hermes),
- *   SANDBOX_COMMAND_JSON (install the profile, then `hermes gateway run` in the foreground,
- *                             without API_SERVER_KEY in its environment),
+ *   SANDBOX_COMMAND_JSON (the image's start-hermes.sh: installs the profile, then runs
+ *                             Hermes in the foreground without API_SERVER_KEY in its environment),
  *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
  * The environment's OpenShell gateway (NH-29, src/gateway.ts):
  *   OPENSHELL_GATEWAY_ENDPOINT  https://openshell.notch-<env>.svc:8080; with it, the
- *                             CLI is registered against the gateway at startup and
- *                             HTTPS calls to sandboxes go through the gateway with
- *                             the client certificate
+ *                             CLI is registered against the gateway at startup (with
+ *                             static sandboxes too: the setup commands in
+ *                             deploy/README.md use this pod's CLI) and HTTPS calls to
+ *                             sandboxes go through the gateway with the client certificate
  *   OPENSHELL_TLS_DIR (/etc/openshell-tls), OPENSHELL_GATEWAY_NAME (notch)
  * The static map:
  *   RELAY_STATIC_SANDBOXES    {"<user id>": {"baseUrl": "...", "apiKey": "..."}}
  */
 
-// install-profile.sh moves API_SERVER_KEY into Hermes' .env; NemoClaw's
-// `hermes` wrapper refuses to start the gateway with it in the environment.
-const DEFAULT_SANDBOX_COMMAND = ["sh", "-c", "/opt/notch/hermes-profile/install-profile.sh && exec env -u API_SERVER_KEY hermes gateway run"];
+// In the sandbox image (deploy/images/hermes-sandbox/profile): installs the
+// profile and API_SERVER_KEY into $HERMES_HOME, then runs Hermes itself —
+// NemoClaw's `hermes` wrapper refuses every start on a Kubernetes volume.
+const DEFAULT_SANDBOX_COMMAND = ["/opt/notch/hermes-profile/start-hermes.sh"];
 const IDLE_SWEEP_MS = 60_000;
 const ORPHAN_SWEEP_MS = 15 * 60_000;
 
@@ -86,16 +88,25 @@ async function main(): Promise<void> {
     if (mode === "manager") throw e;
     log("gateway_unavailable", { error: String(e) });
   }
-  if (gateway) process.env.OPENSHELL_GATEWAY = gateway.name;
+  const exec = execOpenShell(process.env.OPENSHELL_BIN || "openshell");
+  if (gateway) {
+    process.env.OPENSHELL_GATEWAY = gateway.name;
+    // With static sandboxes the relay itself never calls the CLI, so a failed
+    // registration only goes in the log.
+    const status = await registerGateway(gateway, join(homedir(), ".config", "openshell"), exec).catch((e: unknown) => {
+      if (mode === "manager") throw e;
+      return `not registered: ${e instanceof Error ? e.message : String(e)}`;
+    });
+    log("gateway", { name: gateway.name, endpoint: gateway.endpoint, status });
+  }
 
   if (mode === "manager") {
     const keySecret = required("SANDBOX_KEY_SECRET");
     if (keySecret.length < 32) throw new Error("SANDBOX_KEY_SECRET must be at least 32 characters");
     if (!gateway) throw new Error("RELAY_SANDBOXES=manager needs OPENSHELL_GATEWAY_ENDPOINT");
-    const exec = execOpenShell(process.env.OPENSHELL_BIN || "openshell");
-    log("gateway", { name: gateway.name, endpoint: gateway.endpoint, status: await registerGateway(gateway, join(homedir(), ".config", "openshell"), exec) });
+    const { endpoint } = gateway;
     const manager = new SandboxManager(
-      new OpenShellCli(exec),
+      new OpenShellCli(exec, undefined, (name) => sandboxServiceUrl(endpoint, name)),
       { record: (userId, sandboxName, tokenHash) => outbox.recordAgent({ user_id: userId, sandbox_name: sandboxName, tool_token_hash: tokenHash }), list: () => outbox.listAgents() },
       {
         env: env as RelayEnvironment,
@@ -106,7 +117,7 @@ async function main(): Promise<void> {
         apiKeySecret: keySecret,
         sandboxEnv: {
           HERMES_HOME: process.env.SANDBOX_HERMES_HOME || "/sandbox/.hermes",
-          // Not TOKEN_FACTORY_MODEL: NemoClaw's secret boundary reads TOKEN_… as a secret.
+          // Not TOKEN_FACTORY_MODEL: a plain value under a credential-shaped name is what NH-26's probe flags.
           NOTCH_MODEL: model,
           NOTCH_TOOLS_URL: `${functionsUrl}/notch-tools`,
         },

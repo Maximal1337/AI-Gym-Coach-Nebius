@@ -8,7 +8,9 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TLSSocket } from "node:tls";
-import { gatewayConfigFromEnv, gatewayFetch, registerGateway } from "./gateway.js";
+import { fileURLToPath } from "node:url";
+import { parseAllDocuments } from "yaml";
+import { gatewayConfigFromEnv, gatewayFetch, registerGateway, sandboxServiceUrl } from "./gateway.js";
 import type { Exec } from "./openshell-cli.js";
 
 const hasOpenssl = (() => {
@@ -64,11 +66,12 @@ test("registerGateway: bundle copied owner-only, gateway added once, status repo
   const exec: Exec = async (args, options) => {
     calls.push({ args, env: options?.env });
     if (args[0] === "gateway") writeFileSync(join(configDir, "gateways", "notch", "metadata.json"), "{}");
-    return { stdout: "Gateway: notch\nStatus: Connected\n", stderr: "" };
+    // What `openshell status` prints on 0.1.2.
+    return { stdout: "Server Status\n\n  Gateway: notch\n  Server: https://openshell.notch-dev.svc:8080\n  Status: Connected\n  Authentication: Authenticated (mTLS transport)\n  Version: 0.1.2\n", stderr: "" };
   };
   const config = { name: "notch", endpoint: "https://openshell.notch-dev.svc:8080", tlsDir, route: { host: "h", port: 1, ca: "", cert: "", key: "" } };
 
-  assert.equal(await registerGateway(config, configDir, exec), "Gateway: notch");
+  assert.equal(await registerGateway(config, configDir, exec), "Status: Connected");
   const mtls = join(configDir, "gateways", "notch", "mtls");
   assert.equal(readFileSync(join(mtls, "tls.key"), "utf8"), "tls.key");
   if (process.platform !== "win32") assert.equal(statSync(join(mtls, "tls.key")).mode & 0o777, 0o600);
@@ -84,6 +87,27 @@ test("registerGateway: bundle copied owner-only, gateway added once, status repo
     return { stdout: "", stderr: "" };
   };
   assert.equal(await registerGateway(config, configDir, down), "status failed: openshell status failed: connection refused");
+});
+
+test("sandboxServiceUrl: OpenShell 0.1.2's form — workspace, sandbox, the gateway's port", () => {
+  // What `sandbox create --expose` printed on the cluster for a sandbox named spike-nh21.
+  assert.equal(sandboxServiceUrl("https://openshell.notch-dev.svc:8080", "spike-nh21"), "https://default--spike-nh21.openshell.localhost:8080");
+  assert.equal(sandboxServiceUrl("https://gateway.example", "s", "team"), "https://team--s.openshell.localhost:443");
+  // A relay's longest name still fits a DNS label, and the gateway's wildcard certificate covers it.
+  const host = new URL(sandboxServiceUrl("https://openshell.notch-prod.svc:8080", `notch-prod-${"a".repeat(20)}`)).hostname;
+  assert.ok(host.split(".")[0].length <= 63);
+  assert.match(host, /^[a-z0-9-]+\.openshell\.localhost$/);
+});
+
+test("the relay's CLI config directory is one the relay creates itself", () => {
+  // `openshell gateway add` sets the mode of ~/.config/openshell and exits 1
+  // when that directory is the root of a mounted volume (root's). So the
+  // volume is mounted at ~/.config, and registerGateway() makes the rest.
+  const manifests = readFileSync(fileURLToPath(new URL("../../../deploy/notch/base/relay.yaml", import.meta.url)), "utf8");
+  const deployment = parseAllDocuments(manifests).map((d) => d.toJS()).find((d) => d?.kind === "Deployment");
+  const mounts: Array<{ name: string; mountPath: string }> = deployment.spec.template.spec.containers[0].volumeMounts;
+  assert.equal(mounts.find((m) => m.name === "openshell-config")?.mountPath, "/home/node/.config");
+  assert.ok(deployment.spec.template.spec.volumes.some((v: { name: string; emptyDir?: unknown }) => v.name === "openshell-config" && v.emptyDir));
 });
 
 test("gatewayFetch: to the gateway's address, the service hostname as SNI and Host, with the client certificate", { skip: !hasOpenssl && "needs openssl" }, async (t) => {

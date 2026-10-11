@@ -316,6 +316,8 @@ test("hermes: posts OpenAI-style messages with the sandbox key and maps usage", 
   assert.deepEqual(r, { text: "Hi!", usage: { tokensInput: 10, tokensOutput: 2 } });
   const headers = calls[0].headers as Record<string, string>;
   assert.equal(headers.authorization, "Bearer sandbox-key");
+  // The one that arrives through the OpenShell gateway, which strips Authorization.
+  assert.equal(headers["x-hermes-api-key"], "sandbox-key");
   assert.equal(headers["x-hermes-session-key"], "u1");
   assert.equal(JSON.parse(calls[0].body as string).stream, false);
 });

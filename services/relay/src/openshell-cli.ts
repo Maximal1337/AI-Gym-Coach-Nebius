@@ -11,9 +11,10 @@ import type { SandboxDriver, SandboxInfo, SandboxPhase, SandboxSpec } from "./sa
  *
  * Commands and flags follow the OpenShell 0.1.2 docs. The JSON shapes are
  * read loosely (snake or camel case, a bare list or an envelope, phases as
- * "Ready" or "SANDBOX_PHASE_READY") until the spike pins them. Secrets never
- * go on a command line: a provider credential is passed by name and read by
- * the CLI from its own environment (the documented "bare key" form).
+ * "Ready" or "SANDBOX_PHASE_READY"); on the cluster 0.1.2 answers `sandbox
+ * list -o json` with `{sandboxes: [{name, phase: "Ready", …}], next_page_token}`.
+ * Secrets never go on a command line: a provider credential is passed by name
+ * and read by the CLI from its own environment (the documented "bare key" form).
  */
 
 export interface ExecResult {
@@ -110,6 +111,8 @@ export class OpenShellCli implements SandboxDriver {
   constructor(
     private readonly exec: Exec,
     private readonly timeouts = { quickMs: 60_000, lifecycleMs: 600_000 },
+    /** Where a sandbox's exposed service answers (gateway.ts, sandboxServiceUrl); unset without a gateway. */
+    private readonly serviceUrlFor?: (sandbox: string) => string,
   ) {}
 
   private async all(baseArgs: string[], key: string, what: string): Promise<Json[]> {
@@ -158,15 +161,14 @@ export class OpenShellCli implements SandboxDriver {
     await this.exec(["sandbox", "delete", name], { timeoutMs: this.timeouts.quickMs });
   }
 
-  async serviceUrl(name: string, port: number): Promise<string> {
-    const parsed = parseJson((await this.exec(["service", "get", name, "-o", "json"], { timeoutMs: this.timeouts.quickMs })).stdout, "service get");
-    const record = isObject(parsed) && isObject(parsed.service) ? parsed.service : parsed;
-    if (!isObject(record) || typeof record.url !== "string" || !/^https?:\/\//.test(record.url)) {
-      throw new Error(`openshell service get: no URL for ${name}`);
-    }
-    const target = record.target_port ?? record.targetPort;
-    if (target !== undefined && Number(target) !== port) throw new Error(`openshell service get: ${name} exposes ${target}, not ${port}`);
-    return record.url;
+  /**
+   * The one service a sandbox exposes: the port create() passed to --expose.
+   * The URL has a known form, so nothing is asked of the CLI — OpenShell
+   * 0.1.2's `service get` has no JSON output to read it from.
+   */
+  async serviceUrl(name: string, _port: number): Promise<string> {
+    if (!this.serviceUrlFor) throw new Error(`no service URL for ${name}: the relay has no gateway (OPENSHELL_GATEWAY_ENDPOINT)`);
+    return this.serviceUrlFor(name);
   }
 
   async upsertProvider(name: string, type: string, credentials: Record<string, string>): Promise<void> {

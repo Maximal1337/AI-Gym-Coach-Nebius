@@ -32,7 +32,7 @@
  * the sandbox mid-run.
  */
 import { pathToFileURL } from "node:url";
-import { gatewayConfigFromEnv, gatewayFetch } from "./gateway.js";
+import { gatewayConfigFromEnv, gatewayFetch, sandboxServiceUrl } from "./gateway.js";
 import { chat as hermesChat, type ChatResult, type SandboxEndpoint } from "./hermes.js";
 import { OpenShellCli, execOpenShell } from "./openshell-cli.js";
 import type { JobContext } from "./outbox.js";
@@ -316,7 +316,7 @@ async function cli(argv: string[]): Promise<void> {
   const gateway = gatewayConfigFromEnv(process.env);
   if (gateway) process.env.OPENSHELL_GATEWAY = gateway.name;
   const sandboxFetch = gateway ? gatewayFetch(gateway.route) : undefined;
-  const openshell = new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell"));
+  const openshell = new OpenShellCli(execOpenShell(process.env.OPENSHELL_BIN || "openshell"), undefined, gateway ? (name) => sandboxServiceUrl(gateway.endpoint, name) : undefined);
   const target = resolveTarget(args, process.env, (name, port) => openshell.serviceUrl(name, port));
   const deps: BenchDeps = {
     chat: (endpoint, job, sessionKey) =>

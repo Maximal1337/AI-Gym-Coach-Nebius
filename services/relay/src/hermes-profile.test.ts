@@ -199,6 +199,14 @@ test("the Dockerfile makes /opt/notch enterable, patches Hermes' key check, and 
   assert.equal(dockerfile.split("\n").filter((line) => line.startsWith("USER ")).at(-1), "USER sandbox");
 });
 
+test("the relay starts a sandbox with the script the image ships", () => {
+  const main = readFileSync(repo("services/relay/src/main.ts"), "utf8");
+  assert.match(main, /const DEFAULT_SANDBOX_COMMAND = \["\/opt\/notch\/hermes-profile\/start-hermes\.sh"\];/);
+  // Never NemoClaw's wrapper: `hermes gateway` refuses every start on a Kubernetes volume.
+  assert.doesNotMatch(main, /hermes gateway run/);
+  assert.match(readFileSync(join(profileDir, "start-hermes.sh"), "utf8"), /^exec hermes\.real gateway run$/m);
+});
+
 // Hermes v0.21.3's key check (gateway/platforms/api_server.py), cut to what the patch reads.
 const CHECK_AUTH = `import hmac
 import logging

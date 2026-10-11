@@ -3,7 +3,7 @@ import type { Usage } from "./outbox.js";
 
 /**
  * Calls a user's Hermes agent through its OpenAI-compatible API server
- * (`/v1/chat/completions`, bearer key per sandbox). The sandbox is reached on
+ * (`/v1/chat/completions`, one key per sandbox). The sandbox is reached on
  * the cluster network only; nothing about it is exposed outside the VPS.
  */
 
@@ -39,6 +39,16 @@ export interface ChatOptions {
   fetch?: typeof fetch;
 }
 
+/**
+ * The sandbox's key, in both headers its Hermes takes it from. Through the
+ * OpenShell gateway only X-Hermes-Api-Key arrives: OpenShell 0.1.2 strips
+ * Authorization on the way to a sandbox service, and the sandbox image patches
+ * Hermes to read the other one (deploy/images/hermes-sandbox/patch-hermes-api-key.py).
+ */
+export function apiKeyHeaders(apiKey: string): Record<string, string> {
+  return { authorization: `Bearer ${apiKey}`, "x-hermes-api-key": apiKey };
+}
+
 function usageFrom(body: Record<string, unknown>): Usage | undefined {
   const u = body.usage as Record<string, unknown> | undefined;
   const input = u?.prompt_tokens;
@@ -55,7 +65,7 @@ export async function chat(endpoint: SandboxEndpoint, messages: ChatMessage[], o
       method: "POST",
       headers: {
         "content-type": "application/json",
-        authorization: `Bearer ${endpoint.apiKey}`,
+        ...apiKeyHeaders(endpoint.apiKey),
         "x-hermes-session-key": options.sessionKey,
       },
       body: JSON.stringify({ model: "hermes-agent", messages, stream: false }),

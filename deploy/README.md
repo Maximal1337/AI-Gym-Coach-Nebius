@@ -216,17 +216,24 @@ on Kubernetes, OpenShell authenticates users with OIDC or not at all, and we
 have no identity provider. So the gateway accepts user calls without a token
 (`server.auth.allowUnauthenticatedUsers` in `platform/openshell/values.yaml`),
 while TLS still requires the chart's client certificate. The relay mounts it
-from the `openshell-client-tls` Secret. At startup it registers the CLI with
-the gateway at `OPENSHELL_GATEWAY_ENDPOINT`
-(`https://openshell.notch-<env>.svc:8080`). A sandbox's Hermes port comes back
-as a service URL on `<sandbox>.openshell.localhost`, which cluster DNS doesn't
-know. The relay sends those requests to the gateway's own address with the
-service hostname as SNI and Host, and presents the certificate; a real TLS
-test covers that.
+from the `openshell-client-tls` Secret, copies it into the CLI's own
+configuration directory and, at startup, registers the CLI with the gateway at
+`OPENSHELL_GATEWAY_ENDPOINT` (`https://openshell.notch-<env>.svc:8080`) — with
+static sandboxes too, so the setup commands above work from the relay's pod. A
+sandbox's Hermes port is the service URL
+`https://default--<sandbox>.openshell.localhost:8080`, which cluster DNS
+doesn't know. The relay sends those requests to the gateway's own address with
+the service hostname as SNI and Host, and presents the certificate; a real TLS
+test covers that. On that path the gateway removes `Authorization`, so the
+sandbox's key also goes in `X-Hermes-Api-Key`, which the sandbox image patches
+Hermes to read ([why](images/hermes-sandbox/README.md#our-patch-to-hermes)).
 
-Settled in the spike, not guessed here: the service URL's exact form, that
-`openshell gateway add --local` accepts the mounted bundle, and how an image
-update reaches sandboxes that already exist.
+Settled in the spike (NH-21): the service URL's form; that `openshell gateway
+add --local` accepts the copied bundle, in a configuration directory the relay
+made itself (on a mounted one it exits 1, so the volume is mounted one level
+up); that `sandbox create --detach` returns only once the sandbox is ready, 25
+seconds with the image on the node. Still open: how an image update reaches
+sandboxes that already exist.
 
 ## Backups and restore (NH-34)
 

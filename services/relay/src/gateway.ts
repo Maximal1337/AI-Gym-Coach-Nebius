@@ -17,15 +17,17 @@ import type { Exec } from "./openshell-cli.js";
  * Two uses:
  * - the openshell CLI: registerGateway() puts the bundle where the CLI looks
  *   for it and registers the gateway once, at startup;
- * - a sandbox's exposed Hermes port: `openshell service get` returns an HTTPS
- *   URL on a service hostname (`<sandbox>.openshell.localhost`, covered by the
- *   gateway certificate's `*.openshell.localhost`) that cluster DNS doesn't
- *   know. gatewayFetch() connects to the gateway's own address instead, keeps
- *   the service hostname for SNI and Host — the gateway routes on it — and
- *   presents the client certificate.
+ * - a sandbox's exposed Hermes port: its URL is on a service hostname
+ *   (sandboxServiceUrl(), covered by the gateway certificate's
+ *   `*.openshell.localhost`) that cluster DNS doesn't know. gatewayFetch()
+ *   connects to the gateway's own address instead, keeps the service hostname
+ *   for SNI and Host — the gateway routes on it — and presents the client
+ *   certificate.
  *
- * The URL format and the CLI's `gateway add --local` behaviour are the spike's
- * to confirm; this is the shape the docs and the chart describe.
+ * Both were run against OpenShell 0.1.2 on the cluster (NH-21): `gateway add
+ * --local` takes the copied bundle, and a request built this way reaches the
+ * sandbox's port. On that path the gateway drops `Authorization`, so a
+ * sandbox's own key travels in another header (hermes.ts, apiKeyHeaders).
  */
 
 export interface GatewayRoute {
@@ -77,10 +79,26 @@ export function gatewayConfigFromEnv(env: NodeJS.ProcessEnv, read: (path: string
 }
 
 /**
- * Puts the client bundle where the CLI reads it
+ * The URL of the service a sandbox exposes, as OpenShell 0.1.2 forms it:
+ * `https://<workspace>--<sandbox>.openshell.localhost:<gateway port>`. Built
+ * here, not read back from the CLI — `openshell service get` prints a table
+ * and has no JSON output. The relay uses OpenShell's `default` workspace.
+ */
+export function sandboxServiceUrl(gatewayEndpoint: string, sandbox: string, workspace = "default"): string {
+  const port = new URL(gatewayEndpoint).port || "443";
+  return `https://${workspace}--${sandbox}.openshell.localhost:${port}`;
+}
+
+/**
+ * Copies the mounted client bundle to where the CLI reads it
  * (<configDir>/gateways/<name>/mtls/) and registers the gateway the first
  * time. The caller sets OPENSHELL_GATEWAY=<name> so every command uses it.
- * Returns the first line of `openshell status`, for the log.
+ * Returns the gateway's status as `openshell status` reports it, for the log.
+ *
+ * configDir must be a directory this process created: `gateway add` sets its
+ * mode, and exits 1 on one it doesn't own — a volume mounted right at
+ * ~/.config/openshell is root's. The relay's volume is mounted one level up
+ * (deploy/notch/base/relay.yaml).
  */
 export async function registerGateway(config: GatewayConfig, configDir: string, exec: Exec): Promise<string> {
   const dir = join(configDir, "gateways", config.name);
@@ -96,10 +114,11 @@ export async function registerGateway(config: GatewayConfig, configDir: string, 
   );
   if (!registered) await exec(["gateway", "add", config.endpoint, "--local", "--name", config.name]);
   // An unreachable gateway isn't a registration failure: it may still be starting.
-  const status = await exec(["status"], { env: { OPENSHELL_GATEWAY: config.name } }).catch((e: unknown) => ({
+  const status = await exec(["status"], { env: { OPENSHELL_GATEWAY: config.name }, timeoutMs: 15_000 }).catch((e: unknown) => ({
     stdout: `status failed: ${e instanceof Error ? e.message : String(e)}`,
   }));
-  return status.stdout.trim().split("\n")[0] ?? "";
+  const lines = status.stdout.trim().split("\n").map((line) => line.trim());
+  return lines.find((line) => line.startsWith("Status:")) ?? lines[0] ?? "";
 }
 
 function headerRecord(headers: HeadersInit | undefined): Record<string, string> {

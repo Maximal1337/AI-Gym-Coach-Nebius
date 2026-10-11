@@ -2,10 +2,15 @@
 # NH-26 from inside a sandbox: what the workload itself can reach. Runs under
 # the sandbox's own policy, so it sees exactly what the agent's process would:
 #
-#   openshell sandbox upload <A> deploy/spike/sandbox-probe.sh
-#   openshell sandbox exec -n <A> -- bash sandbox-probe.sh \
+#   R="kubectl -n notch-dev exec -i deploy/notch-relay -- openshell sandbox exec -n <A> --no-tty --"
+#   $R sh -c 'cat > sandbox-probe.sh' < deploy/spike/sandbox-probe.sh
+#   $R bash sandbox-probe.sh \
 #     --peer <B's pod IP>:8642 --gateway <gateway service IP>:<port> --node <VPS private IP> \
-#     [--allowed api.tavily.com:443]
+#     [--allowed api.tavily.com:443] < /dev/null
+#
+# From the VPS, through the CLI in the relay's pod. The script goes in on
+# exec's stdin: `openshell sandbox upload` needs ssh, which the relay's image
+# doesn't have. exec waits for stdin to close, hence < /dev/null.
 #
 # The addresses come from the host: `kubectl -n notch-dev get pods,svc -o wide`
 # and `hostname -I`. Plain bash and coreutils only — the sandbox image may have
