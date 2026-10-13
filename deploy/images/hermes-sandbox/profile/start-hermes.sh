@@ -27,6 +27,14 @@ set -eu
 [ "$(id -u)" -ne 0 ] || { echo "start-hermes: refusing to run Hermes as root" >&2; exit 1; }
 : "${HERMES_HOME:?HERMES_HOME must be set}"
 
+# Python's CA bundle in this image is a chain of two links: certifi's
+# cacert.pem to /etc/openshell-tls/ca-bundle.pem (NemoClaw's), and that to
+# where OpenShell's Kubernetes supervisor puts the sandbox's bundle (ours, in
+# the Dockerfile). If the chain ends nowhere Hermes starts and then answers
+# every turn with a 500, so it's checked here, where a failed start is seen.
+ca="${NOTCH_CA_BUNDLE:-/etc/openshell-tls/ca-bundle.pem}"
+[ -s "$ca" ] || { echo "start-hermes: no CA bundle at $ca (SSL_CERT_FILE=${SSL_CERT_FILE:-unset}): has OpenShell moved the sandbox's bundle?" >&2; exit 1; }
+
 here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 umask 077
 export HOME=/sandbox

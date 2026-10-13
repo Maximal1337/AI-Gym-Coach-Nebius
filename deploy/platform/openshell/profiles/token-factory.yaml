@@ -1,7 +1,8 @@
 # OpenShell provider profile for Nebius Token Factory (D-28, NH-33). One
 # provider per environment, named `token-factory`, with that environment's key
-# (D-34: dev and prod keys differ). Hermes' nebius-token-factory provider reads
-# NEBIUS_API_KEY and calls this endpoint.
+# (D-34: dev and prod keys differ). Hermes' provider entry for Token Factory
+# (the image's config.yaml, custom_providers) reads NEBIUS_API_KEY and calls
+# this endpoint.
 #
 # Placeholder, replaced when the profile is imported (see ../README.md):
 #   @HERMES_BINARY@   the interpreter that runs Hermes in the sandbox image (NH-21)

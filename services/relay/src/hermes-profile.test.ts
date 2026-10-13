@@ -78,8 +78,25 @@ test("D-30 / NH-45: no user profile inside Hermes, and no hidden model calls out
 });
 
 test("inference and search go only where the egress policy allows", () => {
-  assert.equal(config.model.provider, "nebius-token-factory");
-  assert.equal(config.agent.reasoning_effort, "none", "D-03: no thinking on tool-calling turns");
+  // Token Factory as a provider entry of our own: the host is the one the
+  // token-factory profile and the sandbox policy allow, and the key is the
+  // variable that profile fills with a placeholder.
+  assert.equal(config.model.provider, "notch-token-factory");
+  assert.equal(config.custom_providers.length, 1);
+  const provider = config.custom_providers[0];
+  const profile = parse(readFileSync(repo("deploy/platform/openshell/profiles/token-factory.yaml"), "utf8"));
+  assert.equal(provider.name, config.model.provider);
+  assert.equal(new URL(provider.base_url).host, profile.endpoints[0].host);
+  assert.equal(new URL(provider.base_url).pathname, "/v1");
+  assert.deepEqual(profile.credentials[0].env_vars, [provider.key_env]);
+  assert.equal(provider.api_key, undefined);
+  // D-03: no thinking on tool-calling turns. Hermes' own setting, and the
+  // request field that actually reaches Token Factory: Hermes' built-in
+  // provider drops "none" (seen in the spike, NH-22).
+  assert.equal(config.agent.reasoning_effort, "none");
+  assert.deepEqual(provider.extra_body, { reasoning_effort: "none" });
+  // The seven Notch tools go to the model as they are, not behind Hermes' tool_search bridge.
+  assert.equal(config.tools.tool_search.enabled, "off");
   assert.equal(config.model.default, "${NOTCH_MODEL}");
   assert.equal(config.web.backend, "tavily");
   assert.equal(config.web.keyless_fallback, false);
@@ -161,7 +178,10 @@ test("start-hermes.sh: installs the profile, then runs Hermes itself with what N
   writeFileSync(join(bin, "hermes.real"), `#!/bin/sh\n{ echo "args=$*"; echo "umask=$(umask)"; env; } > "${seen}"\n`);
   chmodSync(join(bin, "hermes.real"), 0o755);
   const start = join(profileDir, "start-hermes.sh");
-  const env = { PATH: `${bin}:${process.env.PATH}`, HERMES_HOME: home, API_SERVER_KEY: HEX64, NOTCH_MODEL: "nvidia/some-model" };
+  // In a sandbox the CA bundle is at the script's default path; here a stand-in.
+  const ca = join(bin, "ca-bundle.pem");
+  writeFileSync(ca, "-----BEGIN CERTIFICATE-----\n");
+  const env = { PATH: `${bin}:${process.env.PATH}`, HERMES_HOME: home, API_SERVER_KEY: HEX64, NOTCH_MODEL: "nvidia/some-model", NOTCH_CA_BUNDLE: ca };
   execFileSync("sh", [start], { env, stdio: "pipe" });
   const started = readFileSync(seen, "utf8");
   assert.match(started, /^args=gateway run$/m);
@@ -178,10 +198,17 @@ test("start-hermes.sh: installs the profile, then runs Hermes itself with what N
   writeFileSync(seen, "");
   assert.throws(() => execFileSync("sh", [start], { env: { PATH: env.PATH, API_SERVER_KEY: HEX64 }, stdio: "pipe" }));
   assert.throws(() => execFileSync("sh", [start], { env: { ...env, API_SERVER_KEY: "short" }, stdio: "pipe" }));
+  // Nor without a CA bundle: Hermes would start and then fail every turn.
+  for (const missing of [join(bin, "no-such-bundle.pem"), "/etc/openshell-tls/ca-bundle.pem"]) {
+    const refused = spawnSync("sh", [start], { env: { ...env, NOTCH_CA_BUNDLE: missing }, encoding: "utf8" });
+    assert.equal(refused.status, 1, missing);
+    assert.match(refused.stderr, /^start-hermes: no CA bundle at /, missing);
+  }
   assert.equal(readFileSync(seen, "utf8"), "");
+  assert.match(readFileSync(start, "utf8"), /^ca="\$\{NOTCH_CA_BUNDLE:-\/etc\/openshell-tls\/ca-bundle\.pem\}"$/m);
 });
 
-test("the Dockerfile makes /opt/notch enterable, patches Hermes' key check, and checks both as the sandbox user", () => {
+test("the Dockerfile makes /opt/notch enterable, patches Hermes twice, links the CA bundle, and checks it all as the sandbox user", () => {
   const dockerfile = readFileSync(repo("deploy/images/hermes-sandbox/Dockerfile"), "utf8").replace(/\r\n/g, "\n");
   const at = (re: RegExp) => {
     const i = dockerfile.search(re);
@@ -193,10 +220,29 @@ test("the Dockerfile makes /opt/notch enterable, patches Hermes' key check, and 
   assert.ok(at(/^RUN install -d -m 0755 \/opt\/notch \/opt\/notch\/hermes-profile /m) < at(/^COPY /m));
   assert.match(dockerfile, /^COPY --chmod=0644 profile\/SOUL\.md profile\/config\.yaml \/opt\/notch\/hermes-profile\/$/m);
   assert.match(dockerfile, /^COPY --chmod=0755 profile\/install-profile\.sh profile\/start-hermes\.sh \/opt\/notch\/hermes-profile\/$/m);
+  assert.match(dockerfile, /^COPY --chmod=0755 patch-hermes-api-key\.py patch-hermes-drain-gate\.py \/opt\/notch\/patches\/$/m);
   assert.match(dockerfile, /^RUN \/opt\/hermes\/\.venv\/bin\/python -I \/opt\/notch\/patches\/patch-hermes-api-key\.py \/opt\/hermes\/gateway\/platforms\/api_server\.py$/m);
+  assert.match(dockerfile, /^RUN \/opt\/hermes\/\.venv\/bin\/python -I \/opt\/notch\/patches\/patch-hermes-drain-gate\.py \/opt\/hermes\/gateway\/drain_control\.py$/m);
+  // certifi's bundle is NemoClaw's link to /etc/openshell-tls/ca-bundle.pem; ours continues it to the
+  // Kubernetes supervisor's bundle, which start-hermes.sh then requires to be there.
+  assert.match(dockerfile, /^ && ln -s \/run\/openshell-supervisor-ca\/material\/ca-bundle\.crt \/etc\/openshell-tls\/ca-bundle\.pem$/m);
   // The image ends as the base's user, and the last checks run as it.
   assert.ok(at(/^USER sandbox$/m) < at(/^RUN test /m));
   assert.equal(dockerfile.split("\n").filter((line) => line.startsWith("USER ")).at(-1), "USER sandbox");
+  const checks = dockerfile.slice(at(/^RUN test /m));
+  for (const check of [
+    "grep -q 'X-Hermes-Api-Key' /opt/hermes/gateway/platforms/api_server.py",
+    "grep -q 'patch-hermes-drain-gate.py' /opt/hermes/gateway/drain_control.py",
+    "= /etc/openshell-tls/ca-bundle.pem",
+    'test "$(readlink /etc/openshell-tls/ca-bundle.pem)" = /run/openshell-supervisor-ca/material/ca-bundle.crt',
+  ]) {
+    assert.ok(checks.includes(check), check);
+  }
+  // The interpreter the profiles and the policy are loaded with (deploy/README.md): a base image
+  // with another one must stop the build, not have every request of Hermes refused on the cluster.
+  const binary = /'s\|@HERMES_BINARY@\|([^|]+)\|'/.exec(readFileSync(repo("deploy/README.md"), "utf8"))?.[1];
+  assert.equal(binary, "/usr/bin/python3.13");
+  assert.ok(checks.includes(`test "$(readlink -f /opt/hermes/.venv/bin/python)" = ${binary}`));
 });
 
 test("the relay starts a sandbox with the script the image ships", () => {
@@ -260,6 +306,97 @@ test("patch-hermes-api-key.py: the key is also taken from X-Hermes-Api-Key, and 
     const result = run();
     assert.equal(result.status, 1, what);
     assert.match(result.stderr, /^patch-hermes-api-key: /, what);
+    assert.equal(readFileSync(file, "utf8"), source, `${what}: the file is left as it was`);
+  }
+});
+
+// gateway/drain_control.py of the Hermes in NemoClaw's image (v0.0.130), cut to what the patch reads.
+const DRAIN_CONTROL = `from pathlib import Path
+from typing import Optional
+
+_NEMOCLAW_CRON_RESTORE_DRAIN_PATH = Path(
+    "/sandbox/.nemoclaw/hermes-cron-restore-drain.json"
+)
+
+
+def operator_drain_requested(*, home: Optional[Path] = None) -> bool:
+    return False
+
+
+def nemoclaw_cron_restore_drain_requested() -> bool:
+    """Return whether NemoClaw's restart-stable rebuild marker is present.
+
+    Any unsafe metadata or lookup error fails toward keeping dispatch drained.
+    """
+    import os
+    import stat
+
+    state_root = _NEMOCLAW_CRON_RESTORE_DRAIN_PATH.parent
+    flags = os.O_RDONLY | os.O_CLOEXEC | os.O_DIRECTORY | os.O_NOFOLLOW
+    try:
+        state_root_fd = os.open(state_root, flags)
+    except OSError:
+        return True
+    try:
+        metadata = os.fstat(state_root_fd)
+        if (
+            not stat.S_ISDIR(metadata.st_mode)
+            or metadata.st_uid != 0
+            or metadata.st_gid != 0
+            or stat.S_IMODE(metadata.st_mode) & 0o022
+        ):
+            return True
+        try:
+            os.stat(_NEMOCLAW_CRON_RESTORE_DRAIN_PATH.name, dir_fd=state_root_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            return False
+        except OSError:
+            return True
+        return True
+    except OSError:
+        return True
+    finally:
+        try:
+            os.close(state_root_fd)
+        except OSError:
+            pass
+
+
+def drain_requested(*, home: Optional[Path] = None) -> bool:
+    """Return whether either operator or NemoClaw drain is active."""
+    return (
+        nemoclaw_cron_restore_drain_requested()
+        or operator_drain_requested(home=home)
+    )
+`;
+
+test("patch-hermes-drain-gate.py: NemoClaw's cron-restore gate is off, Hermes' own drain marker still counts, and a gate it doesn't recognise stops the build", { skip: !python && "needs Python 3.9+" }, () => {
+  const file = join(mkdtempSync(join(tmpdir(), "hermes-patch-")), "drain_control.py");
+  const run = () => spawnSync(python!, ["-I", repo("deploy/images/hermes-sandbox/patch-hermes-drain-gate.py"), file], { encoding: "utf8" });
+  const draining = () => spawnSync(python!, ["-I", "-c", "import runpy, sys; print(runpy.run_path(sys.argv[1])['drain_requested']())", file], { encoding: "utf8" }).stdout.trim();
+  writeFileSync(file, DRAIN_CONTROL);
+  // What the cluster showed: with no root-owned /sandbox/.nemoclaw the gate says "drain" for ever.
+  if (process.platform !== "win32") assert.equal(draining(), "True");
+  const first = run();
+  assert.equal(first.status, 0, first.stderr);
+  const patched = readFileSync(file, "utf8");
+  // Right after the docstring, before the function looks at the filesystem.
+  assert.match(patched, /fails toward keeping dispatch drained\.\n {4}"""\n {4}# Notch patch \(deploy\/images\/hermes-sandbox\/patch-hermes-drain-gate\.py\).*\n(?: {4}#.*\n)+ {4}return False\n {4}import os\n/);
+  assert.equal(patched.replace(/ {4}# Notch patch.*\n(?: {4}#.*\n)+ {4}return False\n/, ""), DRAIN_CONTROL, "nothing else changed");
+  assert.equal(draining(), "False");
+  assert.equal(run().status, 0);
+  assert.equal(readFileSync(file, "utf8"), patched, "a second run changes nothing");
+  const changedUpstream: Array<[string, string]> = [
+    ["the gate is gone", DRAIN_CONTROL.replace("def nemoclaw_cron_restore_drain_requested(", "def nemoclaw_drain_requested(")],
+    ["the gate no longer checks who owns the directory", DRAIN_CONTROL.replace("metadata.st_uid != 0", "metadata.st_uid == 0")],
+    ["drain_requested() no longer asks the gate", DRAIN_CONTROL.replace("        nemoclaw_cron_restore_drain_requested()\n        or ", "        ")],
+    ["the patch marker is somewhere else already", `${DRAIN_CONTROL}\n# Notch patch (deploy/images/hermes-sandbox/patch-hermes-drain-gate.py)\n`],
+  ];
+  for (const [what, source] of changedUpstream) {
+    writeFileSync(file, source);
+    const result = run();
+    assert.equal(result.status, 1, what);
+    assert.match(result.stderr, /^patch-hermes-drain-gate: /, what);
     assert.equal(readFileSync(file, "utf8"), source, `${what}: the file is left as it was`);
   }
 });

@@ -267,7 +267,7 @@ doesn't know. The relay sends those requests to the gateway's own address with
 the service hostname as SNI and Host, and presents the certificate; a real TLS
 test covers that. On that path the gateway removes `Authorization`, so the
 sandbox's key also goes in `X-Hermes-Api-Key`, which the sandbox image patches
-Hermes to read ([why](images/hermes-sandbox/README.md#our-patch-to-hermes)).
+Hermes to read ([why](images/hermes-sandbox/README.md#our-patches-to-hermes)).
 
 Settled in the spike (NH-21): the service URL's form; that `openshell gateway
 add --local` accepts the copied bundle, in a configuration directory the relay

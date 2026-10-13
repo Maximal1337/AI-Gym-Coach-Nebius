@@ -14,13 +14,29 @@ model:
   # per environment: the relay's TOKEN_FACTORY_MODEL, which it also prices
   # spend with (D-34), reaches the sandbox as NOTCH_MODEL — NemoClaw's secret
   # boundary reads any TOKEN_… variable as a secret.
-  provider: nebius-token-factory   # key: NEBIUS_API_KEY (placeholder)
+  #
+  # The provider is our own entry below, not Hermes' built-in
+  # `nebius-token-factory`: see custom_providers.
+  provider: notch-token-factory
   default: "${NOTCH_MODEL}"
+
+custom_providers:
+  # Token Factory, OpenAI-compatible. Hermes' built-in provider for it sends
+  # no reasoning setting for a Nemotron model, and nothing at all for "none",
+  # so `agent.reasoning_effort` below never reached the model and it kept
+  # thinking (seen in the spike, NH-22: 25 output tokens for a one-number
+  # answer, 4 with this entry). `extra_body` goes into every request as it is.
+  - name: notch-token-factory
+    base_url: https://api.tokenfactory.nebius.com/v1
+    key_env: NEBIUS_API_KEY        # an OpenShell placeholder; the proxy puts the key in (D-28)
+    extra_body:
+      reasoning_effort: "none"     # D-03, the way Token Factory takes it
 
 agent:
   # D-03: no thinking on interactive, tool-calling turns — a reasoning model
   # can spend its whole token budget thinking and return an empty answer, and
-  # every reasoning token counts against the D-34 ceilings.
+  # every reasoning token counts against the D-34 ceilings. Hermes' own
+  # setting; what the model is told is custom_providers' extra_body above.
   reasoning_effort: "none"
   # D-29: off everywhere, whatever a platform default would include.
   disabled_toolsets:
@@ -48,6 +64,16 @@ agent:
 # arbitrary URL is a way to send data somewhere.
 platform_toolsets:
   api_server: [mcp-notch, search, memory, skills]
+
+tools:
+  # Hermes otherwise hides MCP tools behind three bridge tools (tool_search,
+  # tool_describe, tool_call), and the model has to look each one up before it
+  # can call it: five model calls and 24,500 input tokens for a turn that reads
+  # two things, and with thinking off Nemotron didn't find the tools at all
+  # (seen in the spike, NH-22). The Notch tools are seven; they go into the
+  # request as they are: two model calls, 9,400 tokens.
+  tool_search:
+    enabled: "off"
 
 mcp_servers:
   notch:

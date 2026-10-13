@@ -2,18 +2,19 @@
 
 Every user gets their own OpenShell sandbox running Hermes Agent (D-25, D-26).
 This directory is that sandbox's image: NemoClaw's published Hermes sandbox
-image plus the **coach profile**, our start script and one patch to Hermes
-(NH-21, NH-40, NH-45). The Images workflow builds it with the relay after every
+image plus the **coach profile**, our start script, two patches to Hermes and
+a link for the CA bundle (NH-21, NH-22, NH-40, NH-45). The Images workflow builds it with the relay after every
 green CI run on `main` (NH-37).
 
 ```
-Dockerfile                FROM NemoClaw's Hermes sandbox image, pinned by digest; adds what's below
-patch-hermes-api-key.py   build step: Hermes' API server also takes its key from X-Hermes-Api-Key
+Dockerfile                  FROM NemoClaw's Hermes sandbox image, pinned by digest; adds what's below
+patch-hermes-api-key.py     build step: Hermes' API server also takes its key from X-Hermes-Api-Key
+patch-hermes-drain-gate.py  build step: NemoClaw's cron-restore drain gate is switched off
 profile/
   SOUL.md             who the coach is and the rules it never breaks — slot #1 of Hermes' system prompt
-  config.yaml         model, the D-29 tool allowlist, the Notch MCP server, Tavily search, memory, API server
+  config.yaml         Token Factory and the model, the D-29 tool allowlist, the Notch MCP server, Tavily search, memory, API server
   install-profile.sh  on every start: the two files into $HERMES_HOME, and the API key into its .env
-  start-hermes.sh     the sandbox's command: installs the profile, then runs Hermes
+  start-hermes.sh     the sandbox's command: checks the CA bundle, installs the profile, then runs Hermes
 ```
 
 In the image all of it is under `/opt/notch`, directories 0755 and files 0644
@@ -21,7 +22,8 @@ In the image all of it is under `/opt/notch`, directories 0755 and files 0644
 
 Tests in `services/relay/src/hermes-profile.test.ts` pin what the rest of the
 system relies on: the allowlist, the MCP tool list against `notch-tools`, no
-secret in the config, the rules in SOUL.md, how Hermes is started, the patch.
+secret in the config, the rules in SOUL.md, how Hermes is started, both
+patches, the Dockerfile's checks.
 
 ## What is common and what is per user
 
@@ -45,7 +47,8 @@ that system message on top of SOUL.md.
 
 `start-hermes.sh` adds `HOME=/sandbox`, `HERMES_SKIP_CHMOD=1` and
 `HERMES_LAZY_INSTALL_TARGET=$HERMES_HOME/lazy-packages`: what NemoClaw's own
-image and start script give Hermes.
+image and start script give Hermes. Before that it refuses to start without
+the CA bundle (below).
 
 ## The image (NH-21)
 
@@ -78,11 +81,17 @@ Two things of NemoClaw's are not used:
 What the cluster needs for the image to start is in
 [`deploy/README.md`](../../README.md#sandboxes-one-per-user-nh-55-nh-56): the
 namespace's UID annotations (the image's `sandbox` user is 998:999) and the
-gateway's global sandbox policy (`/opt/notch` and `/opt/hermes` readable).
+gateway's global sandbox policy (`/opt/notch` and `/opt/hermes` readable, and
+the three hosts a sandbox may reach).
 
-### Our patch to Hermes
+### Our patches to Hermes
 
-`patch-hermes-api-key.py` changes one upstream file at build,
+Two functions of the Hermes in the base image are changed at build. Each
+script fails the build unless the code it changes still looks the way it
+expects and the patched code then behaves, so a new base image stops the build
+instead of shipping unpatched.
+
+**The API key, also from another header.** `patch-hermes-api-key.py` changes
 `/opt/hermes/gateway/platforms/api_server.py`: in `_check_auth`, five lines so
 the API key is also accepted from an `X-Hermes-Api-Key` header, compared in
 constant time like the original. `Authorization: Bearer` keeps working; a
@@ -97,10 +106,64 @@ gateway every `/v1` call was a 401. The relay sends the key in both headers.
 
 The build fails unless the script finds its anchor exactly once inside
 `_check_auth` and the patched method then passes the script's own cases (the
-key in either header, a wrong key, none, a non-ASCII one). A new base image
-whose Hermes changed there stops the build instead of shipping unpatched.
-OpenShell 0.1.3 has a per-service bearer passthrough; when the chart moves to
-it, delete the script and its Dockerfile step.
+key in either header, a wrong key, none, a non-ASCII one). OpenShell 0.1.3 has
+a per-service bearer passthrough; when the chart moves to it, delete the
+script and its Dockerfile step.
+
+**NemoClaw's cron-restore drain gate, off.** `patch-hermes-drain-gate.py`
+changes `/opt/hermes/gateway/drain_control.py`:
+`nemoclaw_cron_restore_drain_requested()` returns False before it looks at the
+filesystem.
+
+Why: that function is NemoClaw's addition. While it says so, Hermes refuses
+new turns — HTTP 503, "Gateway is draining existing work" — and it says so
+unless `/sandbox/.nemoclaw` is a directory owned by `root:root` that nobody
+else can write. NemoClaw's installer arranges that on a host. On a Kubernetes
+workspace volume everything under `/sandbox` belongs to the sandbox's user:
+the volume is filled by an init container running as that user, and nothing in
+the pod runs as root. So the gate read "drain" from start to end, and every
+turn through the relay was a 503 (seen in the spike, NH-22). The marker it
+guards belongs to NemoClaw's sandbox rebuild, which restores cron jobs and
+holds dispatch until they're checked; Notch doesn't run that rebuild, and the
+cron toolset is off (D-29). Hermes' own drain marker,
+`$HERMES_HOME/.drain_request.json`, is untouched.
+
+The build fails unless the function exists once and still is that ownership
+check, `drain_requested()` still asks it, and the patched pair behaves: no
+drain without Hermes' own marker, a drain with it.
+
+### The CA bundle
+
+OpenShell's proxy terminates TLS inside the sandbox — that is how it puts a
+provider's key into a request — so Hermes must trust the sandbox's own CA.
+NemoClaw's image makes Python's bundle (`certifi`'s `cacert.pem`) a link to
+`/etc/openshell-tls/ca-bundle.pem`, where another OpenShell driver mounts it.
+The Kubernetes driver's supervisor puts it at
+`/run/openshell-supervisor-ca/material/ca-bundle.crt` (the sandbox's
+`SSL_CERT_FILE`), so the link ended nowhere and Hermes answered every turn
+with a 500 ("certifi points to a missing CA bundle", NH-22). The Dockerfile
+adds the missing path as a link to the supervisor's file. The build checks
+both links, and `start-hermes.sh` refuses to start Hermes when the chain
+doesn't end at a file (`NOTCH_CA_BUNDLE` overrides the path it checks, for the
+test).
+
+### Token Factory and the tools, as `config.yaml` sets them
+
+Two settings are there because of what the spike saw (NH-22):
+
+- **Token Factory is an entry in `custom_providers`**, not Hermes' built-in
+  `nebius-token-factory` provider. The built-in one sends a reasoning setting
+  only for the model families it lists, Nemotron not among them, and nothing
+  at all for "none" — so `agent.reasoning_effort: "none"` never reached the
+  model, which thinks by default: 25 output tokens for a one-number answer.
+  The entry's `extra_body` puts `reasoning_effort: "none"` into every request
+  (4 tokens for the same answer). The key is still the `NEBIUS_API_KEY`
+  placeholder.
+- **`tools.tool_search.enabled: "off"`**. Hermes otherwise hides MCP tools
+  behind three bridge tools the model has to search through first. A turn that
+  read two things took five model calls and 24,500 input tokens that way, and
+  with thinking off Nemotron didn't find the tools at all. With the seven
+  Notch tools in the request as they are: two model calls, 9,400 tokens.
 
 ### Background requests Hermes makes on its own
 
@@ -114,14 +177,21 @@ Seen on the cluster, each one refused by the sandbox's policy, and now off in
   Releases — `security.tirith_enabled: false`; the terminal toolset is off.
 
 Neither is a model call or carries user data, and the policy refuses them
-either way: a sandbox reaches only the hosts its providers allow.
+either way: a sandbox reaches only the three hosts its policy names.
 
 ### Moving to a new base image
 
-- Read what changed in NemoClaw's `agents/hermes` and in Hermes' `_check_auth`.
-- `@HERMES_BINARY@` in the provider profiles is `/usr/bin/python3.13`: what
-  OpenShell names as the process making Hermes' requests (its deny log says
-  so). A new Python minor version changes it.
+- Read what changed in NemoClaw's `agents/hermes`, in Hermes' `_check_auth`
+  and in `gateway/drain_control.py`. The build stops at the first of them that
+  no longer fits its patch.
+- `@HERMES_BINARY@` in the provider profiles and the sandbox policy is
+  `/usr/bin/python3.13`: what OpenShell names as the process making Hermes'
+  requests (its log says so). A new Python minor version changes it; the build
+  checks the interpreter and stops, and then the profiles and the policy are
+  loaded again with the new path (`deploy/README.md`, "Sandboxes").
+- The build also stops if `certifi`'s bundle is no longer NemoClaw's link, or
+  if the base image starts shipping `/etc/openshell-tls` itself: read "The CA
+  bundle" above again.
 - Then point the gateways at the image (see ../../README.md, "The Hermes
   sandbox image").
 
