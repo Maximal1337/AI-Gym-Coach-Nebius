@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 import { parseAllDocuments } from "yaml";
 import { gatewayConfigFromEnv, gatewayFetch, registerGateway, sandboxServiceUrl } from "./gateway.js";
 import type { Exec } from "./openshell-cli.js";
+import { sandboxName } from "./sandbox-manager.js";
 
 const hasOpenssl = (() => {
   try {
@@ -93,8 +94,8 @@ test("sandboxServiceUrl: OpenShell 0.1.2's form — workspace, sandbox, the gate
   // What `sandbox create --expose` printed on the cluster for a sandbox named spike-nh21.
   assert.equal(sandboxServiceUrl("https://openshell.notch-dev.svc:8080", "spike-nh21"), "https://default--spike-nh21.openshell.localhost:8080");
   assert.equal(sandboxServiceUrl("https://gateway.example", "s", "team"), "https://team--s.openshell.localhost:443");
-  // A relay's longest name still fits a DNS label, and the gateway's wildcard certificate covers it.
-  const host = new URL(sandboxServiceUrl("https://openshell.notch-prod.svc:8080", `notch-prod-${"a".repeat(20)}`)).hostname;
+  // A name the relay makes fits a DNS label, and the gateway's wildcard certificate covers it.
+  const host = new URL(sandboxServiceUrl("https://openshell.notch-prod.svc:8080", sandboxName("prod", "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b"))).hostname;
   assert.ok(host.split(".")[0].length <= 63);
   assert.match(host, /^[a-z0-9-]+\.openshell\.localhost$/);
 });

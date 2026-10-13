@@ -158,7 +158,8 @@ The relay creates and runs every user's sandbox itself, through the
 `openshell` CLI in its image (`services/relay/src/sandbox-manager.ts`):
 
 - **First message** from a flagged user: a sandbox named
-  `notch-<env>-<hash of the user id>` is recorded in Supabase with the digest
+  `notch-<env>-<hash of the user id>` (19 characters, the longest name
+  OpenShell 0.1.2 takes) is recorded in Supabase with the digest
   of a freshly minted tool token, the token goes into a per-user OpenShell
   provider `<sandbox>-tools`, and the sandbox is created from the gateway's
   default image with the environment's shared providers, `HERMES_HOME` on its

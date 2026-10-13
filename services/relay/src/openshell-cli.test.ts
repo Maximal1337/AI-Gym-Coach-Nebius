@@ -93,7 +93,7 @@ test("service URL: built from the gateway's form, without asking the CLI", async
   // OpenShell 0.1.2's `service get` has no -o json; the relay would have failed on its first sandbox.
   const { exec, calls } = fakeExec(() => new Error("error: unexpected argument '-o' found"));
   const cli = new OpenShellCli(exec, undefined, (name) => `https://default--${name}.openshell.localhost:8080`);
-  assert.equal(await cli.serviceUrl("notch-dev-0123456789abcdef0123", 8642), "https://default--notch-dev-0123456789abcdef0123.openshell.localhost:8080");
+  assert.equal(await cli.serviceUrl("notch-dev-1a2b3c4d5", 8642), "https://default--notch-dev-1a2b3c4d5.openshell.localhost:8080");
   assert.deepEqual(calls, []);
   // No gateway, no service URL: static sandboxes carry their own.
   await assert.rejects(() => new OpenShellCli(exec).serviceUrl("s", 8642), /no gateway/);

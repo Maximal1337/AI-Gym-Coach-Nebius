@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { JobContext, RecordAgentStatus } from "./outbox.js";
 import {
   type AgentStore, DEFER_SECONDS, EVICT_GRACE_MS, type ManagerConfig, MANAGED_BY, sandboxApiKey, SandboxError,
-  type SandboxInfo, SandboxManager, sandboxName, type SandboxPhase, type SandboxSpec, sha256hex, toolsProviderName,
+  SANDBOX_NAME_MAX, type SandboxInfo, SandboxManager, sandboxName, type SandboxPhase, type SandboxSpec, sha256hex, toolsProviderName,
 } from "./sandbox-manager.js";
 
 const MIN = 60_000;
@@ -116,7 +116,20 @@ test("names: deterministic, per environment, valid for assistant_agents, no user
   const a = sandboxName("prod", "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b");
   assert.equal(a, sandboxName("prod", "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b"));
   assert.notEqual(a, sandboxName("dev", "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b"));
-  assert.match(a, /^notch-prod-[0-9a-f]{20}$/);
+  // OpenShell 0.1.2 takes 19 characters and no more: the create of a 30-character name was refused on the cluster.
+  assert.equal(SANDBOX_NAME_MAX, 19);
+  assert.match(a, /^notch-prod-[0-9a-z]{8}$/);
+  assert.match(sandboxName("dev", "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b"), /^notch-dev-[0-9a-z]{9}$/);
+  for (const env of ["dev", "prod"] as const) {
+    const names = new Set<string>();
+    for (let i = 0; i < 2000; i++) {
+      const name = sandboxName(env, `user-${i}`);
+      assert.equal(name.length, SANDBOX_NAME_MAX, name);
+      assert.match(name, /^notch-(dev|prod)-[a-z0-9-]{1,50}$/); // assistant-outbox's check on a recorded name
+      names.add(name);
+    }
+    assert.equal(names.size, 2000, "no two of 2000 users share a name");
+  }
   assert.match(a, /^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/); // the SQL check on sandbox_name
   assert.ok(!a.includes("3f1c2a5e"));
   assert.equal(sandboxApiKey("s".repeat(32), a), sandboxApiKey("s".repeat(32), a));

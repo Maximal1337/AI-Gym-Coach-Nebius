@@ -123,12 +123,22 @@ const TOOLS_SUFFIX = "-tools";
 
 export const sha256hex = (text: string) => createHash("sha256").update(text).digest("hex");
 
+/** OpenShell 0.1.2 refuses a longer sandbox name ("name exceeds maximum length (30 > 19)", seen in the spike). */
+export const SANDBOX_NAME_MAX = 19;
+
 /**
  * Deterministic, so a retry finds the same sandbox (idempotent), and hashed,
- * so user ids never appear in cluster object names.
+ * so user ids never appear in cluster object names: `notch-<env>-`, the prefix
+ * assistant-outbox requires, then as much of the user id's SHA-256 as the name
+ * has room for, in base 36 — 9 characters in dev (46 bits), 8 in prod (41).
+ * Two users whose names collide can't end up in one sandbox:
+ * assistant_agents.sandbox_name is unique, so the second one's record fails
+ * and nothing is created for them.
  */
 export function sandboxName(env: "dev" | "prod", userId: string): string {
-  return `notch-${env}-${sha256hex(userId).slice(0, 20)}`;
+  const prefix = `notch-${env}-`;
+  // The low digits: unlike the leading one, each is spread evenly over 0-9a-z.
+  return prefix + BigInt(`0x${sha256hex(userId)}`).toString(36).slice(prefix.length - SANDBOX_NAME_MAX);
 }
 
 /**
