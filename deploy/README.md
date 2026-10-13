@@ -221,7 +221,8 @@ tar -C "$P" -cf - . | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
 
    `openshell profile list` then shows the three, in the relay's workspace
    (`default`), and `openshell profile export <id>` what the gateway keeps.
-   An import refuses an id the gateway already has. To change a profile, put
+   An import refuses an id the gateway already has, and so does the lint from
+   then on. To change a profile, put
    `resource_version: <n>` — the number its export shows — at the top of the
    filled-in file and run `openshell profile update --file <file> <id>`.
 3. Create the shared providers `token-factory` (that environment's key, D-34)

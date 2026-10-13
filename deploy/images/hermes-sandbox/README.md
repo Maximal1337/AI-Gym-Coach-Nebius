@@ -200,8 +200,11 @@ either way: a sandbox reaches only the three hosts its policy names.
 Written against Hermes Agent's documentation (v2026.9.24) and OpenShell 0.1.2;
 the spike and NH-26 check them live:
 
-- `${VAR}` substitution in `model.default`, the MCP `url` and `headers`.
+- `${VAR}` substitution in `model.default`, the MCP `url` and `headers` —
+  confirmed in NH-22.
 - Only the four toolsets are offered (`GET /v1/toolsets` with the API key).
-- The OpenShell proxy resolves the three placeholders for their hosts and
-  refuses them anywhere else (`credential_endpoint_mismatch`).
+- The OpenShell proxy resolves the placeholders for their hosts — confirmed
+  for Token Factory and `notch-tools` in NH-22, Tavily's is NH-23 — and
+  refuses them anywhere else (`credential_endpoint_mismatch`), which is
+  NH-26's check.
 - A fact deleted in the app is gone from the next reply (NH-73).

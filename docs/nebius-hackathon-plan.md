@@ -44,6 +44,7 @@ How to use this document:
 - 2026-10-04, the review's second half: a reply over the 8,000 characters `assistant-deliver` and `assistant_messages` accept — reachable when a user asks for a detailed program, since nothing caps Hermes' output — was refused, the relay let its lease run out, and each of the five attempts ran a paid turn that was never recorded against D-34. The relay now cuts a reply to fit (never mid-emoji: Postgres refuses a lone surrogate), and a delivery refused as invalid is reported at once as a failed attempt with its spend. The gateway route, `assistant-send`, `assistant-outbox`, `assistant-deliver` and `notch-tools` read clean otherwise.
 - 2026-10-04, NH-21 without the VPS: NemoClaw publishes its built Hermes sandbox image (`ghcr.io/nvidia/nemoclaw/hermes-sandbox`, v0.0.130, 590 MiB compressed), so option 1 needs nothing of theirs built. Reading their wrapper showed our sandboxes would never have started: it refuses `hermes gateway` when the environment holds a raw secret-shaped value, and ours had two. The model id now reaches the sandbox as `NOTCH_MODEL`, and the API key — now 64 hex characters — goes into `$HERMES_HOME/.env` (mode 0640) before Hermes starts, the one place their boundary accepts it; their `validate-env-secret-boundary.py` refused the old environment and accepts the new one, in its strict installed mode too. Our Dockerfile adds the profile to their image, and both gateways default to it.
 - 2026-10-09 … 11, on the VPS: the cluster is up — bootstrap, NH-28 (Super, Ultra and Lightning pass; Nano doesn't), both environments synced and healthy against a temporary test Supabase project, backups and the health check running — and NH-21 with O-11 is done: a sandbox made the way the manager makes one starts, and its Hermes answers through the gateway with the sandbox's key. Getting there took three changes the plan didn't have (the user a sandbox pod runs as, Hermes started without NemoClaw's wrapper, a second header for the API key); they and the rest of the spike are in [`deploy-status.md`](./deploy-status.md).
+- 2026-10-13, on the VPS: NH-22 is done — in a sandbox Nemotron Super answers through Hermes with thinking off and uses the Notch tools over MCP, with both keys held by the gateway. It took five more changes: the network rules written into the global sandbox policy, a second patch to Hermes, a link for the CA bundle, Token Factory as a provider entry of our own in Hermes' config, and sandbox names within OpenShell's 19 characters.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -60,7 +61,7 @@ Everything here is quick; it unblocks the whole critical path. Commands are bash
 - [ ] Register the team on Devpost (NH-02).
 
 **@Maximal1337**
-- [ ] Claim the Tavily key (NH-03).
+- [x] Claim the Tavily key (NH-03).
 - [ ] Look up the Supabase project's region in the dashboard (the privacy page says Asia-Pacific) and pick the Nebius region (O-02).
 - [x] Create the VPS (NH-30): Ubuntu 24.04 LTS, non-GPU preset 2 vCPU / 8 GiB, 60 GiB network SSD boot disk, a public IPv4, your own SSH key; security group inbound TCP 22 from your IP only. Note the public IP price — it isn't on the pricing page. — created; the security group is open and the host firewall does the restricting ([`deploy-status.md`](./deploy-status.md#2-deviations-from-the-plan)); the price is still to note
 - [x] Give Claude its own login (Claude generates the key pair on the laptop and hands over the public key):
@@ -388,11 +389,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 49 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-28, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **130 remaining ≈ 46 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
+**Scope:** **179 points** in total, 51 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-22, NH-28, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **128 remaining ≈ 45 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 120 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 118 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -434,7 +435,7 @@ Both members redeem the event credits, the promo form and the Builders Program (
 #### NH-03 · Claim Tavily credits and create an API key
 **Priority:** High · **Estimate:** 1 · **Labels:** Area/Agent, Type/Chore · **Blocked by:** —
 
-- [ ] API key created and stored in the team password manager, never in the repo
+- [x] API key created and stored in the team password manager, never in the repo — the key exists (2026-10-11)
 - [ ] Available credits and limits noted in §7
 
 #### NH-04 · Choose and add a root LICENSE ✅
@@ -585,13 +586,15 @@ Nano returns reasoning although `reasoning_effort` is "none", so it's out. Super
 - [x] After the first Images run that pushes it, the `notch-hermes-sandbox` package set to public in GHCR, or the cluster can't pull it (`deploy/README.md`, "Adding the Hermes sandbox image") — it came out public from its first build on 2026-10-04 (`sha-4655445706c5`, pulled without credentials), like the relay's
 - [x] Upstream licenses (OpenShell, NemoClaw, Hermes) recorded for the README — README, "What we built, and what we build on": OpenShell and NemoClaw Apache-2.0, Hermes MIT, with the pinned versions (2026-10-06)
 
-#### NH-22 · Connect Nemotron via Token Factory
+#### NH-22 · Connect Nemotron via Token Factory ✅
 **Priority:** Urgent · **Estimate:** 2 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-21, NH-28
 
-- [ ] OpenShell's OpenAI-compatible provider points at Token Factory; the key lives in the gateway, not in the sandbox (D-28)
-- [ ] The agent answers with Nemotron and calls an MCP tool end to end (the tool's result is used in the reply)
-- [ ] Interactive turns run with thinking off; confirmed that `reasoning_effort` survives the inference router, or the equivalent setting is found and written down
-- [ ] Confirmed from Token Factory usage that the requests reach Token Factory and nothing falls back to another provider
+Done on the dev gateway on 2026-10-13, on the image as CI builds it. What it took beyond the plan is in [`deploy-status.md`](./deploy-status.md#2-deviations-from-the-plan), deviations 7 to 11.
+
+- [x] OpenShell's OpenAI-compatible provider points at Token Factory; the key lives in the gateway, not in the sandbox (D-28) — provider `token-factory` on the dev gateway. Hermes' request leaves with an OpenShell placeholder in `Authorization`, and the sandbox's proxy puts the key in on the way to Token Factory. Whether it would put it in for any other host is NH-26's check
+- [x] The agent answers with Nemotron and calls an MCP tool end to end (the tool's result is used in the reply) — Super answers in 1 to 2 s; a turn that reads the profile and the active plans through `notch-tools` takes two model calls and 2.9 s, and the reply states what the tools returned. About 4,600 input tokens for a turn without tools, 9,400 with two tool calls
+- [x] Interactive turns run with thinking off; confirmed that `reasoning_effort` survives the inference router, or the equivalent setting is found and written down — the equivalent: Hermes' `agent.reasoning_effort: "none"` never reaches Token Factory, because its built-in provider sends no reasoning setting for Nemotron. Token Factory is now a `custom_providers` entry in the image's `config.yaml` whose `extra_body` carries `reasoning_effort: "none"`; the dumped request has it, the proxy passes it on, and a one-number answer costs 4 output tokens instead of 25
+- [x] Confirmed from Token Factory usage that the requests reach Token Factory and nothing falls back to another provider — the usage page matched the test turns' count, model and tokens (checked by @Maximal1337 on 2026-10-13), and the sandbox's network log shows Token Factory and `notch-tools` and no other host
 
 #### NH-23 · Tavily as Hermes' web search backend
 **Priority:** High · **Estimate:** 1 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-03, NH-21
@@ -708,7 +711,7 @@ Probes ready (2026-09-30), for a team test account A and a second account B in d
 **Priority:** High · **Estimate:** 3 · **Labels:** Area/Infra, Type/Chore · **Blocked by:** NH-36
 
 - [x] Gateway (or per-environment configuration, per O-11) for `notch-dev` and `notch-prod` deployed from Git — one gateway per environment, healthy since 2026-10-10
-- [ ] Provider profiles imported (`deploy/platform/openshell/profiles`: `token-factory`, `tavily`, `notch-tools`, written with NH-55) and the shared providers `token-factory` and `tavily` created in each environment — the three profiles imported into the dev gateway on 2026-10-11, lint clean (`deploy/README.md`, "Sandboxes", step 2); the providers and prod are left
+- [ ] Provider profiles imported (`deploy/platform/openshell/profiles`: `token-factory`, `tavily`, `notch-tools`, written with NH-55) and the shared providers `token-factory` and `tavily` created in each environment — the three profiles imported into the dev gateway on 2026-10-11, lint clean (`deploy/README.md`, "Sandboxes", step 2), and `token-factory` created there with the dev key; `tavily` and prod are left
 - [ ] Separate Token Factory keys per environment (D-34), injected by the gateway
 - [ ] Everything comes back after a VPS reboot
 
@@ -1042,7 +1045,7 @@ The weekly checklist and the fixed dates are in [`submission.md`](./submission.m
 
 | Risk | Impact | Mitigation | Related |
 |---|---|---|---|
-| Scope exceeds team capacity (130 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
+| Scope exceeds team capacity (128 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
 | OpenShell and Hermes are alpha; the Kubernetes path is less traveled than NemoClaw's host installer | Spike slips, runtime unstable | NH-21 first thing after the VPS; versions pinned; go/no-go on Oct 4 | NH-21, NH-27 |
 | 2 vCPU / 8 GiB doesn't hold the platform plus sandboxes | Long queues | Measured in NH-25 (O-12); shorter idle timeout, then a temporary 4/16 within the credits; never shared spaces | NH-25, D-31 |
 | Hermes gateway memory grows over hours (upstream issue) | OOM, sandboxes killed | Idle sandboxes stop after 10 minutes; per-sandbox RSS watchdog | NH-25, NH-35 |
