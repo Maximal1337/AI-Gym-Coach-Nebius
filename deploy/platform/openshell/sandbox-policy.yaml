@@ -1,6 +1,7 @@
-# The policy every Notch sandbox runs under (NH-21, D-29). It is set as each
-# gateway's global policy, so it applies to every sandbox of that environment
-# whatever a `sandbox create` passes (../../README.md, "Sandboxes").
+# The policy every Notch sandbox runs under (NH-21, NH-22, NH-32, D-28, D-29).
+# It is set as each gateway's global policy, so it applies to every sandbox of
+# that environment whatever a `sandbox create` passes (../../README.md,
+# "Sandboxes").
 #
 # Filesystem: OpenShell's built-in default, plus the two directories of the
 # Hermes image that the default doesn't cover — the coach profile and Hermes
@@ -8,9 +9,20 @@
 # run the start command (exit status 126, seen in the spike). The sandbox's own
 # volume, /sandbox, is the working directory and stays writable.
 #
-# Network: no rule here on purpose. A sandbox reaches a host only through a
-# provider attached to it (profiles/, D-28); everything else is refused and
-# logged.
+# Network: the three hosts a sandbox may reach; everything else is refused and
+# logged. Under a global policy OpenShell doesn't add the rules of the
+# providers attached to a sandbox — with none written here, Token Factory
+# itself was refused (seen in the spike, NH-22). So each rule below repeats its
+# provider profile in profiles/: the same host, port, path, methods and binary,
+# never wider. A test fails when they differ
+# (services/relay/src/sandbox-policy.test.ts). The credentials still come from
+# the providers: a sandbox holds placeholders, and OpenShell's proxy puts the
+# key into the request (D-28).
+#
+# Placeholders, replaced when the policy is loaded (see ../../README.md), the
+# same two as in the profiles:
+#   @SUPABASE_HOST@   <project-ref>.supabase.co
+#   @HERMES_BINARY@   the interpreter that runs Hermes in the sandbox image (NH-21)
 version: 1
 filesystem_policy:
   include_workdir: true
@@ -29,3 +41,44 @@ filesystem_policy:
     - /dev/null
 landlock:
   compatibility: best_effort
+network_policies:
+  # profiles/token-factory.yaml
+  token_factory:
+    name: token_factory
+    endpoints:
+      - host: api.tokenfactory.nebius.com
+        port: 443
+        path: /v1/**
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: /v1/chat/completions }
+          - allow: { method: GET, path: /v1/models }
+    binaries:
+      - path: "@HERMES_BINARY@"
+  # profiles/tavily.yaml: search only (D-04)
+  tavily:
+    name: tavily
+    endpoints:
+      - host: api.tavily.com
+        port: 443
+        protocol: rest
+        enforcement: enforce
+        request_body_credential_rewrite: true
+        rules:
+          - allow: { method: POST, path: /search }
+    binaries:
+      - path: "@HERMES_BINARY@"
+  # profiles/notch-tools.yaml
+  notch_tools:
+    name: notch_tools
+    endpoints:
+      - host: "@SUPABASE_HOST@"
+        port: 443
+        path: /functions/v1/notch-tools
+        protocol: rest
+        enforcement: enforce
+        rules:
+          - allow: { method: POST, path: /functions/v1/notch-tools }
+    binaries:
+      - path: "@HERMES_BINARY@"

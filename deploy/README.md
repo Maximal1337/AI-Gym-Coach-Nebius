@@ -179,34 +179,43 @@ The relay creates and runs every user's sandbox itself, through the
 
 It stays off until the spike has proved it on this cluster: each overlay sets
 `RELAY_SANDBOXES=static` (the spike's hand-made map). Turn dev to `manager`
-first. Before that, per environment:
+first. Before that, per environment (dev shown).
 
-1. Set `platform/openshell/sandbox-policy.yaml` as the gateway's global
-   policy, and again after every change to the file (dev shown):
+The policy and the provider profiles in `platform/openshell/` carry two
+placeholders: `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and
+`@HERMES_BINARY@` (the interpreter that runs Hermes in the image:
+`/usr/bin/python3.13` in the pinned one). Fill them in and copy the files into
+the relay's pod, whose CLI is registered with the gateway:
+
+```bash
+P=$(mktemp -d) && mkdir "$P/profiles"
+fill() { sed -e 's|@SUPABASE_HOST@|<project-ref>.supabase.co|' -e 's|@HERMES_BINARY@|/usr/bin/python3.13|' "$1"; }
+fill deploy/platform/openshell/sandbox-policy.yaml > "$P/sandbox-policy.yaml"
+for f in deploy/platform/openshell/profiles/*.yaml; do fill "$f" > "$P/profiles/$(basename "$f")"; done
+tar -C "$P" -cf - . | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
+  'rm -rf /tmp/openshell && mkdir /tmp/openshell && tar -C /tmp/openshell -xf -'
+```
+
+1. Set the policy as the gateway's global policy, and again after every change
+   to `sandbox-policy.yaml`:
 
    ```bash
-   kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
-     'cat > /tmp/sandbox-policy.yaml && openshell policy set --global --policy /tmp/sandbox-policy.yaml --yes' \
-     < deploy/platform/openshell/sandbox-policy.yaml
+   kubectl -n notch-dev exec deploy/notch-relay -- \
+     openshell policy set --global --policy /tmp/openshell/sandbox-policy.yaml --yes
    ```
 
-   `openshell policy get --global` shows what's loaded. Sandboxes take it
-   whatever their `sandbox create` says; without it they get OpenShell's
-   default, which can't read `/opt`, and Hermes never starts.
-2. Import the provider profiles in `platform/openshell/profiles/`, with
-   `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and `@HERMES_BINARY@` (the
-   interpreter that runs Hermes in the image: `/usr/bin/python3.13` in the
-   pinned one) filled in. Lint first, then import (dev shown):
+   `openshell policy get --global --full` shows what's loaded, and running
+   sandboxes take a new one within a minute. Sandboxes get it whatever their
+   `sandbox create` says. Without it they get OpenShell's default, which can't
+   read `/opt`, and Hermes never starts. It also carries the only network
+   rules a sandbox has: under a global policy OpenShell doesn't add the rules
+   of the providers attached to a sandbox, so the file repeats the three
+   profiles' endpoints, and a relay test fails when they differ.
+2. Import the provider profiles. Lint first, then import:
 
    ```bash
-   P=$(mktemp -d)
-   for f in deploy/platform/openshell/profiles/*.yaml; do
-     sed -e 's|@SUPABASE_HOST@|<project-ref>.supabase.co|' \
-         -e 's|@HERMES_BINARY@|/usr/bin/python3.13|' "$f" > "$P/$(basename "$f")"
-   done
-   tar -C "$P" -cf - . | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
-     'rm -rf /tmp/profiles && mkdir /tmp/profiles && tar -C /tmp/profiles -xf - &&
-      openshell profile lint --from /tmp/profiles && openshell profile import --from /tmp/profiles'
+   kubectl -n notch-dev exec deploy/notch-relay -- sh -c \
+     'openshell profile lint --from /tmp/openshell/profiles && openshell profile import --from /tmp/openshell/profiles'
    ```
 
    `openshell profile list` then shows the three, in the relay's workspace
@@ -215,7 +224,22 @@ first. Before that, per environment:
    `resource_version: <n>` — the number its export shows — at the top of the
    filled-in file and run `openshell profile update --file <file> <id>`.
 3. Create the shared providers `token-factory` (that environment's key, D-34)
-   and `tavily` (NH-33).
+   and `tavily` (NH-33), in your own SSH session. The key is typed at a hidden
+   prompt and goes to the CLI on standard input, so it is in no shell history
+   and no process's arguments:
+
+   ```bash
+   read -rsp 'Token Factory key: ' K; echo
+   printf '%s\n' "$K" | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
+     'IFS= read -r NEBIUS_API_KEY && [ -n "$NEBIUS_API_KEY" ] && export NEBIUS_API_KEY &&
+      openshell provider create --name token-factory --type token-factory --credential NEBIUS_API_KEY'
+   unset K
+   ```
+
+   For Tavily: `TAVILY_API_KEY`, `--name tavily --type tavily`. To replace a
+   key, `openshell provider update <name> --credential <VARIABLE>` the same
+   way. `openshell provider list` shows names and how many credentials each
+   holds, never a value.
 4. Add `SANDBOX_KEY_SECRET` to `/etc/notch/<env>.env` and rerun `secrets.sh`.
    Back it up with the gateway key (NH-34): losing it locks the relay out of
    every existing sandbox.
