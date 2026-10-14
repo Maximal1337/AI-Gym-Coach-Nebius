@@ -14,4 +14,4 @@ resources:
 images:
   - name: notch-relay
     newName: ghcr.io/maximal1337/notch-relay
-    newTag: sha-5a5efa090d4d # image-tag: notch-relay
+    newTag: sha-ae95fdd72683 # image-tag: notch-relay
