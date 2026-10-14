@@ -13,11 +13,12 @@ manager.
 
 ## 1. Current state — 2026-10-14
 
-Spike items 1 to 4 of 9 are done: NH-21 with O-11, the provider profiles on
+Spike items 1 to 5 of 9 are done: NH-21 with O-11, the provider profiles on
 the dev gateway, NH-22 — Nemotron answers through Hermes and uses the Notch
-tools — and NH-23, web search through Tavily, with one question left open: the
-agent links its sources only when asked (below). Next: item 5, the relay to a
-sandbox in static mode.
+tools — NH-23, web search through Tavily, with one question left open: the
+agent links its sources only when asked (below), and NH-24, a test account's
+messages through the dev relay to its sandbox and back. Next: item 6, the
+sandbox manager in dev.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -39,13 +40,13 @@ gateways.
 
 | | `notch-dev` | `notch-prod` |
 |---|---|---|
-| Relay mode | `RELAY_SANDBOXES=static`, no sandbox mapped | The same |
+| Relay mode | `RELAY_SANDBOXES=static`, test account A mapped to its sandbox until item 6 | `RELAY_SANDBOXES=static`, no sandbox mapped |
 | Relay to Supabase | Polling, no errors | The same |
 | Relay to its gateway | Registered (`Status: Connected`) | The same |
 | Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` with its three network rules; kept across gateway restarts | **Not set** |
 | Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | None |
-| Providers | `token-factory` with the dev key, and `tavily` | None |
-| Sandboxes | None: the test ones are deleted after each item | None |
+| Providers | `token-factory` with the dev key, `tavily`, and test account A's tool token | None |
+| Sandboxes | Test account A's, named and provisioned the way the manager would, for the static map; deleted at the start of item 6 | None |
 
 **Supabase.** Both relays work against a temporary test project, created on
 2026-10-10 so the spike doesn't wait for the main one: migrations, function
@@ -109,6 +110,13 @@ come from NH-25.
   about $0.0045, and 1.5 s longer; two searches, 23,000. A request to open a
   page, which the agent can't do, became three searches and 40,000 tokens.
   With the relay's own prompt and a history it is measured in NH-25.
+- The relay's round trip (NH-24, 2026-10-14). Test account A's messages, sent
+  the way the app sends them, went from `assistant-send` through the dev relay
+  to A's sandbox and came back as replies in `assistant_messages` 5 to 10
+  seconds later: the plan question through the Notch tools, the follow-up
+  with the conversation's history. A turn's reported usage covers all its
+  model calls, so a search turn is charged both. Three turns took four model
+  calls, 23,700 input and 370 output tokens: about $0.007.
 - Token Factory itself: Nemotron Super, Ultra and Lightning pass the tool
   round trip, `tool_choice: "required"` and JSON-schema output with thinking
   off; Nano fails all three (NH-28, 2026-10-09).
@@ -116,14 +124,23 @@ come from NH-25.
 
 **Doesn't work yet**
 
-- The agent links its sources only when asked. Its answers come from the
-  search results, but a link to the page appeared in none of 8 answers to
-  questions that didn't ask for sources, and in 1 to 3 of 4 when the user did —
-  sometimes as `【1†L1-L8】` markers instead of links, which the app can't use.
-  Wording in the profile and a reminder from the relay each helped little;
-  the choice is in Next steps.
-- Nobody can chat: both relays are static with an empty map, and the sandbox
-  manager is off (items 5–6).
+- No sources under the coach's answers. The answers come from the search
+  results, but the agent links a page only when asked: none of 8 answers in
+  item 4 that didn't ask, none of 8 searched answers in item 5 (5 of them with
+  the relay's own prompt), and 1 to 3 of 4 when the user asked. The
+  `【1†L1-L8】` markers it sometimes writes instead are now dropped by the relay
+  (`5a5efa0`); a URL inside one still becomes a source. Wording in the profile and a reminder from the relay each
+  helped little, so the relay is to take the sources from Hermes' own search
+  results (Next steps).
+- With a conversation before it, the agent sometimes refuses a plain
+  supplement question. "Is creatine safe to take every day, and what dose do
+  studies use?" after a question about the plan was refused as "personalized
+  supplement recommendations" in 2 of 4 turns, without a search, and the
+  follow-up in the same way; on its own it was searched and answered 6 of 6
+  times. The profile's rule against medical advice is read too widely; its
+  wording is for the profile (NH-45).
+- Only test account A can chat, in dev, through the static map; the sandbox
+  manager is off (item 6).
 - Nothing of this is on prod: its gateway has no global policy, no profiles
   and no providers, so a sandbox there wouldn't even start.
 - Isolation is unverified (NH-26), nothing is measured (NH-25), and there's no
@@ -169,12 +186,11 @@ proposed — set on 2026-10-13 at one spike item a day, and not agreed between
 the two of us yet; the others are the plan's.
 
 **The spike**, in this order. Each item ends with a short report and an update
-of this file. Items 1 to 4 are done.
+of this file. Items 1 to 5 are done.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
-| 5 | Relay to sandbox in static mode: a full round trip for test account A, a search question among the messages to see what reaches the app as sources | NH-24 | Claude; Max edits `dev.env` and sends the message | — | *10-14* |
-| 6 | The sandbox manager in dev: create, stop and start keeping the memory, delete, idempotency. And how a new sandbox image reaches the sandboxes that already exist, written into the runbook as a procedure | NH-29 | Claude; Max removes the static map from `dev.env` afterwards | Item 5 | *10-15* |
+| 6 | The sandbox manager in dev, after A's static sandbox is deleted: create, stop and start keeping the memory, delete, idempotency. And how a new sandbox image reaches the sandboxes that already exist, written into the runbook as a procedure | NH-29 | Claude; Max removes the static map from `dev.env` | — | *10-15* |
 | 7 | Measurements: turns, cold start, a soak overnight, memory, and 4 prod + 2 dev sandboxes at once (O-12) | NH-25 | Claude; Max pauses the health check's alerts for the soak | Item 6. No pushes to `main` during the soak: each one restarts the relay and both gateways | *10-16* |
 | 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity | NH-26 | Claude; Max plants the canary in B's facts | Item 6 | *10-17* |
 | 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-18* |
@@ -185,7 +201,7 @@ of this file. Items 1 to 4 are done.
 |---|---|---|---|---|
 | The global policy, profiles, providers and the manager in prod | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-19* |
 | One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command. From item 2: `profile import` refuses an id the gateway has, so the script updates those with their current `resource_version`. From item 3: the policy takes the same two placeholders as the profiles. From item 4: a provider's key goes in through standard input at a hidden prompt (runbook, step 3) | NH-33 | Claude | — | *10-19* |
-| Sources the agent links reliably: a way to choose — keep "links when asked" and fix the profile's wording, have the relay send the pages itself from Hermes' search results, or let the model think a little (`reasoning_effort` low, against D-03) — then measured on the same questions | NH-23, NH-45 | Max decides; Claude measures; the partner for the profile's wording | — | Before NH-73 |
+| Sources from Hermes' own search results, so every searched answer shows its pages in the app — the demo and the video need them. After a turn the relay reads that turn's `web_search` results from the sandbox's session history (the `X-Hermes-Session-Id` it gets back, then `/api/sessions/<id>/messages` with the same key, both checked through the gateway in item 5: five results a search, each with a title and a URL) and attaches them as the reply's sources, after any link the reply has. About 3 to 4 hours with tests and a check on item 4's questions. Not taken: letting the model think (`reasoning_effort` low) — against D-03, dearer and slower. Should it cost more than half a day, the profile's wording goes to the partner instead (NH-45) | NH-23 | Claude | The spike | *A day of its own after the spike*, before NH-73 |
 | The NH-06 rollout on the main Supabase project | NH-06 | Partner | — | *10-19* |
 | TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | 10-16 |
 | The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project | *10-20* |
@@ -225,8 +241,14 @@ of this file. Items 1 to 4 are done.
 - Does a skill the agent saves come back into its prompt? Hermes looks for
   skills beside `state.db` too, in `runtime/`, and saves them in
   `$HERMES_HOME/skills` (item 6, with stop and start).
-- A search returns up to 10 results, 7,000 to 8,500 characters a time: would
-  fewer keep the answers and cut a search turn's cost? (item 7)
+- A search returns five results (the tool's default), 7,000 to 8,500
+  characters a time: would fewer keep the answers and cut a search turn's
+  cost? (item 7)
+
+Answered in item 5: the relay's own turn goes through the gateway with the
+sandbox's key in `X-Hermes-Api-Key`; Hermes' session id comes back through the
+gateway, and the session's history, with every search's results, can be read
+with the same key — the way to the sources above.
 
 Answered in item 4: the model is given `web_search` and nothing that fetches a
 page, and the policy refuses everything at Tavily but `POST /search`; the

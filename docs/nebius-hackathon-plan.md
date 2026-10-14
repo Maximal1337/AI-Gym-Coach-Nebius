@@ -46,6 +46,7 @@ How to use this document:
 - 2026-10-09 … 11, on the VPS: the cluster is up — bootstrap, NH-28 (Super, Ultra and Lightning pass; Nano doesn't), both environments synced and healthy against a temporary test Supabase project, backups and the health check running — and NH-21 with O-11 is done: a sandbox made the way the manager makes one starts, and its Hermes answers through the gateway with the sandbox's key. Getting there took three changes the plan didn't have (the user a sandbox pod runs as, Hermes started without NemoClaw's wrapper, a second header for the API key); they and the rest of the spike are in [`deploy-status.md`](./deploy-status.md).
 - 2026-10-13, on the VPS: NH-22 is done — in a sandbox Nemotron Super answers through Hermes with thinking off and uses the Notch tools over MCP, with both keys held by the gateway. It took five more changes: the network rules written into the global sandbox policy, a second patch to Hermes, a link for the CA bundle, Token Factory as a provider entry of our own in Hermes' config, and sandbox names within OpenShell's 19 characters.
 - 2026-10-14, on the VPS: NH-23 — web search through Tavily works, with `web_extract` out of the agent's reach and refused by the policy; the agent links its sources only when asked, which stays open. On the way, two fixes: the coach's `SOUL.md` had never reached Hermes' prompt (Hermes reads it beside its state database), and the disabled `web` toolset had taken `web_search` away from the model.
+- 2026-10-14, on the VPS: NH-24 is done — the dev relay, with a static map, ran test account A's messages from `assistant-send` through A's sandbox to the reply in `assistant_messages` in 5 to 10 seconds, the plan question through the Notch tools and the follow-up with the conversation's history. The relay now drops the citation markers the model sometimes writes. Sources still reach the app only when the agent links them, and it didn't: the relay can take them from Hermes' own search results instead, a day of work after the spike.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -390,11 +391,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 51 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-22, NH-28, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **128 remaining ≈ 45 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
+**Scope:** **179 points** in total, 53 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-22, NH-24, NH-28, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **126 remaining ≈ 44 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 118 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 116 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -602,13 +603,15 @@ Done on the dev gateway on 2026-10-13, on the image as CI builds it. What it too
 
 - [x] `web.backend: tavily` with the key injected by the gateway — provider `tavily` on the dev gateway (2026-10-13); the sandbox holds a placeholder, and Hermes' searches through OpenShell's proxy were answered (2026-10-14)
 - [x] `web_extract` disabled; if Hermes can't disable it on its own, egress policy allows only Tavily's search endpoint — both are written: the Hermes config offers the `search` toolset (web_search alone) and disables `web`, and the `tavily` provider profile allows only `POST /search`; checked live in the spike — checked on 2026-10-14, both ways. The tools in the request to the model are exactly D-29's twelve, `web_search` the only web tool. A direct `POST /extract` (or `/crawl`, `/map`, `GET /search`) from inside the sandbox gets 403 `policy_denied`. The config no longer disables `web`: Hermes takes a disabled toolset's tools away from every session, so it had removed `web_search` as well ([`deploy-status.md`](./deploy-status.md#2-deviations-from-the-plan), deviation 13)
-- [ ] A test question produces an answer that cites its sources — the answers come from the search results (12 of 12 questions that needed a search were searched, none for small talk), but the agent links the pages only when asked: in none of 8 answers that didn't ask for sources, 1 to 3 of 4 that did, sometimes as `【1†L1-L8】` markers. How to make it reliable is open in `deploy-status.md`, Next steps
+- [ ] A test question produces an answer that cites its sources — the answers come from the search results (12 of 12 questions that needed a search were searched, none for small talk), but the agent links the pages only when asked: in none of 8 answers that didn't ask for sources, 1 to 3 of 4 that did, sometimes as `【1†L1-L8】` markers. In NH-24 no link in any of 8 searched answers, 5 of them with the relay's own prompt. The relay drops the markers since `5a5efa0`; links when asked aren't enough for the demo, so the relay is to take the sources from Hermes' search results ([`deploy-status.md`](./deploy-status.md#3-next-steps), after the spike)
 
-#### NH-24 · Prototype the relay
+#### NH-24 · Prototype the relay ✅
 **Priority:** High · **Estimate:** 2 · **Labels:** Area/Agent, Type/Spike · **Blocked by:** NH-21
 
-- [ ] A relay polls a mock outbox, calls a sandbox's Hermes API (`/v1/chat/completions`) with that sandbox's key, and posts the reply to a mock endpoint
-- [ ] Full round trip works for one test user
+Done on the dev gateway on 2026-10-14, with the real outbox and delivery of the temporary test Supabase project in place of the mocks.
+
+- [x] A relay polls a mock outbox, calls a sandbox's Hermes API (`/v1/chat/completions`) with that sandbox's key, and posts the reply to a mock endpoint — the dev relay with `RELAY_SANDBOXES=static` and one entry for test account A: it claims from `assistant-outbox`, calls A's Hermes through the gateway with that sandbox's key, and delivers through `assistant-deliver`
+- [x] Full round trip works for one test user — three messages from A, sent the way the app sends them, each answered in `assistant_messages` 5 to 10 seconds later: the plan question through the Notch tools (`get_active_plans`), the follow-up with the conversation's history (it knew what "it" was). Three turns, four model calls, 23,700 input and 370 output tokens
 
 #### NH-29 · Prototype per-user sandbox provisioning
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Agent, Area/Security, Type/Spike · **Blocked by:** NH-21
@@ -834,7 +837,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [x] Attaches the facts block to every request (NH-64)
 - [x] Recovers from network errors: exponential backoff, idempotent delivery retries, a lost lease drops the result
 - [ ] Deployed per environment through Argo CD (NH-36, NH-37)
-- [ ] Verified against a real Hermes sandbox: reply text, `usage` across the tool loop, `x-hermes-session-key` (NH-24, NH-25)
+- [x] Verified against a real Hermes sandbox: reply text, `usage` across the tool loop, `x-hermes-session-key` (NH-24, NH-25) — in NH-24 (2026-10-14): the reply text reached the app; a turn's `usage` is the sum of all its model calls (a search turn's two calls, 13,700 input tokens, match the session's own count); Hermes takes the relay's session key. Latency and cost at scale are NH-25's
 
 #### NH-55 · Sandbox manager: provisioning and lifecycle
 **Priority:** Urgent · **Estimate:** 8 · **Labels:** Area/Agent, Type/Feature · **Blocked by:** NH-29, NH-40, NH-41, NH-54
@@ -1046,7 +1049,7 @@ The weekly checklist and the fixed dates are in [`submission.md`](./submission.m
 
 | Risk | Impact | Mitigation | Related |
 |---|---|---|---|
-| Scope exceeds team capacity (128 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
+| Scope exceeds team capacity (126 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
 | OpenShell and Hermes are alpha; the Kubernetes path is less traveled than NemoClaw's host installer | Spike slips, runtime unstable | NH-21 first thing after the VPS; versions pinned; go/no-go on Oct 4 | NH-21, NH-27 |
 | 2 vCPU / 8 GiB doesn't hold the platform plus sandboxes | Long queues | Measured in NH-25 (O-12); shorter idle timeout, then a temporary 4/16 within the credits; never shared spaces | NH-25, D-31 |
 | Hermes gateway memory grows over hours (upstream issue) | OOM, sandboxes killed | Idle sandboxes stop after 10 minutes; per-sandbox RSS watchdog | NH-25, NH-35 |
