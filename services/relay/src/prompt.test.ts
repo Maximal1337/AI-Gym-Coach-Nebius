@@ -96,6 +96,16 @@ test("reply text: markdown links become their titles; the sources keep the links
   assert.equal(replyText("Bare https://example.org/a stays"), "Bare https://example.org/a stays");
 });
 
+test("citation markers: Nemotron's 【…】 come out of the text, and a URL inside one is still a source", () => {
+  const raw =
+    "Creatine is safe at **3–5 g** a day【1†L1-L4】. Kidneys stay fine in healthy adults " +
+    '【{"id":3,"cursor":0,"loc":0}】, says a review【https://pmc.ncbi.nlm.nih.gov/articles/PMC5469049】.';
+  assert.equal(replyText(raw), "Creatine is safe at **3–5 g** a day. Kidneys stay fine in healthy adults, says a review.");
+  assert.deepEqual(extractSources(raw), [{ url: "https://pmc.ncbi.nlm.nih.gov/articles/PMC5469049" }]);
+  // Only a marker closed on the same line is one.
+  assert.equal(replyText("left 【 open\nand 】 here"), "left 【 open\nand 】 here");
+});
+
 test("a check-in has no user text: an instruction with the skip word, and a placeholder turn", () => {
   const j = job({ job: { id: 2, kind: "checkin", environment: "prod", user_id: "u1", attempts: 1 }, message: null });
   const m = buildMessages(j, NOW);

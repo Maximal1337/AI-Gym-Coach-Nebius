@@ -115,14 +115,24 @@ export function buildMessages(job: JobContext, now: Date): ChatMessage[] {
 export const REPLY_MAX_CHARS = 8000;
 
 /**
+ * The citation markers Nemotron sometimes writes in place of links:
+ * 【1†L1-L4】, 【{"id":2,"cursor":0,"loc":0}】, now and then 【https://…】.
+ * They point into search results the app never sees, so they come out of the
+ * text; a URL inside one still becomes a source (extractSources). None of the
+ * app's languages uses these brackets otherwise.
+ */
+const CITATION_MARKER = /[ \t]*【[^】\n]{0,600}】/g;
+
+/**
  * The reply as the app shows it. The chat renders plain text and **bold**
  * only, so a markdown link would show as raw brackets: it becomes its title,
  * and the link itself becomes a tappable source under the message
- * (extractSources, run on the original text). A reply too long to store is
- * cut short rather than refused, which would throw the paid turn away.
+ * (extractSources, run on the original text). Citation markers are dropped.
+ * A reply too long to store is cut short rather than refused, which would
+ * throw the paid turn away.
  */
 export function replyText(text: string): string {
-  const clean = storableText(text);
+  const clean = storableText(text).replace(CITATION_MARKER, "");
   const plain = clean.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
   return clip(plain || clean.trim(), REPLY_MAX_CHARS);
 }
@@ -179,6 +189,6 @@ export function extractSources(text: string): Array<{ title?: string; url: strin
   };
   const clean = storableText(text);
   for (const m of clean.matchAll(/\[([^\]]{1,200})\]\((https:\/\/[^\s)]+)\)/g)) add(m[2], m[1]);
-  for (const m of clean.matchAll(/https:\/\/[^\s<>"'\])]+/g)) add(m[0]);
+  for (const m of clean.matchAll(/https:\/\/[^\s<>"'\])【】]+/g)) add(m[0]);
   return out;
 }
