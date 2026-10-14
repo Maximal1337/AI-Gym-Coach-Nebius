@@ -39,6 +39,12 @@ agent:
   # setting; what the model is told is custom_providers' extra_body above.
   reasoning_effort: "none"
   # D-29: off everywhere, whatever a platform default would include.
+  #
+  # Not `web`, although D-04 keeps its web_extract out: Hermes subtracts a
+  # disabled toolset's tools at the very end, from every session, and `web`
+  # holds web_search too — with `web` here the model never got web_search at
+  # all (seen in the spike, NH-23). web_extract stays out because no toolset
+  # below offers it, and the sandbox policy refuses Tavily's /extract anyway.
   disabled_toolsets:
     - terminal
     - file
@@ -53,15 +59,14 @@ agent:
     - connections
     - homeassistant
     - vision
-    - web
     - image_gen
     - video_gen
     - tts
 
 # D-29: exactly these four for the API server the relay talks to — the Notch
 # tools, web search (Tavily), and Hermes' own memory and skills (D-30).
-# `search` is web_search alone: D-04 keeps web_extract out, since fetching an
-# arbitrary URL is a way to send data somewhere.
+# `search` is web_search alone, never `web`: D-04 keeps web_extract out, since
+# fetching an arbitrary URL is a way to send data somewhere.
 platform_toolsets:
   api_server: [mcp-notch, search, memory, skills]
 

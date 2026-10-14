@@ -147,9 +147,20 @@ both links, and `start-hermes.sh` refuses to start Hermes when the chain
 doesn't end at a file (`NOTCH_CA_BUNDLE` overrides the path it checks, for the
 test).
 
+### Where Hermes reads SOUL.md
+
+Hermes builds the agent's identity from the `SOUL.md` beside its state
+database, not from `$HERMES_HOME` as such. In NemoClaw's image
+`$HERMES_HOME/state.db` is a link into `$HERMES_HOME/runtime`, so with
+`SOUL.md` only in `$HERMES_HOME` every reply came from Hermes' default "Hermes
+Agent" identity, without one of the coach's rules in the prompt (NH-23; the
+request dump showed it). `install-profile.sh` puts `SOUL.md` in both places.
+Skills follow the same lookup, and whether a skill the agent saves comes back
+into its prompt is checked with the manager in NH-29.
+
 ### Token Factory and the tools, as `config.yaml` sets them
 
-Two settings are there because of what the spike saw (NH-22):
+Three settings are there because of what the spike saw (NH-22, NH-23):
 
 - **Token Factory is an entry in `custom_providers`**, not Hermes' built-in
   `nebius-token-factory` provider. The built-in one sends a reasoning setting
@@ -164,6 +175,12 @@ Two settings are there because of what the spike saw (NH-22):
   read two things took five model calls and 24,500 input tokens that way, and
   with thinking off Nemotron didn't find the tools at all. With the seven
   Notch tools in the request as they are: two model calls, 9,400 tokens.
+- **`web` is not among `agent.disabled_toolsets`**, although D-04 keeps its
+  `web_extract` out. Hermes subtracts a disabled toolset's tools from every
+  session at the very end, and `web` holds `web_search` too: with `web`
+  disabled the model never got `web_search`. `web_extract` stays out because
+  only `search` (`web_search` alone) is enabled for the API server, and the
+  sandbox policy refuses Tavily's `/extract` on top of that.
 
 ### Background requests Hermes makes on its own
 

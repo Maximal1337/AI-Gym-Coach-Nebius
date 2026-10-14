@@ -20,12 +20,15 @@ const configText = readFileSync(join(profileDir, "config.yaml"), "utf8");
 const config = parse(configText) as any;
 
 test("D-29: the API server gets exactly the Notch tools, web search, memory and skills", () => {
+  // `search` is web_search alone; `web` also carries web_extract, which D-04 keeps out.
   assert.deepEqual([...config.platform_toolsets.api_server].sort(), ["mcp-notch", "memory", "search", "skills"]);
   const off = new Set(config.agent.disabled_toolsets as string[]);
-  // `web` also carries web_extract; D-04 allows search only.
-  for (const t of ["terminal", "file", "code_execution", "browser", "computer_use", "delegation", "cronjob", "web"]) {
+  for (const t of ["terminal", "file", "code_execution", "browser", "computer_use", "delegation", "cronjob"]) {
     assert.ok(off.has(t), `${t} must be disabled`);
   }
+  // Hermes subtracts a disabled toolset's tools from every session at the end:
+  // `web` disabled takes web_search with it (seen in the spike, NH-23).
+  assert.ok(!off.has("web"), "disabling `web` would also remove web_search");
   for (const t of config.platform_toolsets.api_server) assert.ok(!off.has(t), `${t} is both enabled and disabled`);
   assert.equal(config.gateway.api_server.max_concurrent_runs, 1);
   assert.equal(config.gateway.api_server.direct_model_requests, undefined, "the request body must not pick the model");
@@ -152,6 +155,24 @@ test("install-profile.sh: installs both files, replaces stale ones, leaves memor
   assert.equal(readFileSync(join(home, "memories", "MEMORY.md"), "utf8"), "keep\n");
   assert.equal(statSync(join(home, "config.yaml")).mode & 0o777, 0o600);
   assert.throws(() => execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { PATH: process.env.PATH, API_SERVER_KEY: HEX64 }, stdio: "pipe" }));
+});
+
+test("install-profile.sh: SOUL.md also goes beside state.db, where Hermes reads the identity from", { skip: process.platform === "win32" && "needs a POSIX sh" }, () => {
+  // As NemoClaw's image lays out $HERMES_HOME: state.db is a link into runtime/.
+  const home = mkdtempSync(join(tmpdir(), "hermes-home-"));
+  execFileSync("sh", ["-c", `mkdir "${home}/runtime" && ln -s runtime/state.db "${home}/state.db"`]);
+  const out = execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { ...process.env, HERMES_HOME: home, API_SERVER_KEY: HEX64 }, encoding: "utf8" });
+  assert.equal(readFileSync(join(home, "SOUL.md"), "utf8"), soul);
+  assert.equal(readFileSync(join(home, "runtime", "SOUL.md"), "utf8"), soul);
+  assert.equal(statSync(join(home, "runtime", "SOUL.md")).mode & 0o777, 0o600);
+  assert.match(out, /SOUL\.md also into .*runtime, beside state\.db/);
+  // Only SOUL.md: config.yaml and the key stay in $HERMES_HOME alone.
+  assert.throws(() => statSync(join(home, "runtime", "config.yaml")));
+  assert.throws(() => statSync(join(home, "runtime", ".env")));
+  // Without such a link (a plain home) nothing goes anywhere else.
+  const plain = mkdtempSync(join(tmpdir(), "hermes-home-"));
+  const plainOut = execFileSync("sh", [join(profileDir, "install-profile.sh")], { env: { ...process.env, HERMES_HOME: plain, API_SERVER_KEY: HEX64 }, encoding: "utf8" });
+  assert.doesNotMatch(plainOut, /also into/);
 });
 
 test("install-profile.sh: the API key goes into .env, owner-only, and only as 64 lowercase hex characters", { skip: process.platform === "win32" && "needs a POSIX sh" }, () => {
