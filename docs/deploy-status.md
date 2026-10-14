@@ -11,12 +11,13 @@ refs, check URLs, test accounts and keys are never written here: everything
 specific to the environment is in the **Notch VPS** entry in the password
 manager.
 
-## 1. Current state — 2026-10-13
+## 1. Current state — 2026-10-14
 
-Spike items 1 to 3 of 9 are done: NH-21 with O-11, the provider profiles on
-the dev gateway, and NH-22 — in a sandbox Nemotron answers through Hermes and
-uses the Notch tools. Next: item 4, the `tavily` provider, which starts with
-Max entering the key.
+Spike items 1 to 4 of 9 are done: NH-21 with O-11, the provider profiles on
+the dev gateway, NH-22 — Nemotron answers through Hermes and uses the Notch
+tools — and NH-23, web search through Tavily, with one question left open: the
+agent links its sources only when asked (below). Next: item 5, the relay to a
+sandbox in static mode.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -43,7 +44,7 @@ gateways.
 | Relay to its gateway | Registered (`Status: Connected`) | The same |
 | Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` with its three network rules; kept across gateway restarts | **Not set** |
 | Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | None |
-| Providers | `token-factory`, with the dev key | None |
+| Providers | `token-factory` with the dev key, and `tavily` | None |
 | Sandboxes | None: the test ones are deleted after each item | None |
 
 **Supabase.** Both relays work against a temporary test project, created on
@@ -92,10 +93,22 @@ come from NH-25.
   OpenShell's proxy puts the real ones in. Every request carries
   `reasoning_effort: "none"`. The sandbox reached Token Factory and
   `notch-tools` and nothing else, and nothing was refused.
-- What a turn costs: about 4,600 input tokens without tools and 9,400 with two
-  tool calls, a handful of output tokens either way — $0.0014 and $0.003 at
-  Super's list price. With the relay's own prompt and a history it is measured
-  in NH-25.
+- Web search (NH-23, 2026-10-14). With the coach's profile in the prompt the
+  agent searched for every question that needed it (12 of 12: research,
+  nutrition facts, a supplement's safety, an exercise substitute) and never
+  for small talk, and answered from what Tavily returned. The tools the model
+  is given are exactly D-29's twelve, `web_search` the only web tool. A direct
+  request from inside the sandbox to Tavily's `/extract`, `/crawl` or `/map`,
+  or anything but `POST /search`, gets a 403 from OpenShell's policy, and any
+  other host is refused outright.
+- What a turn costs, with the coach's profile in the prompt (it wasn't in
+  item 3's numbers, see deviation 12): about 5,800 input tokens and a handful
+  of output tokens without tools — $0.0018 at Super's list price. A search
+  adds a second model call carrying 7,000 to 8,500 characters of results: a
+  turn with one search is 14,000 to 15,000 input and 150 to 250 output tokens,
+  about $0.0045, and 1.5 s longer; two searches, 23,000. A request to open a
+  page, which the agent can't do, became three searches and 40,000 tokens.
+  With the relay's own prompt and a history it is measured in NH-25.
 - Token Factory itself: Nemotron Super, Ultra and Lightning pass the tool
   round trip, `tool_choice: "required"` and JSON-schema output with thinking
   off; Nano fails all three (NH-28, 2026-10-09).
@@ -103,7 +116,12 @@ come from NH-25.
 
 **Doesn't work yet**
 
-- The agent has no web search: no `tavily` provider yet (item 4).
+- The agent links its sources only when asked. Its answers come from the
+  search results, but a link to the page appeared in none of 8 answers to
+  questions that didn't ask for sources, and in 1 to 3 of 4 when the user did —
+  sometimes as `【1†L1-L8】` markers instead of links, which the app can't use.
+  Wording in the profile and a reminder from the relay each helped little;
+  the choice is in Next steps.
 - Nobody can chat: both relays are static with an empty map, and the sandbox
   manager is off (items 5–6).
 - Nothing of this is on prod: its gateway has no global policy, no profiles
@@ -133,6 +151,8 @@ Decisions taken along the way, each with its reason and where it lives.
 | 9 | Nothing about the CA bundle | The image links `/etc/openshell-tls/ca-bundle.pem` to the CA bundle OpenShell's Kubernetes supervisor provides, and the start script refuses to start Hermes without it | NemoClaw's image points Python's CA bundle at that path, where another OpenShell driver mounts it. With the Kubernetes driver the path didn't exist, and every turn was a 500 | `09e8bba` |
 | 10 | D-03, NH-22: thinking off through Hermes' `reasoning_effort` setting | Token Factory is an entry of our own in Hermes' config, whose `extra_body` puts `reasoning_effort: "none"` into every request; Hermes' tool search is off, so the seven Notch tools go to the model directly | Hermes' built-in Token Factory provider sends no reasoning setting for Nemotron, so the model kept thinking: 25 output tokens for a one-number answer, 4 now. Behind the tool search a two-tool turn took five model calls and 24,500 input tokens, and with thinking off the model didn't find the tools; now two calls and 9,400 | `09e8bba` |
 | 11 | NH-55: sandbox names of 30 characters | `notch-<env>-` plus the base-36 tail of the user id's hash, 19 characters in all | OpenShell 0.1.2 refuses a longer name: the manager's first create would have failed. A collision can't put two users in one sandbox — the name is unique in the database, and the second record fails | `54a6667` |
+| 12 | NH-40: the profile installed into `$HERMES_HOME` | `SOUL.md` also goes beside Hermes' state database, `$HERMES_HOME/runtime/` | Hermes builds the agent's identity from the `SOUL.md` beside `state.db`, which NemoClaw's image links into `runtime/`. Until this change every reply came from Hermes' default "Hermes Agent" identity, without the coach's character or one of its rules — item 3's turns included; the request dump showed it | `b21c26f` |
+| 13 | NH-23: `web` among Hermes' disabled toolsets, to keep `web_extract` out | `web` is no longer disabled; only `search` (`web_search` alone) is enabled for the API server, and the policy refuses Tavily's `/extract` | A disabled toolset's tools are taken away from every session at the end, and `web` holds `web_search` too: the model never got a search tool at all | `b21c26f` |
 
 Smaller ones, in the same commits: the policy opens `/opt/hermes` read-only
 next to `/opt/notch`, because Hermes runs from there; the relay builds a
@@ -145,30 +165,32 @@ off in the profile.
 
 Owners: **Max** (@Maximal1337), **partner** (@dorhaimbob-web), **Claude**
 (runs the VPS work over SSH and writes the changes). Dates in *italics* are
-targets proposed on 2026-10-11 and not agreed yet; the others are the plan's.
+proposed — set on 2026-10-13 at one spike item a day, and not agreed between
+the two of us yet; the others are the plan's.
 
 **The spike**, in this order. Each item ends with a short report and an update
-of this file. Items 1 to 3 are done.
+of this file. Items 1 to 4 are done.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
-| 4 | `tavily` provider: `web_extract` unavailable, an answer that cites its sources | NH-23 | Claude; Max enters the key | Max's SSH session for the key | *10-12* |
-| 5 | Relay to sandbox in static mode: a full round trip for test account A | NH-24 | Claude; Max edits `dev.env` and sends the message | Item 4 | *10-12* |
-| 6 | The sandbox manager in dev: create, stop and start keeping the memory, delete, idempotency | NH-29 | Claude; Max removes the static map from `dev.env` afterwards | Item 5 | *10-13* |
-| 7 | Measurements: turns, cold start, a three-hour soak, memory, and 4 prod + 2 dev sandboxes at once (O-12) | NH-25 | Claude; Max pauses the health check's alerts for the soak | Item 6. No pushes to `main` during the soak: each one restarts the relay and both gateways | *10-13* |
-| 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes | NH-26 | Claude; Max plants the canary in B's facts | Item 6 | *10-14* |
-| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-14* |
+| 5 | Relay to sandbox in static mode: a full round trip for test account A, a search question among the messages to see what reaches the app as sources | NH-24 | Claude; Max edits `dev.env` and sends the message | — | *10-14* |
+| 6 | The sandbox manager in dev: create, stop and start keeping the memory, delete, idempotency. And how a new sandbox image reaches the sandboxes that already exist, written into the runbook as a procedure | NH-29 | Claude; Max removes the static map from `dev.env` afterwards | Item 5 | *10-15* |
+| 7 | Measurements: turns, cold start, a soak overnight, memory, and 4 prod + 2 dev sandboxes at once (O-12) | NH-25 | Claude; Max pauses the health check's alerts for the soak | Item 6. No pushes to `main` during the soak: each one restarts the relay and both gateways | *10-16* |
+| 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity | NH-26 | Claude; Max plants the canary in B's facts | Item 6 | *10-17* |
+| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-18* |
 
 **After the spike**
 
 | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|
-| The global policy, profiles, providers and the manager in prod | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-15* |
-| One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command. From item 2: `profile import` refuses an id the gateway has, so the script updates those with their current `resource_version`. From item 3: the policy takes the same two placeholders as the profiles | NH-33 | Claude | Item 4, which settles the rest of what it has to do | *10-15* |
+| The global policy, profiles, providers and the manager in prod | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-19* |
+| One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command. From item 2: `profile import` refuses an id the gateway has, so the script updates those with their current `resource_version`. From item 3: the policy takes the same two placeholders as the profiles. From item 4: a provider's key goes in through standard input at a hidden prompt (runbook, step 3) | NH-33 | Claude | — | *10-19* |
+| Sources the agent links reliably: a way to choose — keep "links when asked" and fix the profile's wording, have the relay send the pages itself from Hermes' search results, or let the model think a little (`reasoning_effort` low, against D-03) — then measured on the same questions | NH-23, NH-45 | Max decides; Claude measures; the partner for the profile's wording | — | Before NH-73 |
+| The NH-06 rollout on the main Supabase project | NH-06 | Partner | — | *10-19* |
 | TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | 10-16 |
-| The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project | *10-17*, before NH-73 |
-| The nightly memory job on Token Factory: first real run, the golden set | NH-61, NH-63, NH-65 | Max; partner provides the key (D-24) | The main Supabase project | 10-18 |
-| End-to-end demo run on the TestFlight build | NH-73 | Partner, Max | Prod in manager mode, the main Supabase project, NH-72 | 10-20 |
+| The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project | *10-20* |
+| The nightly memory job on Token Factory: first real run, the golden set | NH-61, NH-63, NH-65 | Max; partner provides the key (D-24) | The main Supabase project | *10-21* |
+| End-to-end demo run on the TestFlight build | NH-73 | Partner, Max | Prod in manager mode, the main Supabase project, NH-72 | *10-22* |
 | Demo video | NH-91 | Partner | NH-73 | *10-24* |
 | Devpost submission | NH-92, NH-93 | Partner; README together | NH-72, NH-90, NH-91 | 10-26 (hard deadline 10-30, 10:00 PT) |
 | The partner's access: a user of their own on the VPS (their key, sudo) and the **Notch VPS** entry in the password manager | NH-34, NH-96 | Max | — | Before the restore drill |
@@ -179,10 +201,11 @@ of this file. Items 1 to 3 are done.
 
 **The partner can start now**, without waiting for the spike:
 
-- **NH-02** — register the team on Devpost and confirm eligibility.
-- **NH-06** — the rollout on the main Supabase project (steps in §0 of the
-  plan). The move to the main project waits for it.
-- **The TestFlight build** (NH-72): the checklist in
+- **NH-02**, now — register the team on Devpost and confirm eligibility.
+- **NH-06**, by *10-19* — the rollout on the main Supabase project (steps in
+  §0 of the plan). The move to the main project on *10-20* waits for it.
+- **The TestFlight build** (NH-72), submitted to Beta App Review by 10-16: the
+  checklist in
   [`submission.md`](./submission.md#the-testflight-build-nh-72), starting with
   the version question.
 - **The video script** (NH-91): the draft in
@@ -199,6 +222,16 @@ of this file. Items 1 to 3 are done.
   facts and a history? (item 7, against O-04's $0.05)
 - Does the proxy put a provider's key only into requests for that provider's
   host? (item 8)
+- Does a skill the agent saves come back into its prompt? Hermes looks for
+  skills beside `state.db` too, in `runtime/`, and saves them in
+  `$HERMES_HOME/skills` (item 6, with stop and start).
+- A search returns up to 10 results, 7,000 to 8,500 characters a time: would
+  fewer keep the answers and cut a search turn's cost? (item 7)
+
+Answered in item 4: the model is given `web_search` and nothing that fetches a
+page, and the policy refuses everything at Tavily but `POST /search`; the
+Tavily key reaches the sandbox only as a placeholder, and the proxy fills it
+in — the searches were answered.
 
 Answered in item 3: provider rules are not added under a global policy, so
 they are in the policy itself (deviation 7); `/usr/bin/python3.13` is what the
