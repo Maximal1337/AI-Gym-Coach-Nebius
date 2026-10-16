@@ -645,6 +645,7 @@ while sleep 60; do echo "$(date -u +%H:%M) $(sudo /usr/local/lib/notch-ops/healt
 
 The write tools run for real (one exercise changed, then undone), so only a test account. Raise the relay's `SANDBOX_IDLE_MINUTES` above the run's length first, or its idle sweep stops the sandbox mid-run. The base platform's RAM: `free -m` and the health report's memory lines with no sandbox running.
 
+- [ ] Tools called reliably (O-04), with the profile's rules 6 and 7 from NH-45: in NH-29 the agent said it had added the user's facts and that it would save a skill, and on 2026-10-16 it twice promised to "check your active plans" and ended the turn, by its length without a tool call. About 10 questions that need a tool and 3 that don't; from the session history, the share of turns that needed a tool and called one, and the share that promised an action without one; for the current profile, one with rules 6 and 7 made stricter, and `reasoning_effort: "low"` for comparison
 - [ ] p50/p95 reply latency, and cold start of a stopped sandbox
 - [ ] Input/output tokens per turn and cost per 10-turn conversation at the routing from D-03
 - [ ] RAM of the base platform and per sandbox, idle and during a heavy turn; O-12 answered with 4 prod + 2 dev sandboxes running
@@ -798,7 +799,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [x] Hermes' own memory keeps coaching know-how, not personal facts about the user: a fact deleted in "What the coach remembers" (NH-71) must stop being used, and our delete can't reach inside Hermes' memory. Checked in NH-73: delete a fact, and the next reply doesn't use it — Hermes' USER.md profile store is off (`user_profile_enabled: false`), and SOUL.md keeps personal facts out of MEMORY.md; the live check stays in NH-73
 - [x] Tavily only for knowledge questions (nutrition labels, exercise substitutions, equipment), no personal data in queries, sources cited — SOUL.md; the agent cites markdown links, and the relay turns each into plain text plus a tappable source, since the chat renders only bold
 - [x] Medical safety rule preserved: pain or injury → stop the exercise and consult a professional
-- [ ] Rule 1 drawn more narrowly, decided with the partner: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't. In the spike the agent refused "Is creatine safe to take every day, and what dose do studies use?" as personal supplement advice, without a search, in 2 of 4 turns with a conversation before it (NH-24). The same review takes rules 6 and 7: in NH-29 the agent said it had added the user's facts and that it would save a skill, and called no tool either time
+- [ ] Rule 1 drawn more narrowly, decided with the partner: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't. In the spike the agent refused "Is creatine safe to take every day, and what dose do studies use?" as personal supplement advice, without a search, in 2 of 4 turns with a conversation before it (NH-24). Rules 6 and 7 moved to NH-25 on 2026-10-16: they are O-04's tool reliability
 - [ ] Checked in a real sandbox: the rules hold against the scripted cases in NH-73
 
 ### M5 — Channel, relay and sandbox lifecycle · target 2026-10-14

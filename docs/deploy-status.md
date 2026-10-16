@@ -19,8 +19,8 @@ tools — NH-23, web search through Tavily, with one question left open: the
 agent links its sources only when asked (below), NH-24, a test account's
 messages through the dev relay to its sandbox and back, and NH-29: the dev
 relay runs the sandbox manager, which creates, stops, starts and deletes the
-sandboxes itself. Next: long polling for the outbox, then item 7, the
-measurements.
+sandboxes itself. Since the same day both relays long-poll the outbox: a
+claim waits up to 50 s for a job. Next: item 7, the measurements.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -43,7 +43,7 @@ gateways.
 | | `notch-dev` | `notch-prod` |
 |---|---|---|
 | Relay mode | `RELAY_SANDBOXES=manager`: the relay creates, starts, stops and deletes the sandboxes | `RELAY_SANDBOXES=static`, no sandbox mapped |
-| Relay to Supabase | Polling, no errors; an empty claim waits 10 s before the next (deviation 14) | The same; 60 s |
+| Relay to Supabase | Long polling, no errors: each claim waits up to 50 s for a job (deviation 15) | The same |
 | Relay to its gateway | Registered (`Status: Connected`) | The same |
 | Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` with its three network rules; kept across gateway restarts | **Not set** |
 | Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | None |
@@ -137,6 +137,17 @@ come from NH-25.
   and start reuse it. The runbook now has the procedure that points existing
   sandboxes at the current image; each takes it at its next start, volume and
   all, and a running one isn't interrupted (checked on dev).
+- Long polling for the outbox (2026-10-16, deviation 15). In the first hour
+  after the rollout the two relays made 146 claims — 74 in dev, 3 of them
+  with a job, and 72 in prod — with no errors and no answer that came back
+  early: about 3,500 Edge Function calls a day, where polling every 2 s made
+  86,000. A claim with nothing queued answers after 50.5 s. A message was
+  claimed 0.2 s after it was sent with A's sandbox running, and the reply was
+  stored 1.6 s after the message; with the sandbox stopped, 0.7 s and 18 s,
+  most of it the sandbox's start. A stopping relay took 6 to 12 s, the rest of
+  its claim's wait. A push that changes an overlay and the code rolls the
+  relay out twice: Argo CD applies the new ConfigMap on the old image first,
+  and the new image follows a few minutes later.
 - Token Factory itself: Nemotron Super, Ultra and Lightning pass the tool
   round trip, `tool_choice: "required"` and JSON-schema output with thinking
   off; Nano fails all three (NH-28, 2026-10-09).
@@ -159,13 +170,19 @@ come from NH-25.
   follow-up in the same way; on its own it was searched and answered 6 of 6
   times. The profile's rule against medical advice is read too widely; the
   decision is in Next steps (NH-45).
-- The agent says it did what it didn't. In item 6 it told A it had "added
-  your training time and equipment limit to your facts", and answered a
-  request to save a skill with "Let me create that now" — no tool call either
-  time, against the profile's rules 6 and 7. Asked outright to use its skill
-  tool, it saved the skill, at the sixth attempt: Hermes refused five
-  descriptions longer than 60 characters, and each retry was another model
-  call.
+- The agent promises, or reports, what it didn't do — a go/no-go question,
+  since O-04 asks that Nemotron call tools reliably through Hermes. In item 6
+  it told A it had "added your training time and equipment limit to your
+  facts", and answered a request to save a skill with "Let me create that
+  now" — no tool call either time, against the profile's rules 6 and 7. On
+  2026-10-16 A asked "How many sets should I do for squats?" and then how much
+  weight to put on the bench press; both answers said it needed A's plan and
+  history and would "check your active plans" first, and the turn ended
+  there. The second turn took 1.4 s, too short for a tool's second model
+  call; item 7 checks both in the session history and measures the rate.
+  Asked outright to use its skill tool, the agent saved the skill, at the
+  sixth attempt: Hermes refused five descriptions longer than 60 characters,
+  and each retry was another model call.
 - Hermes offers the agent NemoClaw's bundled skills too — `skills_list`
   returns ones for coding agents, email and social media next to the coach's.
   Whether they reach the prompt, and what they cost, is for item 8's dump.
@@ -180,6 +197,12 @@ come from NH-25.
 **Known noise.** Each gateway logs "Sandbox list failed" about 15 times an hour
 (6 to 22), the same in dev and prod, with no trend over 24 hours and no visible
 effect. Counted again during the soak (NH-25).
+
+**Known limit.** `assistant-outbox` doesn't see a claim the relay drops — at
+its 65 s timeout, or when the network fails — and goes on looking until its
+50 s are up. A job it leases after the drop goes to nobody: it waits out its
+180 s lease and is retried with one attempt spent. A stopping relay doesn't
+drop its claim (deviation 15).
 
 ## 2. Deviations from the plan
 
@@ -200,7 +223,8 @@ Decisions taken along the way, each with its reason and where it lives.
 | 11 | NH-55: sandbox names of 30 characters | `notch-<env>-` plus the base-36 tail of the user id's hash, 19 characters in all | OpenShell 0.1.2 refuses a longer name: the manager's first create would have failed. A collision can't put two users in one sandbox — the name is unique in the database, and the second record fails | `54a6667` |
 | 12 | NH-40: the profile installed into `$HERMES_HOME` | `SOUL.md` also goes beside Hermes' state database, `$HERMES_HOME/runtime/` | Hermes builds the agent's identity from the `SOUL.md` beside `state.db`, which NemoClaw's image links into `runtime/`. Until this change every reply came from Hermes' default "Hermes Agent" identity, without the coach's character or one of its rules — item 3's turns included; the request dump showed it | `b21c26f` |
 | 13 | NH-23: `web` among Hermes' disabled toolsets, to keep `web_extract` out | `web` is no longer disabled; only `search` (`web_search` alone) is enabled for the API server, and the policy refuses Tavily's `/extract` | A disabled toolset's tools are taken away from every session at the end, and `web` holds `web_search` too: the model never got a search tool at all | `b21c26f` |
-| 14 | NH-54: the relay claims again 2 s after an empty claim | An empty claim waits 10 s in dev and 60 s in prod before the next one (`RELAY_IDLE_POLL_MS`), until long polling | Every claim is an Edge Function call: at 2 s the two relays made about 86,000 a day, against the 500,000 a month of the test project's free plan. A message now waits up to 10 s in dev before it's claimed | `697f099` |
+| 14 | NH-54: the relay claims again 2 s after an empty claim | **Closed on 2026-10-16 by 15.** Until then an empty claim waited 10 s in dev and 60 s in prod before the next one (`RELAY_IDLE_POLL_MS`) | Every claim is an Edge Function call: at 2 s the two relays made about 86,000 a day, against the 500,000 a month of the test project's free plan. A message waited up to 10 s in dev before it was claimed | `697f099` |
+| 15 | NH-52, NH-54: a claim answers at once, and the relay claims again 2 s after an empty one | Long polling. A claim takes `wait_seconds`, 0 to 50 (0, the default, is one look, as before); `assistant-outbox` looks at the queue every 2.5 s and answers as soon as a job is there, with `reason: "empty"` when the wait is over, and at once with `reason: "paused"` at the spend ceiling. The relay asks for 50 s and gives the claim 65 s; after an empty answer at the deadline it claims again at once, after a fast one (paused, or under 5 s) or an error it waits `RELAY_IDLE_POLL_MS`, 30 s, growing to a minute as errors repeat. A stopping relay lets a waiting claim come back and hands a job it brings back to the queue unspent | Deviation 14 traded calls for delay; a claim that waits saves both: about 72 calls an hour per idle relay, and a message is claimed at the function's next look. A full wait is about 20 looks, some 20 to 40 ms of the 2 s CPU limit. The relay doesn't cut a claim short because the hosted runtime doesn't tell the function the request is gone (`req.signal` didn't fire in a test on 2026-10-16), and the function would lease a job that arrives after to nobody | `3b948f6`, `8746cc8` |
 
 Smaller ones, in the same commits: the policy opens `/opt/hermes` read-only
 next to `/opt/notch`, because Hermes runs from there; the relay builds a
@@ -218,12 +242,11 @@ proposed — set on 2026-10-13 at one spike item a day, moved a day on
 plan's.
 
 **The spike**, in this order. Each item ends with a short report and an update
-of this file. Items 1 to 6 are done.
+of this file. Items 1 to 6 are done, and long polling before item 7.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
-| — | Long polling for the outbox: a claim takes `wait_seconds` (about 25), and `assistant-outbox` checks the queue every 2 s or so and answers as soon as a job is there. The relay's `OUTBOX_TIMEOUT_MS` goes above the wait, with no pause after an empty answer, and `RELAY_IDLE_POLL_MS` back to its default (deviation 14). Deno tests for the function, tests for the relay | NH-52, NH-54 | Claude; Max deploys `assistant-outbox` | — | *10-17*, first |
-| 7 | Measurements: turns, cold start, a soak overnight, memory, and 4 prod + 2 dev sandboxes at once (O-12) | NH-25 | Claude; Max pauses the health check's alerts for the soak | Long polling. No pushes to `main` during the soak: each one restarts the relay and both gateways | *10-17*, the soak overnight |
+| 7 | In this order. **Tool reliability** (O-04; the profile's rules 6–7, from NH-45): about 10 questions that need a tool — the plan, the history, weights, an exercise substitute — and 3 small-talk ones; from the session history, the share of turns that needed a tool and called one, and the share that promised an action without one. Three variants: the current `SOUL.md`, `SOUL.md` with rules 6–7 made stricter ("don't promise: call the tool in this turn, or answer without it"), and `reasoning_effort: "low"` for comparison, with its price and latency (D-03 stays). If the prompt isn't enough, an estimate for a safety net in the relay: a promise without a tool call (seen in the session history, as for the sources) continues the turn once. **Then** `bench turns` and `bench cold-start`; O-12 with at least 2–3 sandboxes at once; how a cold start moves p95, and options for NH-27 — warming the sandbox when the chat opens, `SANDBOX_IDLE_MINUTES` for the demo — with their cost in RAM. **Last**, the soak overnight. A `SOUL.md` change is pushed before the soak; no pushes to `main` during it: each one restarts the relay and both gateways | NH-25 | Max and Claude; Max pauses the health check's alerts for the soak | — | *10-17*, the soak overnight |
 | 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity, and which of NemoClaw's bundled skills reach the prompt | NH-26 | Claude; Max plants the canary in B's facts | — | *10-18* |
 | 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
 
@@ -234,10 +257,10 @@ of this file. Items 1 to 6 are done.
 | The global policy, profiles, providers and the manager in prod | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-20* |
 | One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command. From item 2: `profile import` refuses an id the gateway has, so the script updates those with their current `resource_version`. From item 3: the policy takes the same two placeholders as the profiles. From item 4: a provider's key goes in through standard input at a hidden prompt (runbook, step 3) | NH-33 | Claude | — | *10-20* |
 | Sources from Hermes' own search results, so every searched answer shows its pages in the app — the demo and the video need them. After a turn the relay reads that turn's `web_search` results from the sandbox's session history (the `X-Hermes-Session-Id` it gets back, then `/api/sessions/<id>/messages` with the same key, both checked through the gateway in item 5: five results a search, each with a title and a URL) and attaches them as the reply's sources. The rules, each with a test: only this turn's `web_search` results; only `https`, no user info in the URL, a capped length; no duplicate of a link the reply has; at most three sources; titles cut short and stripped of markup; the results are untrusted content, so they go into the sources and never into the reply's text; the history is read with a timeout of about 3 s, and a failure neither fails nor holds up the turn. About 3 to 4 hours. Not taken: letting the model think (`reasoning_effort` low) — against D-03, dearer and slower | NH-23 | Claude | — | *10-19*, with item 9 |
-| Rule 1 of the coach's profile, drawn more narrowly: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't (item 5's refused creatine question). The same review takes rules 6 and 7: in item 6 the agent claimed to have added facts and promised to save a skill, calling no tool. The creatine question is in NH-73's checklist | NH-45 | Max and the partner decide; the partner writes the wording; Claude checks it on the spike's questions | — | Before NH-73 |
+| Rule 1 of the coach's profile, drawn more narrowly: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't (item 5's refused creatine question). The same change caps a skill's description at one sentence of 60 characters. Rules 6 and 7 moved to item 7 on 2026-10-16: they are O-04's tool reliability. The creatine question is in NH-73's checklist | NH-45 | Max and the partner decide; the partner writes the wording; Claude checks it on the spike's questions | — | Before NH-73 |
 | The NH-06 rollout on the main Supabase project | NH-06 | Partner | — | *10-19* |
-| TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | 10-16 |
-| The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project | *10-21* |
+| TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | *10-18* |
+| The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project, `assistant-outbox` from `3b948f6` or later (the relays' claims carry `wait_seconds`, which an older one refuses with a 400) | *10-21* |
 | The nightly memory job on Token Factory: first real run, the golden set | NH-61, NH-63, NH-65 | Max; partner provides the key (D-24) | The main Supabase project | *10-22* |
 | End-to-end demo run on the TestFlight build | NH-73 | Partner, Max | Prod in manager mode, the main Supabase project, NH-72 | *10-23* |
 | Demo video | NH-91 | Partner | NH-73 | *10-24* |
@@ -253,7 +276,7 @@ of this file. Items 1 to 6 are done.
 - **NH-02**, now — register the team on Devpost and confirm eligibility.
 - **NH-06**, by *10-19* — the rollout on the main Supabase project (steps in
   §0 of the plan). The move to the main project on *10-21* waits for it.
-- **The TestFlight build** (NH-72), submitted to Beta App Review by 10-16: the
+- **The TestFlight build** (NH-72), submitted to Beta App Review by *10-18*: the
   checklist in
   [`submission.md`](./submission.md#the-testflight-build-nh-72), starting with
   the version question.
