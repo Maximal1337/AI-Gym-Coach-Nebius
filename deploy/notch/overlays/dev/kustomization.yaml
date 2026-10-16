@@ -14,11 +14,6 @@ configMapGenerator:
       # The sandbox manager (NH-55), on since the spike's NH-29. Prod stays
       # static until a go in NH-27.
       - RELAY_SANDBOXES=manager
-      # How long an empty claim waits before the next one: every claim is an
-      # Edge Function call, and at the 2 s default two relays make about 86,000
-      # a day. Until assistant-outbox's claim waits for a job itself (long
-      # polling), then back to the default.
-      - RELAY_IDLE_POLL_MS=10000
       # The environment's shared OpenShell providers every sandbox gets (NH-33).
       - SANDBOX_SHARED_PROVIDERS=token-factory,tavily
       # The environment's OpenShell gateway, in this namespace (NH-29).

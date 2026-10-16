@@ -76,8 +76,27 @@ export interface OutboxConfig {
   nowSec?: () => number;
 }
 
-/** Per request to assistant-outbox / assistant-deliver; both answer in well under a second. */
+/** Per request to assistant-outbox / assistant-deliver that answers at once: well under a second. */
 export const OUTBOX_TIMEOUT_MS = 30_000;
+/** A claim that waits for a job (long polling) gets its wait plus this before it's given up. */
+export const CLAIM_TIMEOUT_MARGIN_MS = 15_000;
+
+export function claimTimeoutMs(waitSeconds: number): number {
+  return waitSeconds > 0 ? waitSeconds * 1000 + CLAIM_TIMEOUT_MARGIN_MS : OUTBOX_TIMEOUT_MS;
+}
+
+export interface ClaimOptions {
+  /** How long assistant-outbox may hold the claim open for a job to arrive; 0 is one look. */
+  waitSeconds?: number;
+}
+
+export interface ClaimResult {
+  jobs: JobContext[];
+  /** At the environment's spend ceiling (D-34). */
+  paused?: string;
+  /** Why the answer is empty: "empty" (the wait is over) or "paused". */
+  reason?: string;
+}
 
 export class OutboxError extends Error {
   constructor(message: string, readonly status: number) {
@@ -95,7 +114,7 @@ export class OutboxClient {
     this.nowSec = config.nowSec ?? (() => Math.floor(Date.now() / 1000));
   }
 
-  private async post(fn: string, payload: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
+  private async post(fn: string, payload: unknown, timeoutMs = OUTBOX_TIMEOUT_MS): Promise<{ status: number; body: Record<string, unknown> }> {
     const body = JSON.stringify(payload);
     const res = await this.fetch(`${this.config.functionsUrl}/${fn}`, {
       method: "POST",
@@ -103,16 +122,31 @@ export class OutboxClient {
       body,
       // A hung request would stall the whole poll loop; the liveness probe
       // restarts a stalled relay (deploy/notch/base/relay.yaml), this keeps it rare.
-      signal: AbortSignal.timeout(OUTBOX_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     });
     const parsed = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return { status: res.status, body: parsed };
   }
 
-  async claim(limit: number, leaseSeconds: number): Promise<{ jobs: JobContext[]; paused?: string }> {
-    const { status, body } = await this.post("assistant-outbox", { action: "claim", limit, lease_seconds: leaseSeconds });
+  /**
+   * Leases up to `limit` jobs. With waitSeconds, assistant-outbox holds the
+   * request open until a job is there or the wait is over (long polling).
+   * There's no ending it early: the function doesn't notice a dropped request,
+   * and would lease a job that arrives after to nobody.
+   */
+  async claim(limit: number, leaseSeconds: number, options: ClaimOptions = {}): Promise<ClaimResult> {
+    const wait = options.waitSeconds ?? 0;
+    const { status, body } = await this.post(
+      "assistant-outbox",
+      { action: "claim", limit, lease_seconds: leaseSeconds, ...(wait > 0 ? { wait_seconds: wait } : {}) },
+      claimTimeoutMs(wait),
+    );
     if (status !== 200) throw new OutboxError(`claim failed: ${status} ${JSON.stringify(body)}`, status);
-    return { jobs: (body.jobs ?? []) as JobContext[], paused: body.paused as string | undefined };
+    return {
+      jobs: (body.jobs ?? []) as JobContext[],
+      paused: body.paused as string | undefined,
+      ...(typeof body.reason === "string" ? { reason: body.reason } : {}),
+    };
   }
 
   async fail(request: FailRequest): Promise<boolean> {

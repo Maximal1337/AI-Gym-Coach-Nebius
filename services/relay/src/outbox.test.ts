@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { OutboxClient, OutboxError } from "./outbox.js";
+import { CLAIM_TIMEOUT_MARGIN_MS, claimTimeoutMs, OUTBOX_TIMEOUT_MS, OutboxClient, OutboxError } from "./outbox.js";
 import { relaySignature } from "./signing.js";
 
 test("contract: same signature as supabase/functions/_shared/relay-auth.ts", () => {
@@ -29,6 +29,19 @@ test("claim: signs exactly the body it sends", async () => {
   assert.equal(calls[0].body, JSON.stringify({ action: "claim", limit: 2, lease_seconds: 180 }));
   assert.equal(calls[0].headers["x-relay-env"], "dev");
   assert.equal(calls[0].headers["x-relay-signature"], relaySignature("s".repeat(40), "dev", 1790000000, calls[0].body));
+});
+
+test("claim: a long-polling claim asks for its wait, and gives up only after the wait plus a margin", async () => {
+  const { f, calls } = fakeFetch(200, { jobs: [], reason: "empty" });
+  const r = await new OutboxClient(config(f)).claim(2, 180, { waitSeconds: 50 });
+  assert.equal(calls[0].body, JSON.stringify({ action: "claim", limit: 2, lease_seconds: 180, wait_seconds: 50 }));
+  assert.deepEqual(r.jobs, []);
+  assert.equal(r.reason, "empty");
+  assert.equal(claimTimeoutMs(50), 50_000 + CLAIM_TIMEOUT_MARGIN_MS);
+  // No wait: one look, the usual timeout, and no wait_seconds the old function would refuse.
+  assert.equal(claimTimeoutMs(0), OUTBOX_TIMEOUT_MS);
+  await new OutboxClient(config(f)).claim(2, 180, { waitSeconds: 0 });
+  assert.equal(calls[1].body, JSON.stringify({ action: "claim", limit: 2, lease_seconds: 180 }));
 });
 
 test("claim: a refused request throws with its status", async () => {

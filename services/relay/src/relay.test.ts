@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { chat, HermesError } from "./hermes.js";
 import { type DeferRequest, type DeliverRequest, type FailRequest, type JobContext, OutboxError } from "./outbox.js";
-import { HERMES_BOOT_MS, processJob, type RelayDeps, runOnce } from "./relay.js";
+import { FAST_ANSWER_MS, HERMES_BOOT_MS, pollLoop, type PollConfig, processJob, RELEASE_SECONDS, type RelayDeps, runOnce } from "./relay.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 
 const ENDPOINT = { baseUrl: "http://10.42.0.17:8642", apiKey: "sandbox-key" };
@@ -261,7 +261,7 @@ test("delivery is retried on transient errors (it's idempotent)", async () => {
 
 test("runOnce: a paused queue is logged and runs nothing", async () => {
   const { d, log } = deps({ outbox: { ...deps().d.outbox, claim: () => Promise.resolve({ jobs: [], paused: "daily_limit_reached" }) } });
-  assert.deepEqual(await runOnce(d, 2, 180), []);
+  assert.deepEqual(await runOnce(d, 2, 180), { outcomes: [], paused: "daily_limit_reached" });
   assert.ok(log.events.includes("paused"));
 });
 
@@ -275,7 +275,7 @@ test("runOnce: one job's reporting failure doesn't sink the batch", async () => 
       fail: () => Promise.reject(new Error("down")),
     },
   });
-  assert.deepEqual(await runOnce(d, 2, 180), ["failed", "delivered"]);
+  assert.deepEqual((await runOnce(d, 2, 180)).outcomes, ["failed", "delivered"]);
   assert.ok(log.events.includes("job_error"));
 });
 
@@ -438,4 +438,123 @@ test("static map: a mapped user gets their endpoint, anyone else waits", async (
   assert.ok("endpoint" in mine);
   assert.deepEqual(mine.endpoint, ENDPOINT);
   assert.deepEqual(await acquire(job("chat", "u2")), { defer: 60, reason: "no_sandbox" });
+});
+
+test("runOnce: a batch that arrives once the relay is stopping goes straight back to the queue unspent, and nothing runs", async () => {
+  const stop = new AbortController();
+  stop.abort();
+  const { d, log } = deps();
+  const seen: unknown[] = [];
+  d.outbox.claim = (_limit, _lease, options) => (seen.push(options), Promise.resolve({ jobs: [job()] }));
+  assert.deepEqual(await runOnce(d, 2, 180, { waitSeconds: 50 }, stop.signal), { outcomes: ["deferred"] });
+  assert.deepEqual(seen, [{ waitSeconds: 50 }]);
+  assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: RELEASE_SECONDS, reason: "relay_stopping" }]);
+  assert.equal(log.chats.length, 0);
+  assert.ok(log.events.includes("released"));
+});
+
+test("runOnce: each claimed job is logged with how long its message waited in the queue", async () => {
+  const fields: Array<[string, Record<string, unknown>]> = [];
+  const { d } = deps({ log: (event, f) => fields.push([event, f]) });
+  await runOnce(d, 2, 180);
+  // The message was sent at 07:59:00; the relay's clock says 08:00:00.
+  assert.deepEqual(fields.find(([e]) => e === "claimed")?.[1], { job: 7, kind: "chat", queuedMs: 60_000 });
+});
+
+const LOOP: PollConfig = { batch: 2, leaseSeconds: 180, waitSeconds: 50, idlePauseMs: 30_000 };
+
+/**
+ * The poll loop against a scripted outbox: each answer moves the clock by how
+ * long it took, and so does each pause. An answer with `stops` has the relay
+ * told to stop while that claim waits. When the script runs out, the relay is
+ * told to stop while its next claim waits, and that claim comes back empty at
+ * its deadline.
+ */
+type Answer = { takesMs: number; result?: { jobs: JobContext[]; paused?: string; reason?: string }; error?: Error; stops?: boolean };
+
+function loop(answers: Answer[]) {
+  const clock = { t: Date.parse("2026-10-10T08:00:00Z") };
+  const stop = new AbortController();
+  const seen = { claims: [] as unknown[], sleeps: [] as number[], beats: 0, logged: [] as Array<[string, Record<string, unknown>]> };
+  const { d, log } = deps({ now: () => new Date(clock.t), log: (event, fields) => seen.logged.push([event, fields]) });
+  d.outbox.claim = (_limit, _lease, options) => {
+    seen.claims.push(options);
+    const next: Answer = answers.shift() ?? { takesMs: 50_000, result: EMPTY, stops: true };
+    if (next.stops) stop.abort();
+    clock.t += next.takesMs;
+    return next.error ? Promise.reject(next.error) : Promise.resolve(next.result!);
+  };
+  const io = {
+    sleep: (ms: number) => (seen.sleeps.push(ms), (clock.t += ms), Promise.resolve()),
+    heartbeat: () => (seen.beats++, Promise.resolve()),
+  };
+  const events = () => seen.logged.map(([e]) => e);
+  return { d, log, seen, stop, events, run: () => pollLoop(d, LOOP, stop.signal, io) };
+}
+
+const EMPTY = { jobs: [] as JobContext[], reason: "empty" };
+
+test("loop: an empty answer that took the whole wait is followed by the next claim at once; every claim asks for the wait", async () => {
+  const l = loop([{ takesMs: 50_000, result: EMPTY }, { takesMs: 50_000, result: EMPTY }]);
+  await l.run();
+  assert.deepEqual(l.seen.sleeps, []);
+  assert.equal(l.seen.claims.length, 3);
+  for (const options of l.seen.claims) assert.deepEqual(options, { waitSeconds: 50 });
+  assert.equal(l.seen.beats, 3);
+});
+
+test("loop: an empty answer that came back fast pauses before the next claim — the spend ceiling, or a function that doesn't wait", async () => {
+  const l = loop([
+    { takesMs: 150, result: { jobs: [], paused: "daily_limit_reached", reason: "paused" } },
+    { takesMs: 300, result: { jobs: [] } },
+    { takesMs: FAST_ANSWER_MS - 1, result: EMPTY },
+    { takesMs: FAST_ANSWER_MS, result: EMPTY },
+  ]);
+  await l.run();
+  assert.deepEqual(l.seen.sleeps, [30_000, 30_000, 30_000]);
+});
+
+test("loop: after an error the pause is at least idlePauseMs, grows as errors repeat, stops at a minute, and resets after an answer", async () => {
+  const fail = { takesMs: 100, error: new Error("claim failed: 503") };
+  const l = loop([fail, fail, fail, fail, fail, fail, fail, { takesMs: 50_000, result: EMPTY }, fail]);
+  await l.run();
+  assert.deepEqual(l.seen.sleeps, [30_000, 30_000, 30_000, 30_000, 30_000, 32_000, 60_000, 30_000]);
+  assert.equal(l.events().filter((e) => e === "poll_error").length, 8);
+});
+
+test("loop: a batch that ran is followed by the next claim at once", async () => {
+  const l = loop([{ takesMs: 100, result: { jobs: [job()] } }]);
+  await l.run();
+  assert.deepEqual(l.seen.sleeps, []);
+  assert.equal(l.log.delivered.length, 1);
+  assert.ok(l.events().includes("batch"));
+});
+
+test("loop: stopping lets the waiting claim come back, then ends the loop — no other claim, no error, no pause", async () => {
+  const l = loop([]);
+  await l.run();
+  assert.equal(l.seen.claims.length, 1);
+  assert.deepEqual(l.seen.sleeps, []);
+  assert.ok(!l.events().includes("poll_error"));
+});
+
+test("loop: a job the waiting claim brings after the stop goes straight back to the queue unspent", async () => {
+  const l = loop([{ takesMs: 20_000, result: { jobs: [job()] }, stops: true }]);
+  await l.run();
+  assert.equal(l.seen.claims.length, 1);
+  assert.deepEqual(l.log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: RELEASE_SECONDS, reason: "relay_stopping" }]);
+  assert.equal(l.log.chats.length, 0);
+});
+
+test("loop: once an hour it logs how many claims it made, each one an Edge Function call", async () => {
+  // A paused answer and an error (30 s pause each), a batch, then 71 full waits: the hour is up after them.
+  const l = loop([
+    { takesMs: 100, result: { jobs: [], paused: "daily_limit_reached" } },
+    { takesMs: 100, error: new Error("claim failed: 503") },
+    { takesMs: 100, result: { jobs: [job()] } },
+    ...Array.from({ length: 71 }, () => ({ takesMs: 50_000, result: EMPTY })),
+  ]);
+  await l.run();
+  const stats = l.seen.logged.filter(([e]) => e === "outbox_claims").map(([, f]) => f);
+  assert.deepEqual(stats, [{ since: Date.parse("2026-10-10T08:00:00Z"), claims: 74, withJobs: 1, empty: 72, fast: 1, errors: 1, minutes: 60 }]);
 });

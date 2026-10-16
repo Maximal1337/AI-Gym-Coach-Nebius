@@ -18,8 +18,10 @@ import { LIMIT_REACHED_ERROR, type TokenUsage } from "../_shared/assistant.ts";
  *       of one every few seconds, and a message is picked up within seconds.
  *       At the environment's D-34 spend ceiling, at once:
  *       {"jobs":[],"paused":"daily_limit_reached","reason":"paused"}.
- *       A relay that hangs up mid-wait (it's stopping) gets nothing more, and
- *       a job leased for it after that goes back to the queue unspent.
+ *       When the runtime reports a relay hanging up mid-wait (req.signal), it
+ *       gets nothing more, and a job leased for it then goes back unspent.
+ *       The hosted runtime didn't report it (2026-10-16), so the relay never
+ *       hangs up early: a job leased for a dropped request waits out its lease.
  *   {"action":"fail","job_id":1,"lease_token":"…","error":"…","model":"…","usage":{…}}
  *     → {"ok":true|false}. A failed attempt still spent tokens, so usage is
  *       recorded; the job goes back to the queue until its attempts run out.

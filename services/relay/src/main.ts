@@ -6,7 +6,7 @@ import { chat } from "./hermes.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 import { OutboxClient } from "./outbox.js";
-import { type RelayDeps, runOnce } from "./relay.js";
+import { pause, pollLoop, type RelayDeps } from "./relay.js";
 import { SandboxManager } from "./sandbox-manager.js";
 import type { RelayEnvironment } from "./signing.js";
 
@@ -21,7 +21,11 @@ import type { RelayEnvironment } from "./signing.js";
  *   RELAY_SECRET              the environment's ASSISTANT_RELAY_SECRET_* value
  *   TOKEN_FACTORY_MODEL       the model the sandboxes run, for pricing spend
  *   RELAY_BATCH (2), RELAY_LEASE_SECONDS (180), RELAY_TURN_TIMEOUT_MS (120000),
- *   RELAY_IDLE_POLL_MS (2000), RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat)
+ *   RELAY_HEARTBEAT_FILE (/tmp/relay-heartbeat)
+ *   RELAY_CLAIM_WAIT_SECONDS (50)  how long assistant-outbox holds a claim open for
+ *                             a job (long polling); 0 makes every claim one look
+ *   RELAY_IDLE_POLL_MS (30000)  the pause after an empty answer that came back fast
+ *                             (the spend ceiling, or no long polling) and after an error
  *
  * Where sandboxes come from: RELAY_SANDBOXES = static (the default, the spike's
  * map) or manager (the sandbox manager, NH-55). The manager needs:
@@ -63,7 +67,15 @@ function number(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+/** The claim's wait: a whole number of seconds from 0 to assistant-outbox's 50. */
+function claimWaitSeconds(): number {
+  const raw = process.env.RELAY_CLAIM_WAIT_SECONDS?.trim();
+  if (!raw) return 50;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 0 || value > 50) throw new Error("RELAY_CLAIM_WAIT_SECONDS must be a whole number from 0 to 50");
+  return value;
+}
+
 const log = (event: string, fields: Record<string, unknown>) =>
   console.log(JSON.stringify({ at: new Date().toISOString(), event, ...fields }));
 
@@ -144,7 +156,8 @@ async function main(): Promise<void> {
   const timeoutMs = number("RELAY_TURN_TIMEOUT_MS", 120_000);
   const batch = number("RELAY_BATCH", 2);
   const leaseSeconds = number("RELAY_LEASE_SECONDS", 180);
-  const idlePollMs = number("RELAY_IDLE_POLL_MS", 2_000);
+  const waitSeconds = claimWaitSeconds();
+  const idlePauseMs = number("RELAY_IDLE_POLL_MS", 30_000);
   const heartbeat = process.env.RELAY_HEARTBEAT_FILE ?? "/tmp/relay-heartbeat";
   // HTTPS sandbox URLs are the gateway's service URLs: through the gateway, with its client certificate.
   const sandboxFetch = gateway ? gatewayFetch(gateway.route) : undefined;
@@ -158,33 +171,27 @@ async function main(): Promise<void> {
     log,
   };
 
-  let running = true;
+  // Stopping lets a claim that is waiting for a job come back (within its
+  // wait) and hands back whatever it brings; a batch already running finishes
+  // first. Either fits the pod's terminationGracePeriodSeconds
+  // (deploy/notch/base/relay.yaml).
+  const stop = new AbortController();
   for (const signal of ["SIGTERM", "SIGINT"] as const) {
     process.on(signal, () => {
       log("stopping", { signal });
-      running = false;
+      stop.abort();
       for (const t of timers) clearInterval(t);
     });
   }
 
-  log("started", { env, batch, leaseSeconds });
-  let backoffMs = 1_000;
-  while (running) {
-    // The heartbeat says "the loop is turning", not "Supabase is up": it's
-    // written on every iteration, failed polls included, so the liveness probe
-    // restarts a stuck relay but not one waiting out an outage in backoff.
-    await writeFile(heartbeat, new Date().toISOString()).catch(() => {});
-    try {
-      const outcomes = await runOnce(deps, batch, leaseSeconds);
-      backoffMs = 1_000;
-      if (outcomes.length > 0) log("batch", { outcomes });
-      else await sleep(idlePollMs);
-    } catch (e) {
-      log("poll_error", { error: String(e), retryInMs: backoffMs });
-      await sleep(backoffMs);
-      backoffMs = Math.min(backoffMs * 2, 60_000);
-    }
-  }
+  log("started", { env, batch, leaseSeconds, waitSeconds, idlePauseMs });
+  await pollLoop(deps, { batch, leaseSeconds, waitSeconds, idlePauseMs }, stop.signal, {
+    sleep: pause,
+    heartbeat: () => writeFile(heartbeat, new Date().toISOString()).catch(() => {}),
+  });
+  log("stopped", {});
+  // Nothing is left to finish; open keep-alive connections mustn't hold the pod.
+  process.exit(0);
 }
 
 main().catch((e) => {

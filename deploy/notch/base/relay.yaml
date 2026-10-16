@@ -37,8 +37,10 @@ spec:
     spec:
       serviceAccountName: notch-relay
       automountServiceAccountToken: false
-      # SIGTERM stops the poll loop; a batch in flight gets up to its turn
-      # timeout (RELAY_TURN_TIMEOUT_MS, 120 s) to finish and deliver.
+      # SIGTERM stops the poll loop. A claim waiting for a job comes back first
+      # (its 50 s wait, 65 s at most) and hands back what it brought; a batch
+      # in flight gets up to its turn timeout (RELAY_TURN_TIMEOUT_MS, 120 s)
+      # to finish and deliver.
       terminationGracePeriodSeconds: 150
       securityContext:
         runAsNonRoot: true

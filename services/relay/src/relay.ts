@@ -1,5 +1,13 @@
 import { type ChatOptions, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
-import { type DeferRequest, type DeliverRequest, type FailRequest, type JobContext, OutboxError } from "./outbox.js";
+import {
+  type ClaimOptions,
+  type ClaimResult,
+  type DeferRequest,
+  type DeliverRequest,
+  type FailRequest,
+  type JobContext,
+  OutboxError,
+} from "./outbox.js";
 import { buildMessages, type ChatMessage, extractSources, isCheckinSkip, replyText } from "./prompt.js";
 import { DEFER_SECONDS, type SandboxLease } from "./sandbox-manager.js";
 
@@ -15,7 +23,7 @@ export type Outcome = "delivered" | "skipped" | "failed" | "dropped" | "deferred
 
 export interface RelayDeps {
   outbox: {
-    claim: (limit: number, leaseSeconds: number) => Promise<{ jobs: JobContext[]; paused?: string }>;
+    claim: (limit: number, leaseSeconds: number, options?: ClaimOptions) => Promise<ClaimResult>;
     deliver: (request: DeliverRequest) => Promise<{ status: number; body: Record<string, unknown> }>;
     fail: (request: FailRequest) => Promise<boolean>;
     defer: (request: DeferRequest) => Promise<boolean>;
@@ -146,15 +154,136 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedA
   return skip ? "skipped" : "delivered";
 }
 
-/** One poll: claim a batch and run it; each user has at most one job in the batch (the queue guarantees it). */
-export async function runOnce(deps: RelayDeps, limit: number, leaseSeconds: number): Promise<Outcome[]> {
-  const { jobs, paused } = await deps.outbox.claim(limit, leaseSeconds);
+export interface Poll {
+  outcomes: Outcome[];
+  /** The environment is at its spend ceiling (D-34). */
+  paused?: string;
+}
+
+/** A job claimed while the relay is stopping is claimable again this soon, its attempt unspent. */
+export const RELEASE_SECONDS = 1;
+
+/**
+ * One poll: claim a batch, waiting for it up to `claim.waitSeconds`, and run
+ * it; each user has at most one job in the batch (the queue guarantees it).
+ * A batch that arrives once the relay is stopping (`stop` aborted) isn't
+ * started: it goes straight back to the queue.
+ */
+export async function runOnce(
+  deps: RelayDeps,
+  limit: number,
+  leaseSeconds: number,
+  claim: ClaimOptions = {},
+  stop?: AbortSignal,
+): Promise<Poll> {
+  const { jobs, paused } = await deps.outbox.claim(limit, leaseSeconds, claim);
   if (paused) deps.log("paused", { reason: paused });
+  if (stop?.aborted && jobs.length > 0) {
+    await Promise.allSettled(
+      jobs.map((job) => deps.outbox.defer({ job_id: job.id, lease_token: job.lease_token, seconds: RELEASE_SECONDS, reason: "relay_stopping" })),
+    );
+    deps.log("released", { jobs: jobs.map((job) => job.id), reason: "relay_stopping" });
+    return { outcomes: jobs.map(() => "deferred"), ...(paused ? { paused } : {}) };
+  }
+  const now = deps.now().getTime();
+  for (const job of jobs) {
+    // How long the message waited in the queue: what long polling is for.
+    const sent = job.message?.created_at ? Date.parse(job.message.created_at) : NaN;
+    deps.log("claimed", { job: job.id, kind: job.job.kind, ...(Number.isFinite(sent) ? { queuedMs: now - sent } : {}) });
+  }
   const settled = await Promise.allSettled(jobs.map((job) => processJob(job, deps)));
-  return settled.map((s, i) => {
+  const outcomes = settled.map((s, i): Outcome => {
     if (s.status === "fulfilled") return s.value;
     // Reporting itself failed; the lease will expire and the job will be retried.
     deps.log("job_error", { job: jobs[i].id, error: String(s.reason) });
     return "failed";
   });
+  return { outcomes, ...(paused ? { paused } : {}) };
+}
+
+export interface PollConfig {
+  batch: number;
+  leaseSeconds: number;
+  /** How long assistant-outbox may hold a claim open for a job (long polling); 0 is one look. */
+  waitSeconds: number;
+  /** The pause after an answer that came back fast and empty, or after an error. */
+  idlePauseMs: number;
+}
+
+/**
+ * An empty answer quicker than this didn't wait — the spend ceiling, or a
+ * function that doesn't long-poll — so the next claim waits idlePauseMs first,
+ * instead of the relay calling in a tight loop. An empty answer that took
+ * the whole wait is followed by the next claim at once.
+ */
+export const FAST_ANSWER_MS = 5_000;
+const BACKOFF_MAX_MS = 60_000;
+const STATS_EVERY_MS = 3_600_000;
+
+export interface LoopIO {
+  /** Resolves after ms, or at once when signal aborts. */
+  sleep: (ms: number, signal: AbortSignal) => Promise<void>;
+  /** "The loop is turning", for the liveness probe. */
+  heartbeat: () => Promise<void>;
+}
+
+/** Resolves after ms, or as soon as signal aborts. */
+export function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
+}
+
+/**
+ * The relay's loop: claim, run, repeat, until `stop` aborts. Stopping doesn't
+ * cut short a claim that is waiting: assistant-outbox doesn't notice a dropped
+ * request, and would lease a job that arrives after to nobody until the lease
+ * runs out. The claim comes back within its wait instead, and whatever it
+ * brings goes back to the queue unspent. A batch already running finishes
+ * first. Once an hour it logs how many claims it made — each one an Edge
+ * Function call.
+ */
+export async function pollLoop(deps: RelayDeps, config: PollConfig, stop: AbortSignal, io: LoopIO): Promise<void> {
+  let backoffMs = 1_000;
+  let stats = { since: deps.now().getTime(), claims: 0, withJobs: 0, empty: 0, fast: 0, errors: 0 };
+  while (!stop.aborted) {
+    // Written on every turn of the loop, failed polls included, so the
+    // liveness probe restarts a stuck relay but not one waiting out an outage.
+    await io.heartbeat();
+    const started = deps.now().getTime();
+    if (started - stats.since >= STATS_EVERY_MS) {
+      deps.log("outbox_claims", { ...stats, minutes: Math.round((started - stats.since) / 60_000) });
+      stats = { since: started, claims: 0, withJobs: 0, empty: 0, fast: 0, errors: 0 };
+    }
+    stats.claims++;
+    try {
+      const poll = await runOnce(deps, config.batch, config.leaseSeconds, { waitSeconds: config.waitSeconds }, stop);
+      backoffMs = 1_000;
+      if (poll.outcomes.length > 0) {
+        stats.withJobs++;
+        deps.log("batch", { outcomes: poll.outcomes });
+        continue;
+      }
+      stats.empty++;
+      if (poll.paused !== undefined || deps.now().getTime() - started < FAST_ANSWER_MS) {
+        stats.fast++;
+        await io.sleep(config.idlePauseMs, stop);
+      }
+    } catch (e) {
+      // Stopping: no retry.
+      if (stop.aborted) break;
+      stats.errors++;
+      const retryInMs = Math.min(BACKOFF_MAX_MS, Math.max(backoffMs, config.idlePauseMs));
+      deps.log("poll_error", { error: String(e), retryInMs });
+      await io.sleep(retryInMs, stop);
+      backoffMs = Math.min(backoffMs * 2, BACKOFF_MAX_MS);
+    }
+  }
 }
