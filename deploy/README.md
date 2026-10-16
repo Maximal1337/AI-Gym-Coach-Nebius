@@ -178,9 +178,9 @@ The relay creates and runs every user's sandbox itself, through the
   an account deletion cascades it away — are deleted, at most 3 per sweep,
   and their providers on the following sweep.
 
-It stays off until the spike has proved it on this cluster: each overlay sets
-`RELAY_SANDBOXES=static` (the spike's hand-made map). Turn dev to `manager`
-first. Before that, per environment (dev shown).
+Dev runs it since the spike's NH-29 (`RELAY_SANDBOXES=manager` in its
+overlay); prod stays `static` (a hand-made map, empty) until a go in NH-27.
+Before an environment is turned on, per environment (dev shown):
 
 The policy and the provider profiles in `platform/openshell/` carry two
 placeholders: `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and
