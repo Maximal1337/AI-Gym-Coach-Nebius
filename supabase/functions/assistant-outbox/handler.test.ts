@@ -1,7 +1,17 @@
 // Tests for assistant-outbox (NH-52). Run: deno test --no-config supabase/functions/
 import { assertEquals, assertRejects } from "jsr:@std/assert@1";
 import { relayHeaders, verifyRelayRequest } from "../_shared/relay-auth.ts";
-import { DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS, handleOutbox, jobRefusal, type OutboxDeps, type RefusalChecks } from "./handler.ts";
+import {
+  CLAIM_POLL_MS,
+  CLAIM_WAIT_MAX_SECONDS,
+  DEFAULT_CLAIM_LIMIT,
+  DEFAULT_LEASE_SECONDS,
+  handleOutbox,
+  jobRefusal,
+  type OutboxDeps,
+  RELEASE_SECONDS,
+  type RefusalChecks,
+} from "./handler.ts";
 
 const TOKEN = "5f0c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
 const USER = "3f1c2a5e-0b7d-4c1e-9a2b-1c2d3e4f5a6b";
@@ -50,8 +60,36 @@ function deps(overrides: Partial<OutboxDeps> = {}) {
   return { d, log };
 }
 
-const post = (body: unknown) =>
-  new Request("https://example.test/functions/v1/assistant-outbox", { method: "POST", body: typeof body === "string" ? body : JSON.stringify(body) });
+/** A clock that only the waits move: each pause is recorded and advances it. */
+function clock() {
+  const c = { t: 1_000_000, pauses: [] as number[] };
+  const fake = {
+    now: () => c.t,
+    sleep: (ms: number) => {
+      c.pauses.push(ms);
+      c.t += ms;
+      return Promise.resolve();
+    },
+  };
+  return { c, fake };
+}
+
+const JOB = { id: 7, lease_token: TOKEN, leased_until: "2026-10-10T12:03:00Z", status: "leased" };
+
+/** A queue that is empty for the first `emptyLooks` claims and then has job 7. */
+function queue(emptyLooks: number, log: { claims: unknown[][] }) {
+  return (...args: unknown[]) => {
+    log.claims.push(args);
+    return Promise.resolve(log.claims.length > emptyLooks ? [JOB] : []);
+  };
+}
+
+const post = (body: unknown, signal?: AbortSignal) =>
+  new Request("https://example.test/functions/v1/assistant-outbox", {
+    method: "POST",
+    body: typeof body === "string" ? body : JSON.stringify(body),
+    ...(signal ? { signal } : {}),
+  });
 
 Deno.test("claim: leased jobs come back with their context and lease", async () => {
   const { d, log } = deps();
@@ -70,19 +108,127 @@ Deno.test("claim: leased jobs come back with their context and lease", async () 
   assertEquals(log.claims, [["prod", DEFAULT_CLAIM_LIMIT, DEFAULT_LEASE_SECONDS]]);
 });
 
-Deno.test("claim: at the spend ceiling nothing is leased", async () => {
-  const { d, log } = deps({ spendAllowed: () => Promise.resolve(false) });
-  const res = await handleOutbox(post({ action: "claim", limit: 5 }), d);
-  assertEquals(await res.json(), { jobs: [], paused: "daily_limit_reached" });
+Deno.test("claim: at the spend ceiling nothing is leased, and a wait doesn't hold the answer", async () => {
+  const { c, fake } = clock();
+  const { d, log } = deps({ spendAllowed: () => Promise.resolve(false), ...fake });
+  const res = await handleOutbox(post({ action: "claim", limit: 5, wait_seconds: 50 }), d);
+  assertEquals(await res.json(), { jobs: [], paused: "daily_limit_reached", reason: "paused" });
   assertEquals(log.claims.length, 0);
+  assertEquals(c.pauses, []);
 });
 
-Deno.test("claim: limit and lease are bounded", async () => {
-  for (const body of [{ action: "claim", limit: 11 }, { action: "claim", lease_seconds: 5 }, { action: "claim", extra: 1 }]) {
+Deno.test("claim: limit, lease and wait are bounded", async () => {
+  for (
+    const body of [
+      { action: "claim", limit: 11 },
+      { action: "claim", lease_seconds: 5 },
+      { action: "claim", extra: 1 },
+      { action: "claim", wait_seconds: -1 },
+      { action: "claim", wait_seconds: CLAIM_WAIT_MAX_SECONDS + 1 },
+      { action: "claim", wait_seconds: 2.5 },
+      { action: "claim", wait_seconds: "10" },
+    ]
+  ) {
     const { d, log } = deps();
     assertEquals((await handleOutbox(post(body), d)).status, 400, JSON.stringify(body));
     assertEquals(log.claims.length, 0);
   }
+  for (const wait_seconds of [0, CLAIM_WAIT_MAX_SECONDS]) {
+    const { d } = deps(clock().fake);
+    assertEquals((await handleOutbox(post({ action: "claim", wait_seconds }), d)).status, 200, String(wait_seconds));
+  }
+});
+
+Deno.test("claim: without wait_seconds, an empty queue is one look and an empty answer (what the old relay sends)", async () => {
+  const { c, fake } = clock();
+  const log = { claims: [] as unknown[][] };
+  const { d } = deps({ claim: queue(Infinity, log), ...fake });
+  assertEquals(await (await handleOutbox(post({ action: "claim" }), d)).json(), { jobs: [], reason: "empty" });
+  assertEquals(log.claims.length, 1);
+  assertEquals(c.pauses, []);
+});
+
+Deno.test("claim: a job already queued goes out at once, whatever the wait", async () => {
+  const { c, fake } = clock();
+  const { d, log } = deps(fake);
+  const body = await (await handleOutbox(post({ action: "claim", wait_seconds: 50 }), d)).json();
+  assertEquals(body.jobs.map((j: { id: number }) => j.id), [7]);
+  assertEquals(log.claims.length, 1);
+  assertEquals(c.pauses, []);
+});
+
+Deno.test("claim: a job that arrives mid-wait goes out at the next look", async () => {
+  const { c, fake } = clock();
+  const log = { claims: [] as unknown[][] };
+  const { d } = deps({ claim: queue(3, log), ...fake });
+  const started = c.t;
+  const body = await (await handleOutbox(post({ action: "claim", wait_seconds: 50 }), d)).json();
+  assertEquals(body.jobs.map((j: { id: number }) => j.id), [7]);
+  assertEquals(log.claims.length, 4);
+  assertEquals(c.pauses, [CLAIM_POLL_MS, CLAIM_POLL_MS, CLAIM_POLL_MS]);
+  assertEquals(c.t - started, 3 * CLAIM_POLL_MS);
+});
+
+Deno.test("claim: an empty queue is answered when the wait is over, not before and not after", async () => {
+  const { c, fake } = clock();
+  const log = { claims: [] as unknown[][] };
+  const { d } = deps({ claim: queue(Infinity, log), ...fake });
+  const started = c.t;
+  assertEquals(await (await handleOutbox(post({ action: "claim", wait_seconds: 6 }), d)).json(), { jobs: [], reason: "empty" });
+  assertEquals(c.pauses, [2500, 2500, 1000]);
+  assertEquals(c.t - started, 6000);
+  assertEquals(log.claims.length, 4);
+  // A full wait is twenty looks at the queue, one RPC each.
+  const full = { claims: [] as unknown[][] };
+  await handleOutbox(post({ action: "claim", wait_seconds: CLAIM_WAIT_MAX_SECONDS }), deps({ claim: queue(Infinity, full), ...clock().fake }).d);
+  assertEquals(full.claims.length, CLAIM_WAIT_MAX_SECONDS * 1000 / CLAIM_POLL_MS + 1);
+});
+
+Deno.test("claim: a job found after waiting is held to the spend ceiling again, and goes back unspent if it's reached", async () => {
+  const { fake } = clock();
+  const log = { claims: [] as unknown[][] };
+  let checks = 0;
+  const { d, log: dl } = deps({ claim: queue(2, log), spendAllowed: () => Promise.resolve(++checks === 1), ...fake });
+  assertEquals(await (await handleOutbox(post({ action: "claim", wait_seconds: 50 }), d)).json(), { jobs: [], paused: "daily_limit_reached", reason: "paused" });
+  assertEquals(dl.defers, [["prod", 7, TOKEN, RELEASE_SECONDS, "paused"]]);
+  // No wait, no second check: the one before the claim is current.
+  const once = { n: 0 };
+  await handleOutbox(post({ action: "claim" }), deps({ spendAllowed: () => (once.n++, Promise.resolve(true)) }).d);
+  assertEquals(once.n, 1);
+});
+
+Deno.test("claim: a relay that hangs up mid-wait ends the wait; nothing more is claimed for it", async () => {
+  const { c, fake } = clock();
+  const hangUp = new AbortController();
+  const log = { claims: [] as unknown[][] };
+  const { d, log: dl } = deps({
+    claim: queue(Infinity, log),
+    now: fake.now,
+    sleep: (ms) => {
+      if (c.pauses.length === 1) hangUp.abort();
+      return fake.sleep(ms);
+    },
+  });
+  const res = await handleOutbox(post({ action: "claim", wait_seconds: 50 }, hangUp.signal), d);
+  assertEquals(await res.json(), { jobs: [], reason: "aborted" });
+  assertEquals(log.claims.length, 2);
+  assertEquals(dl.defers, []);
+});
+
+Deno.test("claim: a job leased while the relay hangs up goes back to the queue at once, its attempt unspent", async () => {
+  const hangUp = new AbortController();
+  const { d, log } = deps({
+    claim: (...args) => {
+      log.claims.push(args);
+      hangUp.abort();
+      return Promise.resolve([JOB]);
+    },
+    ...clock().fake,
+  });
+  const res = await handleOutbox(post({ action: "claim", wait_seconds: 50 }, hangUp.signal), d);
+  assertEquals(await res.json(), { jobs: [], reason: "aborted" });
+  assertEquals(log.defers, [["prod", 7, TOKEN, RELEASE_SECONDS, "relay_gone"]]);
+  assertEquals(log.fails, []);
 });
 
 Deno.test("fail: records the tokens spent, then returns the job to the queue", async () => {

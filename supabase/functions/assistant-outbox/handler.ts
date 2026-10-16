@@ -9,9 +9,17 @@ import { LIMIT_REACHED_ERROR, type TokenUsage } from "../_shared/assistant.ts";
  * Requests are signed per environment (_shared/relay-auth.ts), and the
  * signature decides which environment's queue is served.
  *
- *   {"action":"claim","limit":2,"lease_seconds":180}
+ *   {"action":"claim","limit":2,"lease_seconds":180,"wait_seconds":50}
  *     → {"jobs":[{id, lease_token, leased_until, job, message, history, facts, user, agent}]}
- *       At the environment's D-34 spend ceiling: {"jobs":[],"paused":"daily_limit_reached"}.
+ *       With nothing queued, a claim with wait_seconds looks at the queue
+ *       again every CLAIM_POLL_MS and answers as soon as a job is there, or
+ *       {"jobs":[],"reason":"empty"} when the wait is over (0, the default, is
+ *       one look). Long polling: a relay's idle hour is about 72 calls instead
+ *       of one every few seconds, and a message is picked up within seconds.
+ *       At the environment's D-34 spend ceiling, at once:
+ *       {"jobs":[],"paused":"daily_limit_reached","reason":"paused"}.
+ *       A relay that hangs up mid-wait (it's stopping) gets nothing more, and
+ *       a job leased for it after that goes back to the queue unspent.
  *   {"action":"fail","job_id":1,"lease_token":"…","error":"…","model":"…","usage":{…}}
  *     → {"ok":true|false}. A failed attempt still spent tokens, so usage is
  *       recorded; the job goes back to the queue until its attempts run out.
@@ -47,6 +55,37 @@ export interface OutboxDeps {
   defer: (env: RelayEnvironment, jobId: number, leaseToken: string, seconds: number, reason: string | null) => Promise<boolean>;
   recordAgent: (env: RelayEnvironment, userId: string, sandboxName: string, tokenHash: string) => Promise<string>;
   listAgents: (env: RelayEnvironment) => Promise<Array<{ user_id: string; sandbox_name: string }>>;
+  /** The clock and the pause between looks at the queue, for the tests; Date.now and a timer otherwise. */
+  now?: () => number;
+  sleep?: (ms: number, signal: AbortSignal) => Promise<void>;
+}
+
+/**
+ * The longest a claim waits for a job: well under the 150 seconds after
+ * which Supabase's gateway gives up on a request that hasn't answered.
+ */
+export const CLAIM_WAIT_MAX_SECONDS = 50;
+/**
+ * How often a waiting claim looks at the queue: one RPC each time, so a full
+ * wait is 20 of them. Waiting on I/O isn't CPU time, and a look that finds
+ * nothing costs a millisecond or so of it, far inside the 2-second limit.
+ */
+export const CLAIM_POLL_MS = 2_500;
+/** A job leased for a relay that has hung up is claimable again this soon, its attempt unspent. */
+export const RELEASE_SECONDS = 1;
+
+/** Resolves after ms, or as soon as signal aborts. */
+function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal.addEventListener("abort", done, { once: true });
+  });
 }
 
 const USAGE: JsonSchema = {
@@ -62,6 +101,7 @@ export const CLAIM_SCHEMA: JsonSchema = {
     action: { type: "string", enum: ["claim"] },
     limit: { type: "integer", minimum: 1, maximum: 10 },
     lease_seconds: { type: "integer", minimum: 30, maximum: 900 },
+    wait_seconds: { type: "integer", minimum: 0, maximum: CLAIM_WAIT_MAX_SECONDS },
   },
   required: ["action"],
   additionalProperties: false,
@@ -136,6 +176,81 @@ export async function jobRefusal(job: Record<string, unknown>, checks: RefusalCh
 export const DEFAULT_CLAIM_LIMIT = 2;
 export const DEFAULT_LEASE_SECONDS = 180;
 
+type HandedOut = { id: number; lease_token: string } & Record<string, unknown>;
+
+/**
+ * A claim, with its wait (see the top of the file). The spend ceiling is
+ * checked before the wait, and again before a job found after waiting goes
+ * out: a spend recorded meanwhile may have reached it.
+ */
+async function claim(req: Request, env: RelayEnvironment, body: Record<string, unknown>, deps: OutboxDeps): Promise<Record<string, unknown>> {
+  const paused = { jobs: [], paused: LIMIT_REACHED_ERROR, reason: "paused" };
+  if (!(await deps.spendAllowed(env))) return paused;
+  const limit = (body.limit as number | undefined) ?? DEFAULT_CLAIM_LIMIT;
+  const leaseSeconds = (body.lease_seconds as number | undefined) ?? DEFAULT_LEASE_SECONDS;
+  const now = deps.now ?? Date.now;
+  const sleep = deps.sleep ?? pause;
+  const started = now();
+  const deadline = started + ((body.wait_seconds as number | undefined) ?? 0) * 1000;
+  // The relay hung up: it's stopping. How soon the runtime notices is the runtime's.
+  const gone = () => req.signal.aborted;
+  const abandoned = async (jobs: HandedOut[], looks: number) => {
+    await release(env, jobs, "relay_gone", deps);
+    console.log("assistant claim abandoned by the relay", { env, waitedMs: now() - started, looks, released: jobs.map((j) => j.id) });
+    return { jobs: [], reason: "aborted" };
+  };
+  for (let looks = 0;; looks++) {
+    if (gone()) return abandoned([], looks);
+    const jobs = await handOut(env, await deps.claim(env, limit, leaseSeconds), deps);
+    if (gone()) return abandoned(jobs, looks + 1);
+    if (jobs.length > 0) {
+      if (looks > 0 && !(await deps.spendAllowed(env))) {
+        await release(env, jobs, "paused", deps);
+        return paused;
+      }
+      return { jobs };
+    }
+    const left = deadline - now();
+    if (left <= 0) return { jobs: [], reason: "empty" };
+    await sleep(Math.min(CLAIM_POLL_MS, left), req.signal);
+  }
+}
+
+/** Back to the queue at once, the attempt unspent (assistant_defer_job). */
+async function release(env: RelayEnvironment, jobs: HandedOut[], reason: string, deps: OutboxDeps): Promise<void> {
+  for (const job of jobs) {
+    await deps.defer(env, job.id, job.lease_token, RELEASE_SECONDS, reason).catch((e) => {
+      console.error("assistant job not released", { jobId: job.id, error: String(e) });
+      return false;
+    });
+  }
+}
+
+/** The leased jobs that can go out, each with its context; the others are dropped or failed here. */
+async function handOut(env: RelayEnvironment, leased: Record<string, unknown>[], deps: OutboxDeps): Promise<HandedOut[]> {
+  const jobs: HandedOut[] = [];
+  for (const job of leased) {
+    const id = job.id as number;
+    const leaseToken = job.lease_token as string;
+    try {
+      const refusal = await deps.refusal(job);
+      if (refusal) {
+        console.log("assistant job dropped", { jobId: id, kind: job.kind, reason: refusal });
+        await deps.drop(env, id, leaseToken, refusal);
+        continue;
+      }
+      jobs.push({ id, lease_token: leaseToken, leased_until: job.leased_until, ...(await deps.context(id)) });
+    } catch (e) {
+      // One job's checks or context failing mustn't strand the rest of the
+      // batch until their leases run out. This one goes back now, its attempt
+      // spent, so a job whose context never loads still ends.
+      console.error("assistant job not handed out", { jobId: id, error: String(e) });
+      await deps.fail(env, id, leaseToken, `context_error: ${String(e)}`.slice(0, 2000)).catch(() => false);
+    }
+  }
+  return jobs;
+}
+
 export async function handleOutbox(req: Request, deps: OutboxDeps): Promise<Response> {
   const reply = (status: number, body: unknown) =>
     new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
@@ -155,33 +270,7 @@ export async function handleOutbox(req: Request, deps: OutboxDeps): Promise<Resp
   if (body?.action === "claim") {
     const invalid = validate(CLAIM_SCHEMA, body, "body");
     if (invalid) return reply(400, { error: "invalid_input", detail: invalid });
-    if (!(await deps.spendAllowed(env))) return reply(200, { jobs: [], paused: LIMIT_REACHED_ERROR });
-    const leased = await deps.claim(
-      env,
-      (body.limit as number | undefined) ?? DEFAULT_CLAIM_LIMIT,
-      (body.lease_seconds as number | undefined) ?? DEFAULT_LEASE_SECONDS,
-    );
-    const jobs = [];
-    for (const job of leased) {
-      const id = job.id as number;
-      const leaseToken = job.lease_token as string;
-      try {
-        const refusal = await deps.refusal(job);
-        if (refusal) {
-          console.log("assistant job dropped", { jobId: id, kind: job.kind, reason: refusal });
-          await deps.drop(env, id, leaseToken, refusal);
-          continue;
-        }
-        jobs.push({ id, lease_token: leaseToken, leased_until: job.leased_until, ...(await deps.context(id)) });
-      } catch (e) {
-        // One job's checks or context failing mustn't strand the rest of the
-        // batch until their leases run out. This one goes back now, its attempt
-        // spent, so a job whose context never loads still ends.
-        console.error("assistant job not handed out", { jobId: id, error: String(e) });
-        await deps.fail(env, id, leaseToken, `context_error: ${String(e)}`.slice(0, 2000)).catch(() => false);
-      }
-    }
-    return reply(200, { jobs });
+    return reply(200, await claim(req, env, body, deps));
   }
 
   if (body?.action === "fail") {
