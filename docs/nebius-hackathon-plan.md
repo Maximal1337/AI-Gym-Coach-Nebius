@@ -47,6 +47,7 @@ How to use this document:
 - 2026-10-13, on the VPS: NH-22 is done — in a sandbox Nemotron Super answers through Hermes with thinking off and uses the Notch tools over MCP, with both keys held by the gateway. It took five more changes: the network rules written into the global sandbox policy, a second patch to Hermes, a link for the CA bundle, Token Factory as a provider entry of our own in Hermes' config, and sandbox names within OpenShell's 19 characters.
 - 2026-10-14, on the VPS: NH-23 — web search through Tavily works, with `web_extract` out of the agent's reach and refused by the policy; the agent links its sources only when asked, which stays open. On the way, two fixes: the coach's `SOUL.md` had never reached Hermes' prompt (Hermes reads it beside its state database), and the disabled `web` toolset had taken `web_search` away from the model.
 - 2026-10-14, on the VPS: NH-24 is done — the dev relay, with a static map, ran test account A's messages from `assistant-send` through A's sandbox to the reply in `assistant_messages` in 5 to 10 seconds, the plan question through the Notch tools and the follow-up with the conversation's history. The relay now drops the citation markers the model sometimes writes. Sources still reach the app only when the agent links them, and it didn't: the relay can take them from Hermes' own search results instead, a day of work after the spike.
+- 2026-10-16, on the VPS: NH-29 is done — the dev relay runs the sandbox manager. Test account A's first message created its sandbox, which stopped after 10 idle minutes and started again for the next message with the skill the agent had saved still on its volume; a delete leaves nothing behind, the orphan sweep cleans up on its own, and the next message creates the sandbox again. A sandbox keeps the image it was created with; how to move existing ones to a new image is in the runbook. Both relays now wait longer between empty claims, to save Edge Function calls, until the claim waits for a job itself.
 
 **Blocked, waiting on us:** everything in the first-run checklist below. NH-06 is urgent: the repository stays public (O-07), and the old instant-sign-in addresses in its history keep working in production until NH-06 is rolled out.
 
@@ -391,11 +392,11 @@ Invariants:
 | M9 | Submission | 2026-10-26 (hard deadline 2026-10-30 10:00 PT) | @dorhaimbob-web; README together | NH-90 … NH-93 | 9 |
 | M10 | Move and judging support | 2026-11-15 → 2026-12-15 | Both | NH-95, NH-96 | 3 |
 
-**Scope:** **179 points** in total, 53 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-22, NH-24, NH-28, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **126 remaining ≈ 44 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
+**Scope:** **179 points** in total, 56 done (M1, NH-04, NH-05, NH-07, NH-08, NH-20, NH-21, NH-22, NH-24, NH-28, NH-29, NH-31, NH-37, NH-38, NH-41, NH-50, NH-57, NH-60, NH-62) — **123 remaining ≈ 43 person-days**; NH-42…NH-44 and NH-51…NH-53 are code-complete and wait only for a live smoke test after deploy on the §8 scale.
 
 **Capacity versus scope — decided 2026-09-27.** 20–30 hours a week each over four weeks is about 20–30 person-days. The §8 scale assumes hand-written code; Claude writes most of the code, scripts and manifests and runs the VPS work over SSH, so the real constraint is the team's time for accounts, reviews, device testing, TestFlight and the video. **The team commits to the full plan without cuts and accepts the risk of not finishing everything.**
 
-**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 116 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
+**Minimum viable submission** (reference only — what the submission can't do without): everything except NH-56, NH-57, NH-65 and NH-71, with NH-35 cut down to billing alerts, an uptime ping and the per-sandbox RSS watchdog. That's **167 points, 113 remaining.** It still satisfies every mandatory rule, the track's judging hint and the Tavily bonus; without NH-71, facts are listed and deleted from a section of the chat screen.
 
 Never cut: NH-05, NH-06, NH-26, NH-31, NH-32, NH-38, NH-44, NH-66. Without NH-44 and NH-66 the submission is a chatbot, which the track's judging hint rules out (D-21); without NH-26 isolation is unverified; without NH-38 the budget isn't bounded.
 
@@ -613,14 +614,16 @@ Done on the dev gateway on 2026-10-14, with the real outbox and delivery of the 
 - [x] A relay polls a mock outbox, calls a sandbox's Hermes API (`/v1/chat/completions`) with that sandbox's key, and posts the reply to a mock endpoint — the dev relay with `RELAY_SANDBOXES=static` and one entry for test account A: it claims from `assistant-outbox`, calls A's Hermes through the gateway with that sandbox's key, and delivers through `assistant-deliver`
 - [x] Full round trip works for one test user — three messages from A, sent the way the app sends them, each answered in `assistant_messages` 5 to 10 seconds later: the plan question through the Notch tools (`get_active_plans`), the follow-up with the conversation's history (it knew what "it" was). Three turns, four model calls, 23,700 input and 370 output tokens
 
-#### NH-29 · Prototype per-user sandbox provisioning
+#### NH-29 · Prototype per-user sandbox provisioning ✅
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Agent, Area/Security, Type/Spike · **Blocked by:** NH-21
 
-- [ ] A sandbox for a given user is created programmatically from the Hermes image with that user's config: persona, tool whitelist (D-29), `notch-tools` MCP with the user's token injected by the gateway
-- [ ] Stop and start keep the user's memory and skills on the sandbox's own volume
-- [ ] Destroy removes the sandbox, its volume and its credentials
-- [ ] Idempotent: creating an existing user's sandbox twice changes nothing
-- [ ] The relay reaches its gateway and the sandboxes' Hermes ports. Written 2026-09-30 from the OpenShell docs and chart (`services/relay/src/gateway.ts`, 4 tests including a real TLS exchange):
+Done on the dev gateway on 2026-10-16, with the dev relay switched to the sandbox manager (`697f099`) and test account A's messages sent the way the app sends them.
+
+- [x] A sandbox for a given user is created programmatically from the Hermes image with that user's config: persona, tool whitelist (D-29), `notch-tools` MCP with the user's token injected by the gateway — A's first message made the manager record a new tool token, create the user's tools provider and the sandbox from the gateway's default image; the reply came 52 seconds after the message (27 s of them the create, then Hermes' start while the job waited in the queue). A Notch tool answered with the new token. The tools the model gets are NH-23's check and again NH-26's
+- [x] Stop and start keep the user's memory and skills on the sandbox's own volume — the manager stopped the sandbox after 10 idle minutes and started it for the next message, answered 25 seconds after it. A skill the agent had saved before the stop came back after it, in a session with no history (`skills_list`, `skill_view`), and Hermes' sessions were still there. A fact the user had told before the stop was answered after it; that comes from the conversation the relay sends with every turn, out of Supabase
+- [x] Destroy removes the sandbox, its volume and its credentials — the manager's two CLI calls (`sandbox delete`, `provider delete`) leave no Sandbox object, pod, PVC, PV or host directory, and no provider. The orphan sweep did the same on its own with a sandbox that had no mapping row: the sandbox at the first sweep, its provider at the second (NH-56)
+- [x] Idempotent: creating an existing user's sandbox twice changes nothing — the next messages found the sandbox by its name and started it rather than creating one; after a delete, the next message created it again with a new tool token, and the tools worked
+- [x] The relay reaches its gateway and the sandboxes' Hermes ports — since NH-21 and NH-24, and now for sandboxes the manager creates. Written 2026-09-30 from the OpenShell docs and chart (`services/relay/src/gateway.ts`, 4 tests including a real TLS exchange):
   - **No token.** On Kubernetes a user call to the gateway carries an OIDC token or none. We run no identity provider, so user calls come without one (`allowUnauthenticatedUsers`), but TLS still requires the chart's client certificate. The relay mounts it from `openshell-client-tls`; only its own namespace can reach the gateway.
   - **CLI registration.** At startup the relay registers its CLI with `openshell gateway add <endpoint> --local`.
   - **Service URLs.** A sandbox's service URL (`default--<sandbox>.openshell.localhost`, covered by the gateway certificate) goes to the gateway's address, with that hostname as SNI and Host.
@@ -795,6 +798,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [x] Hermes' own memory keeps coaching know-how, not personal facts about the user: a fact deleted in "What the coach remembers" (NH-71) must stop being used, and our delete can't reach inside Hermes' memory. Checked in NH-73: delete a fact, and the next reply doesn't use it — Hermes' USER.md profile store is off (`user_profile_enabled: false`), and SOUL.md keeps personal facts out of MEMORY.md; the live check stays in NH-73
 - [x] Tavily only for knowledge questions (nutrition labels, exercise substitutions, equipment), no personal data in queries, sources cited — SOUL.md; the agent cites markdown links, and the relay turns each into plain text plus a tappable source, since the chat renders only bold
 - [x] Medical safety rule preserved: pain or injury → stop the exercise and consult a professional
+- [ ] Rule 1 drawn more narrowly, decided with the partner: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't. In the spike the agent refused "Is creatine safe to take every day, and what dose do studies use?" as personal supplement advice, without a search, in 2 of 4 turns with a conversation before it (NH-24). The same review takes rules 6 and 7: in NH-29 the agent said it had added the user's facts and that it would save a skill, and called no tool either time
 - [ ] Checked in a real sandbox: the rules hold against the scripted cases in NH-73
 
 ### M5 — Channel, relay and sandbox lifecycle · target 2026-10-14
@@ -846,13 +850,13 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [x] A stopped sandbox is started on demand; idle sandboxes stop after 10 minutes
 - [x] At most 4 running sandboxes in `notch-prod` and 2 in `notch-dev`; extra work waits in the queue — never shared (D-26) — a job that doesn't fit is deferred with its attempt unspent (`assistant_defer_job`, `not_before`), the user's later messages wait behind it, and the least recently used sandbox that isn't answering is stopped to make room; decisions run one at a time, so two jobs can't take the last slot
 - [x] Idempotent: a retry never creates a second sandbox — the name is derived from the user id
-- [ ] Switched on in `notch-dev`, then `notch-prod` (`RELAY_SANDBOXES=manager`) once the spike settles the CLI's JSON, the relay's access to its gateway and to a sandbox's exposed port (NH-29); the steps are in `deploy/README.md`
+- [ ] Switched on in `notch-dev`, then `notch-prod` (`RELAY_SANDBOXES=manager`) once the spike settles the CLI's JSON, the relay's access to its gateway and to a sandbox's exposed port (NH-29); the steps are in `deploy/README.md` — on in `notch-dev` since 2026-10-16 (`697f099`); `notch-prod` after a go in NH-27
 
 #### NH-56 · Account deletion cleanup
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Backend, Area/Agent, Type/Feature · **Blocked by:** NH-55
 
 - [x] Deleting an account destroys the user's sandbox, its volume and its credentials — the sandbox manager (NH-55) destroys every sandbox that no longer has an `assistant_agents` row — a sweep every 15 minutes, at most 3 sandboxes per sweep, then their tool providers; a sandbox answering a message is never touched
-- [ ] Checked on the cluster: a deleted test account's sandbox and provider are gone within two sweeps
+- [ ] Checked on the cluster: a deleted test account's sandbox and provider are gone within two sweeps — the sweep itself checked on 2026-10-16 with a sandbox that had no `assistant_agents` row, which is what an account deletion leaves: the dev relay deleted the sandbox and its volume at the first sweep and its provider at the second. Left: a real account deletion
 - [x] The user's database rows are removed by cascade (`assistant_messages` via NH-50, `user_facts` and `user_memory_state` via NH-60) — also jobs, actions and the mapping; tested, including the QA "fresh" reset
 - [x] `assistant_agents` mapping row removed
 
@@ -973,6 +977,7 @@ Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testfl
   - sign in
   - Coach chat
   - Tavily answer with sources
+  - a sports-nutrition question after another turn — "Is creatine safe to take every day, and what dose do studies use?" after a question about the plan — is searched and answered with sources, not refused as medical advice (NH-45)
   - personalized reply using facts
   - a write tool changes the plan, and undo reverts it
   - delete a fact, and the next reply doesn't use it — a known limit, left as is on 2026-10-06: the agent sees the last 20 chat messages, so a fact the chat itself mentioned (for example in the answer to "What do you know about me?") can still come back from that history after it's deleted
@@ -1049,7 +1054,7 @@ The weekly checklist and the fixed dates are in [`submission.md`](./submission.m
 
 | Risk | Impact | Mitigation | Related |
 |---|---|---|---|
-| Scope exceeds team capacity (126 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
+| Scope exceeds team capacity (123 remaining points against ~20–30 person-days) | Parts of the plan unfinished at the deadline | Accepted by the team on 2026-09-27. Claude writes the code, scripts and manifests and runs the VPS work; the minimum line in §9 shows what the submission can't do without | §9 |
 | OpenShell and Hermes are alpha; the Kubernetes path is less traveled than NemoClaw's host installer | Spike slips, runtime unstable | NH-21 first thing after the VPS; versions pinned; go/no-go on Oct 4 | NH-21, NH-27 |
 | 2 vCPU / 8 GiB doesn't hold the platform plus sandboxes | Long queues | Measured in NH-25 (O-12); shorter idle timeout, then a temporary 4/16 within the credits; never shared spaces | NH-25, D-31 |
 | Hermes gateway memory grows over hours (upstream issue) | OOM, sandboxes killed | Idle sandboxes stop after 10 minutes; per-sandbox RSS watchdog | NH-25, NH-35 |

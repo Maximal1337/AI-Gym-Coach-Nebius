@@ -275,8 +275,44 @@ Settled in the spike (NH-21): the service URL's form; that `openshell gateway
 add --local` accepts the copied bundle, in a configuration directory the relay
 made itself (on a mounted one it exits 1, so the volume is mounted one level
 up); that `sandbox create --detach` returns only once the sandbox is ready, 25
-seconds with the image on the node. Still open: how an image update reaches
-sandboxes that already exist.
+seconds with the image on the node.
+
+**A new sandbox image for the sandboxes that exist** (NH-29). CI moves the
+gateway's default image on every push to `main`, but that reaches only the
+sandboxes created after it: the gateway writes the image into each sandbox's
+`Sandbox` object when it creates it, and a stop and start — the manager's idle
+stop, then the next message — reuse that object. To move the existing ones,
+after a change to the profile, the start script or the patches to Hermes
+(all in the image), point their `Sandbox` objects at the gateway's current
+default image (dev shown):
+
+```bash
+ns=notch-dev
+img=$(kubectl -n $ns get configmap openshell-config -o jsonpath='{.data.gateway\.toml}' \
+  | sed -n 's/^ *default_image *= *"\(.*\)"$/\1/p')
+kubectl -n $ns get sandboxes.agents.x-k8s.io -l openshell.ai/managed-by=openshell \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}' | grep "^default--$ns-" |
+while read -r s; do
+  kubectl -n $ns patch sandboxes.agents.x-k8s.io "$s" --type=json -p "[
+    {\"op\":\"test\",\"path\":\"/spec/podTemplate/spec/containers/0/name\",\"value\":\"agent\"},
+    {\"op\":\"test\",\"path\":\"/spec/podTemplate/spec/initContainers/1/name\",\"value\":\"workspace-init\"},
+    {\"op\":\"replace\",\"path\":\"/spec/podTemplate/spec/containers/0/image\",\"value\":\"$img\"},
+    {\"op\":\"replace\",\"path\":\"/spec/podTemplate/spec/initContainers/1/image\",\"value\":\"$img\"}]"
+done
+```
+
+Each sandbox takes the new image at its next start, volume and all: a stopped
+one when its user next writes, a running one after its next idle stop. The
+patch doesn't restart a running sandbox, so no turn is cut short, and it
+survives a restart of the gateway. The two `test` operations make the patch
+refuse a sandbox whose containers aren't laid out the way OpenShell 0.1.2 lays
+them out (the agent first; the workspace seed second among the init
+containers) — check that layout again after an OpenShell upgrade. The volume
+keeps Hermes' memory, skills and sessions; the profile comes from the image
+and is installed again at every start. The other way, deleting a sandbox,
+loses its volume: the manager creates it again from the current image on the
+next message, and the facts and the conversation, which are in Supabase, stay.
+Checked on dev on 2026-10-16.
 
 ## Backups and restore (NH-34)
 
