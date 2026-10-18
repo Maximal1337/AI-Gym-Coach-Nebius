@@ -55,6 +55,12 @@ test("readTurn: a session that doesn't answer is given up after the timeout (abo
   const hung = ((_url: string, init: RequestInit) =>
     new Promise((_resolve, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason)))) as unknown as typeof fetch;
   const started = Date.now();
-  await assert.rejects(readTurn(ENDPOINT, "api-1", { fetch: hung, timeoutMs: 50 }), (e: unknown) => e instanceof Error && e.name === "TimeoutError");
+  // AbortSignal.timeout's timer doesn't hold the event loop open; in the relay the poll loop does.
+  const alive = setTimeout(() => {}, 5_000);
+  try {
+    await assert.rejects(readTurn(ENDPOINT, "api-1", { fetch: hung, timeoutMs: 50 }), (e: unknown) => e instanceof Error && e.name === "TimeoutError");
+  } finally {
+    clearTimeout(alive);
+  }
   assert.ok(Date.now() - started < 1_000);
 });
