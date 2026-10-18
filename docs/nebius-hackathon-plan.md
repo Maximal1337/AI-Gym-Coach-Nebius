@@ -193,7 +193,7 @@ As of 2026-09-27:
 |---|---|---|---|---|
 | D-01 | Compete in the **Personal AI** track | Confirmed | 2026-09-17 | A private assistant with persistent memory matches the track |
 | D-02 | Agent runtime: NanoClaw | **Superseded by D-25** | 2026-09-27 | NanoClaw isn't in the hackathon's materials; the track names OpenShell, Hermes Agent and NemoClaw |
-| D-03 | Model: **NVIDIA Nemotron via Nebius Token Factory**, routed per purpose — Super for interactive turns with `reasoning_effort: "none"`, Ultra with thinking on for the nightly memory job, Nano/Lightning for cheap classification. Inference goes through OpenShell's provider (D-28) | Confirmed; routing proposed | 2026-09-23 | Hackathon requirement. Thinking must be off on tool-calling turns: a reasoning model can spend `max_tokens` on thinking and return empty `content` |
+| D-03 | Model: **NVIDIA Nemotron via Nebius Token Factory**, routed per purpose — Super for interactive turns with `reasoning_effort: "low"` (until 2026-10-18 `"none"`), Ultra with thinking on for the nightly memory job, Nano/Lightning for cheap classification. Inference goes through OpenShell's provider (D-28) | Confirmed; routing proposed; **`low` Proposed** on 2026-10-18 | 2026-09-23 | Hackathon requirement. No more than a little thinking on tool-calling turns: a reasoning model can spend `max_tokens` on thinking and return empty `content`. NH-25 measured why not none: with thinking off, a turn that came after an earlier exchange called the tool it needed in 6 of 16 — it promised to check and stopped, claimed an undo it never made, gave training numbers from nowhere — and with `low` in 16 of 16; across 160 turns with `low`, none came back empty |
 | D-04 | Web search: **Tavily**, search only | Confirmed | 2026-09-17 | Bonus prize; extract is an exfiltration risk, so `web_extract` is disabled or blocked by egress policy (NH-23) |
 | D-05 | **Keep Supabase** (Postgres, Auth, Edge Functions), the Fly.io agent service and Vercel; full infra migration deferred | Confirmed | 2026-09-17 | Migration cost doesn't fit the hackathon timeline |
 | D-06 | Auth stays on **Supabase Auth**; no custom auth service | Confirmed | 2026-09-17 | Ready-made and already in production |
@@ -245,7 +245,7 @@ As of 2026-09-27:
 |---|---|---|
 | O-01 | Which member is "A"? | @Maximal1337 (D-24) |
 | O-03 | License and copyright holder | MIT, "The Notch authors" — `LICENSE` stays as is |
-| O-04 | Spike go/no-go thresholds | p95 reply ≤ 15 s; sandbox cold start ≤ 60 s; ≤ $0.05 per 10-turn conversation; Nemotron calls tools reliably through Hermes; everything fits in 8 GiB with 4 running prod sandboxes and 2 dev |
+| O-04 | Spike go/no-go thresholds | p95 reply ≤ 15 s; sandbox cold start ≤ 60 s; ≤ $0.10 per 10-turn conversation (**Proposed** on 2026-10-18; it was $0.05); Nemotron calls tools reliably through Hermes; everything fits in 8 GiB with 4 running prod sandboxes and 2 dev. The price is a check on the routing, not the spend's bound: D-34's ceilings bound that whatever a turn costs — prod's $1 a day is about 200 turns at the measured half a cent each. A turn that calls its tools as it should came to $0.045–0.055 per 10 in NH-25, at $0.05 itself |
 | O-05 | How the runtime reaches Token Factory | Obsolete: OpenShell's OpenAI-compatible provider (D-28) |
 | O-06 | Owner per milestone | See §9 |
 | O-07 | The repository has been public since 2026-09-16 with personal data in its history | It stays public; the exposure is accepted. `app-store-connect-form.md` stays where it is — the creator's call. NH-06 rollout is urgent so the old instant-sign-in addresses stop working |
@@ -341,7 +341,7 @@ Invariants:
 
 **Projects:**
 - **Notch × Nebius Hackathon** — target date 2026-10-30; milestones M0–M10 (§9, M8 cancelled); issues NH-01 … NH-96 (§10).
-- **Notch — Post-hackathon** — backlog PH-01 … PH-16 (§12).
+- **Notch — Post-hackathon** — backlog PH-01 … PH-17 (§12).
 
 **Label groups:**
 - `Area`: Backend (Supabase), Agent (Hermes/OpenShell), Mobile, Infra (Nebius, k3s, Argo CD), Memory, Security, Docs, QA
@@ -645,7 +645,7 @@ while sleep 60; do echo "$(date -u +%H:%M) $(sudo /usr/local/lib/notch-ops/healt
 
 The write tools run for real (one exercise changed, then undone), so only a test account. Raise the relay's `SANDBOX_IDLE_MINUTES` above the run's length first, or its idle sweep stops the sandbox mid-run. The base platform's RAM: `free -m` and the health report's memory lines with no sandbox running.
 
-- [ ] Tools called reliably (O-04), with the profile's rules 6 and 7 from NH-45: in NH-29 the agent said it had added the user's facts and that it would save a skill, and on 2026-10-16 it twice promised to "check your active plans" and ended the turn, by its length without a tool call. About 10 questions that need a tool and 3 that don't; from the session history, the share of turns that needed a tool and called one, and the share that promised an action without one; for the current profile, one with rules 6 and 7 made stricter, and `reasoning_effort: "low"` for comparison
+- [x] Tools called reliably (O-04), with the profile's rules 6 and 7 from NH-45: in NH-29 the agent said it had added the user's facts and that it would save a skill, and on 2026-10-16 it twice promised to "check your active plans" and ended the turn, by its length without a tool call. About 10 questions that need a tool and 3 that don't; from the session history, the share of turns that needed a tool and called one, and the share that promised an action without one; for the current profile, one with rules 6 and 7 made stricter, and `reasoning_effort: "low"` for comparison — 2026-10-17/18: without history 36 of 37 to 36 of 36 for every variant; with an earlier exchange 6 of 16 with the current profile, 5 with rules 6 and 7 made stricter, 7 with a line in the relay's prompt, 13 with a safety net in the relay, 16 of 16 with `reasoning_effort: "low"` and 16 of 16 with the Hermes session continued (PH-17). `low` is D-03's proposed change
 - [x] p50/p95 reply latency, and cold start of a stopped sandbox — 2026-10-18: turns p50 4.4 s, p95 5.4 s; a start 17.4 to 18.8 s to the first reply in 9 of 10, one 151 s (the supervisor's reconnect, OpenShell 0.1.2)
 - [x] Input/output tokens per turn and cost per 10-turn conversation at the routing from D-03 — $0.0453 per 10 turns with thinking off, $0.0553 with `reasoning_effort: "low"`
 - [x] RAM of the base platform and per sandbox, idle and during a heavy turn; O-12 answered with 4 prod + 2 dev sandboxes running — six sandboxes in dev, three with turns at once: 3.7 GiB used, 4.2 GiB available; a sandbox 215 MiB fresh to 300 after a day, +35 MiB in a turn, 16 MiB for its supervisor
@@ -1097,6 +1097,7 @@ Linear project **Notch — Post-hackathon**.
 | PH-14 | Sandbox pre-warm when a workout starts; gated rollout of `assistant_workout` (was NH-82) | Medium |
 | PH-15 | Separate dev and prod hosts, or promote prod by release tag instead of tracking `main` | Medium |
 | PH-16 | Capacity plan for real users: sandbox density, multi-node cluster, cost per active user | High |
+| PH-17 | Continue the user's Hermes session (`X-Hermes-Session-Id`) instead of sending the conversation again as text. In NH-25 it had the tools called in 16 of 16 follow-ups with thinking off, at about twice a text history's tokens. It needs a new session whenever the user deletes facts or messages (D-30: what they delete must stop mattering, and the session would still hold it), and the text history whenever the session is gone (Hermes answers 404 for it) | Medium |
 
 ---
 

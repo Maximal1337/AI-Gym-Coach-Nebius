@@ -20,11 +20,15 @@ agent links its sources only when asked (below), NH-24, a test account's
 messages through the dev relay to its sandbox and back, and NH-29: the dev
 relay runs the sandbox manager, which creates, stops, starts and deletes the
 sandboxes itself. Since the same day both relays long-poll the outbox: a
-claim waits up to 50 s for a job. Item 7, the measurements, is under way:
-the tool check, turns, cold starts and O-12 were measured on 2026-10-17 and
-10-18 (below), and the soak runs overnight into 10-19. For the soak, dev's
-`SANDBOX_IDLE_MINUTES` is 1440; it goes back to the default of 10 the
-morning after.
+claim waits up to 50 s for a job. Item 7, the measurements, is done but
+the soak, which runs overnight into 10-19 (dev's `SANDBOX_IDLE_MINUTES` is
+1440 for it). The morning after, one push to `main` brings the default of 10
+back and the branch `spike/relay-fixes` in: a little thinking on interactive
+turns (deviation 16, proposed), the pages a turn searched as its reply's
+sources, a three-minute wait for a starting Hermes, sandboxes kept running
+for the demo and judge accounts, and the gateway setup script. The prod
+gateway has had the global policy and the three profiles since 2026-10-18;
+its providers and the manager wait for prod's day.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -189,8 +193,9 @@ soak's question.
   follow-up in the same way; on its own it was searched and answered 6 of 6
   times. The profile's rule against medical advice is read too widely; the
   decision is in Next steps (NH-45).
-- **Tools aren't called reliably once there is a conversation before the
-  message** — O-04's "Nemotron calls tools reliably through Hermes", so a
+- **Tools weren't called reliably once there was a conversation before the
+  message; `reasoning_effort: "low"` fixes it** (deviation 16, proposed, on
+  `main` after the soak) — O-04's "Nemotron calls tools reliably through Hermes", so a
   go/no-go question. Measured in item 7 (2026-10-17 and 10-18) on test
   account A, seeded with the demo seed's plan and two weeks of workouts, with
   the relay's own prompt, from each turn's session history. Without history
@@ -226,14 +231,44 @@ soak's question.
   all of it, and costs about the same as the safety net: in the follow-up
   turns $0.049 per 10 against $0.048, p95 8.3 s; in `bench turns` p95 13.2 s
   and $0.0553 per 10 turns, over O-04's $0.05 (with thinking off: 5.4 s,
-  $0.0453). Choosing between them, or both, changes D-03 or adds to the
-  relay: item 9's decision.
+  $0.0453).
+
+  The history itself, tried on test account B's sandbox (seeded the same
+  way) the same day, thinking off — two-turn conversations, the second turn
+  judged:
+
+  | 20 conversations each | Tool called, of 16 | Claimed an action it didn't take | Numbers with no tool | Undo done | p95 | $ per 10 second turns |
+  |---|---|---|---|---|---|---|
+  | The history as text, as the relay sends it | 8 | 4 | 4 | 0 of 4 | 4.0 s | 0.033 |
+  | The same, each earlier reply marked with the tools behind it | 8 | 4 | 5 | 0 of 4 | 3.6 s | 0.033 |
+  | The Hermes session continued (`X-Hermes-Session-Id`) | 16 | 0 | 0 | 4 of 4 | 5.0 s | 0.055 |
+
+  Hermes' API takes no tool calls in the history a client sends — only the
+  text of user and assistant messages — so the closest is the marked text,
+  which didn't help. The session holds the real calls and results, and works,
+  but over `bench turns`' nine messages it cost about twice a text history
+  ($0.089–0.092 per 10 against $0.037–0.044), Hermes' own pruning of old tool
+  results didn't change that, and it needs a new session whenever the user
+  deletes facts or messages (D-30). Decided on 2026-10-18: `low`; no safety
+  net; the session to the backlog (PH-17).
+
+  `low` checked on B's sandbox the same evening: item 7's whole tool check
+  called a tool in 40 of 40 turns that needed one, and in 16 of 16 after an
+  earlier exchange, with no promise, claim or invented number; `bench turns`
+  three times: $0.0497, $0.0521 and $0.0481 per 10 turns, p95 5.0 to 10.0 s;
+  three sandboxes with turns at once: p50 3.5 s, p95 8.6 s (one sandbox's
+  14.6 s), memory never below 4.5 GiB available. None of 160 turns came back
+  empty. Its price is O-04's $0.05 itself — hence $0.10 (deviation 17,
+  proposed).
 - One start in seven or so waits about two minutes. 2 of 15 starts and
   creates on 2026-10-18 took 151 s and 159 s instead of 18 s and 26 s: the
   sandbox's supervisor failed its first connection to the gateway and tried
   again 2 min 16 s later (OpenShell 0.1.2). That is over O-04's 60 s, and
   over the relay's 120 s wait for a starting Hermes, after which the
-  message's attempt fails and goes back to the queue.
+  message's attempt fails and goes back to the queue — three minutes in the
+  branch. Two creates that evening failed outright and were rolled back by
+  OpenShell ("timed out waiting for gated workload Pod", then "sandbox not
+  found"); the next one worked.
 - Asked outright to use its skill tool, the agent saved a skill at the sixth
   attempt (item 6): Hermes refused five descriptions longer than 60
   characters, and each retry was another model call (NH-45).
@@ -279,6 +314,8 @@ Decisions taken along the way, each with its reason and where it lives.
 | 13 | NH-23: `web` among Hermes' disabled toolsets, to keep `web_extract` out | `web` is no longer disabled; only `search` (`web_search` alone) is enabled for the API server, and the policy refuses Tavily's `/extract` | A disabled toolset's tools are taken away from every session at the end, and `web` holds `web_search` too: the model never got a search tool at all | `b21c26f` |
 | 14 | NH-54: the relay claims again 2 s after an empty claim | **Closed on 2026-10-16 by 15.** Until then an empty claim waited 10 s in dev and 60 s in prod before the next one (`RELAY_IDLE_POLL_MS`) | Every claim is an Edge Function call: at 2 s the two relays made about 86,000 a day, against the 500,000 a month of the test project's free plan. A message waited up to 10 s in dev before it was claimed | `697f099` |
 | 15 | NH-52, NH-54: a claim answers at once, and the relay claims again 2 s after an empty one | Long polling. A claim takes `wait_seconds`, 0 to 50 (0, the default, is one look, as before); `assistant-outbox` looks at the queue every 2.5 s and answers as soon as a job is there, with `reason: "empty"` when the wait is over, and at once with `reason: "paused"` at the spend ceiling. The relay asks for 50 s and gives the claim 65 s; after an empty answer at the deadline it claims again at once, after a fast one (paused, or under 5 s) or an error it waits `RELAY_IDLE_POLL_MS`, 30 s, growing to a minute as errors repeat. A stopping relay lets a waiting claim come back and hands a job it brings back to the queue unspent | Deviation 14 traded calls for delay; a claim that waits saves both: about 72 calls an hour per idle relay, and a message is claimed at the function's next look. A full wait is about 20 looks, some 20 to 40 ms of the 2 s CPU limit. The relay doesn't cut a claim short because the hosted runtime doesn't tell the function the request is gone (`req.signal` didn't fire in a test on 2026-10-16), and the function would lease a job that arrives after to nobody | `3b948f6`, `8746cc8` |
+| 16 | D-03: no thinking on interactive turns, `reasoning_effort: "none"` | `"low"`, **Proposed** (the plan's D-03) | With thinking off, a turn after an earlier exchange called the tool it needed in 6 of 16 — it promised and stopped, claimed undos it never made, gave numbers from nowhere; with low, 16 of 16, none of 160 turns empty, p95 within 15 s | `95f5465`, on `main` after the soak |
+| 17 | O-04: ≤ $0.05 per 10-turn conversation | ≤ $0.10, **Proposed** (the plan's O-04) | D-34's ceilings bound the spend whatever a turn costs — prod's $1 a day is about 200 turns. A conversation whose turns call their tools came to $0.045–0.055 per 10 | — |
 
 Smaller ones, in the same commits: the policy opens `/opt/hermes` read-only
 next to `/opt/notch`, because Hermes runs from there; the relay builds a
@@ -292,8 +329,9 @@ off in the profile.
 Owners: **Max** (@Maximal1337), **partner** (@dorhaimbob-web), **Claude**
 (runs the VPS work over SSH and writes the changes). Dates in *italics* are
 proposed — set on 2026-10-13 at one spike item a day, moved a day on
-2026-10-16, and not agreed between the two of us yet; the others are the
-plan's.
+2026-10-16; on 2026-10-18 item 7 took a second day, and items 8 and 9 share
+10-19, so what follows keeps its dates. Not agreed between the two of us yet;
+the others are the plan's.
 
 **The spike**, in this order. Each item ends with a short report and an update
 of this file. Items 1 to 6 are done, and long polling before item 7.
@@ -301,16 +339,17 @@ of this file. Items 1 to 6 are done, and long polling before item 7.
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
 | 7 | Done but the soak: the tool check, turns, cold starts and O-12 (above). **Left:** the soak overnight 10-18/19 — one turn a minute on test account A's sandbox, from `bench soak`'s messages that change nothing, memory per sandbox once a minute, "Sandbox list failed" counted again; no pushes to `main` during it: each one restarts the relay and both gateways. The morning after, `SANDBOX_IDLE_MINUTES` back to 10 in a commit | NH-25 | Claude; Max pauses the health check's alerts for the soak | — | *10-17*, the soak 10-18/19 |
-| 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity, and which of NemoClaw's bundled skills reach the prompt | NH-26 | Claude; Max plants the canary in B's facts | — | *10-18* |
-| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31). Two decisions from item 7 go into it. **Tool reliability:** `reasoning_effort: "low"` for chat turns (a D-03 change), the relay's safety net, or both (the table above). **Cold starts** for NH-27, each against a start of about 18 s, and a rare one of two minutes: a shorter wait before the relay retries a job whose Hermes is still starting (10 s now, 3 s would save up to 7 s; no RAM, a line in the relay); warming the sandbox when the user opens the chat (no wait at all after the first minute; 250 to 300 MiB per user with the chat open, held until 10 idle minutes later; the app, a function and the relay, half a day to a day); no idle stop for the demo and judge accounts (no cold start in the demo; about 0.3 GiB each, all the time, and a slot of prod's 4; a list in the relay's config, an hour or two) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
+| — | The history the relay sends: done on 2026-10-18 (above). Hermes' API takes no tool calls in a client's history; continuing the Hermes session works, and goes to the backlog (PH-17); `low` was chosen | NH-25 | Claude | — | done |
+| 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity, and which of NemoClaw's bundled skills reach the prompt | NH-26 | Claude; Max plants the canary in B's facts | — | *10-19* |
+| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31). Decided from item 7 on 2026-10-18: `low` on interactive turns (D-03, deviation 16), O-04's price at $0.10 (17), no safety net in the relay, the Hermes session to PH-17. Against cold starts, in the branch: a three-minute wait for a starting Hermes, so the supervisor's rare 2 min 16 s doesn't cost the message an attempt, and `SANDBOX_KEEP_RUNNING` for the demo and judge accounts (about 0.3 GiB each, all the time, and a place of prod's 4). Still open, for the go/no-go: a shorter wait before the relay retries a job whose Hermes is starting (10 s now; 3 s saves up to 7 s, no RAM), and warming the sandbox when the user opens the chat (250 to 300 MiB per open chat for 10 idle minutes; the app, a function and the relay, half a day to a day). OpenShell 0.1.3's changelog has "keep session retries during startup" (#3765), nothing on the delay itself; we stay on 0.1.2 | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
 
 **After the spike**
 
 | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|
-| The global policy, profiles, providers and the manager in prod | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-20* |
-| One idempotent script that sets a gateway up (policy, profiles, providers), so a new or restored gateway needs one command. From item 2: `profile import` refuses an id the gateway has, so the script updates those with their current `resource_version`. From item 3: the policy takes the same two placeholders as the profiles. From item 4: a provider's key goes in through standard input at a hidden prompt (runbook, step 3) | NH-33 | Claude | — | *10-20* |
-| Sources from Hermes' own search results, so every searched answer shows its pages in the app — the demo and the video need them. After a turn the relay reads that turn's `web_search` results from the sandbox's session history (the `X-Hermes-Session-Id` it gets back, then `/api/sessions/<id>/messages` with the same key, both checked through the gateway in item 5: five results a search, each with a title and a URL) and attaches them as the reply's sources. The rules, each with a test: only this turn's `web_search` results; only `https`, no user info in the URL, a capped length; no duplicate of a link the reply has; at most three sources; titles cut short and stripped of markup; the results are untrusted content, so they go into the sources and never into the reply's text; the history is read with a timeout of about 3 s, and a failure neither fails nor holds up the turn. About 3 to 4 hours. Not taken: letting the model think (`reasoning_effort` low) — against D-03, dearer and slower | NH-23 | Claude | — | *10-19*, with item 9 |
+| Prod: the global policy and the profiles are in its gateway (2026-10-18, `setup-gateway.sh`); left are the providers `token-factory` and `tavily` and the manager | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-20* |
+| One idempotent script that sets a gateway up: `deploy/ops/setup-gateway.sh` (in the branch), the runbook's steps 1 and 2 in one command, providers checked but never touched; on dev it found everything as in Git, on prod it set the policy and imported the profiles, and a second run changed nothing | NH-33 | Claude | — | done 10-18 |
+| Sources from Hermes' own search results: in the branch (2026-10-18), each rule with its test — this turn's `web_search` results only, https without user info and within the length limit, no page twice, three at most, titles stripped and cut, never in the reply's text, the session read within about 3 s through one module (`hermes-session.ts`), a failed read leaving the reply its own links. Checked on dev with the morning's push | NH-23 | Claude | — | *10-19* |
 | Rule 1 of the coach's profile, drawn more narrowly: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't (item 5's refused creatine question). The same change caps a skill's description at one sentence of 60 characters. Rules 6 and 7 moved to item 7 on 2026-10-16: they are O-04's tool reliability. The creatine question is in NH-73's checklist | NH-45 | Max and the partner decide; the partner writes the wording; Claude checks it on the spike's questions | — | Before NH-73 |
 | The NH-06 rollout on the main Supabase project | NH-06 | Partner | — | *10-19* |
 | TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | *10-18* |
