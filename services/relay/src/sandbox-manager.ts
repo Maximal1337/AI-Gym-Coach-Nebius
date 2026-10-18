@@ -82,6 +82,12 @@ export interface ManagerConfig {
   maxRunning: number;
   /** D-31: 10 minutes. */
   idleStopMs: number;
+  /**
+   * Users whose sandbox is never stopped as idle — the demo and judge
+   * accounts, so a demo has no cold start (NH-27). Each still takes one of
+   * maxRunning's places, all the time.
+   */
+  keepRunning?: readonly string[];
   /** Derives each sandbox's Hermes API key, so the relay never has to store one. */
   apiKeySecret: string;
   /**
@@ -314,8 +320,9 @@ export class SandboxManager {
     this.seen(sandboxes);
     const now = this.now();
     const stopped: string[] = [];
+    const keep = new Set((this.config.keepRunning ?? []).map((userId) => sandboxName(this.config.env, userId)));
     for (const s of sandboxes) {
-      if (s.phase !== "ready" || this.busy(s.name)) continue;
+      if (s.phase !== "ready" || this.busy(s.name) || keep.has(s.name)) continue;
       if (now - (this.lastUsed.get(s.name) ?? now) < this.config.idleStopMs) continue;
       try {
         await this.driver.stop(s.name);

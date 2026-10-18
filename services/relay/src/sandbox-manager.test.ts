@@ -279,6 +279,19 @@ test("idle: stopped after 10 minutes unused, never while answering", async () =>
   assert.deepEqual(await manager.sweepIdle(), [sandboxName("prod", "u2")]);
 });
 
+test("idle: a kept-running account's sandbox is never stopped as idle; the others are, as before (NH-27)", async () => {
+  const { clock, manager, job } = setup({ keepRunning: ["demo-1"] });
+  for (const user of ["demo-1", "u1"]) {
+    const lease = await manager.acquire(job(user));
+    assert.ok("endpoint" in lease);
+    lease.release();
+  }
+  clock.t += 11 * MIN;
+  assert.deepEqual(await manager.sweepIdle(), [sandboxName("prod", "u1")]);
+  clock.t += 24 * 60 * MIN;
+  assert.deepEqual(await manager.sweepIdle(), [], "a day later, still running");
+});
+
 test("idle: after a relay restart, running sandboxes get a full idle period from first sight", async () => {
   const { driver, clock, manager } = setup();
   driver.sandboxes.set("notch-prod-seen", { phase: "ready" });

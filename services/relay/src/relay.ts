@@ -8,8 +8,10 @@ import {
   type JobContext,
   OutboxError,
 } from "./outbox.js";
-import { buildMessages, type ChatMessage, extractSources, isCheckinSkip, replyText } from "./prompt.js";
+import type { SessionMessage } from "./hermes-session.js";
+import { buildMessages, type ChatMessage, isCheckinSkip, replyText } from "./prompt.js";
 import { DEFER_SECONDS, type SandboxLease } from "./sandbox-manager.js";
+import { replySources, type Source } from "./sources.js";
 
 /**
  * The relay (NH-54): pulls jobs from Supabase, runs each one in its user's own
@@ -35,6 +37,12 @@ export interface RelayDeps {
    */
   acquireSandbox: (job: JobContext) => Promise<SandboxLease>;
   chat: (endpoint: SandboxEndpoint, messages: ChatMessage[], options: Pick<ChatOptions, "sessionKey">) => Promise<ChatResult>;
+  /**
+   * The turn read back from its Hermes session (hermes-session.ts), for the
+   * reply's sources. Bounded by its own short timeout; without it, or when it
+   * fails, a reply has only the links in its text.
+   */
+  readTurn?: (endpoint: SandboxEndpoint, sessionId: string) => Promise<SessionMessage[]>;
   /** The Token Factory model the sandboxes use, for pricing the spend (D-34). */
   model: string;
   now: () => Date;
@@ -45,9 +53,12 @@ const DELIVER_ATTEMPTS = 3;
 /**
  * How long after the relay starts a sandbox its Hermes may still be booting:
  * until then a turn that finds nothing listening waits in the queue, unspent,
- * instead of using up the job's attempts. The bench allows the same two minutes.
+ * instead of using up the job's attempts. A start takes about 18 s, but now
+ * and then OpenShell 0.1.2's supervisor misses its first connection to the
+ * gateway and tries again 2 min 16 s later (NH-25): three minutes covers that.
+ * The bench allows the same.
  */
-export const HERMES_BOOT_MS = 120_000;
+export const HERMES_BOOT_MS = 180_000;
 
 async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promise<{ status: number; body: Record<string, unknown> }> {
   let lastError: unknown;
@@ -62,6 +73,24 @@ async function deliverWithRetry(deps: RelayDeps, request: DeliverRequest): Promi
     }
   }
   throw lastError;
+}
+
+/**
+ * The reply's sources: its own links, then the pages this turn searched
+ * (NH-23). Reading the session can only add sources: when it fails, the
+ * reply goes out with the links in its text, and the turn is delivered as if
+ * nothing had been tried.
+ */
+async function turnSources(job: JobContext, result: ChatResult, endpoint: SandboxEndpoint, deps: RelayDeps): Promise<Source[]> {
+  let turn: SessionMessage[] | undefined;
+  if (deps.readTurn && result.sessionId) {
+    try {
+      turn = await deps.readTurn(endpoint, result.sessionId);
+    } catch (e) {
+      deps.log("sources_unread", { job: job.id, error: String(e) });
+    }
+  }
+  return replySources(result.text, turn);
 }
 
 export async function processJob(job: JobContext, deps: RelayDeps): Promise<Outcome> {
@@ -119,7 +148,7 @@ async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedA
   const request: DeliverRequest = {
     ...base,
     ...charge,
-    ...(skip ? { skip: true } : { reply: { text, sources: extractSources(result.text) } }),
+    ...(skip ? { skip: true } : { reply: { text, sources: await turnSources(job, result, endpoint, deps) } }),
   };
   let delivery: { status: number; body: Record<string, unknown> };
   try {

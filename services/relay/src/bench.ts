@@ -38,6 +38,7 @@ import { chat as hermesChat, type ChatResult, HermesError, type SandboxEndpoint 
 import { OpenShellCli, execOpenShell } from "./openshell-cli.js";
 import type { JobContext } from "./outbox.js";
 import { buildMessages } from "./prompt.js";
+import { HERMES_BOOT_MS } from "./relay.js";
 import { sandboxApiKey, sandboxName } from "./sandbox-manager.js";
 import { staticSandboxes } from "./sandboxes.js";
 
@@ -175,7 +176,8 @@ export interface ColdStartDriver {
  * Stop, then start and time until the CLI reports it ready, then until
  * Hermes answers — its API server comes up after the sandbox does, so a turn
  * that found nothing listening (a refused connection, or the gateway's 502 or
- * 503 for a port not open yet) is retried for up to two minutes.
+ * 503 for a port not open yet) is retried as long as the relay itself waits
+ * (HERMES_BOOT_MS).
  */
 export async function runColdStart(deps: BenchDeps, driver: ColdStartDriver, name: string, apiKey: string, userId: string, runs: number): Promise<ColdStart[]> {
   const out: ColdStart[] = [];
@@ -189,7 +191,7 @@ export async function runColdStart(deps: BenchDeps, driver: ColdStartDriver, nam
       const endpoint = { baseUrl: await driver.serviceUrl(name, HERMES_PORT), apiKey };
       let lastError = "";
       let answered = false;
-      while (deps.now() - t2 < 120_000) {
+      while (deps.now() - t2 < HERMES_BOOT_MS) {
         const turn = await oneTurn(deps, endpoint, userId, `bench-cold-${run}`, 1, SCRIPT[0], []);
         if (turn.ok) {
           answered = true;

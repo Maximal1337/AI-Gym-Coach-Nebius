@@ -16,6 +16,8 @@ export interface SandboxEndpoint {
 export interface ChatResult {
   text: string;
   usage?: Usage;
+  /** The Hermes session the turn went into (X-Hermes-Session-Id), to read it back (hermes-session.ts). */
+  sessionId?: string;
 }
 
 export class HermesError extends Error {
@@ -89,7 +91,8 @@ export async function chat(endpoint: SandboxEndpoint, messages: ChatMessage[], o
     throw new HermesError(`hermes turn failed: ${reason.slice(0, 300)}`, true, false, usageFrom(body));
   }
   if (!text) throw new HermesError("hermes returned an empty reply", true, false, usageFrom(body));
-  return { text, usage: usageFrom(body) };
+  const sessionId = res.headers.get("x-hermes-session-id")?.trim();
+  return { text, usage: usageFrom(body), ...(sessionId ? { sessionId } : {}) };
 }
 
 /** What Hermes v2026.9.24 sets as hermes.error when a reply ran out of continuation attempts (agent/turn_truncation.py). */

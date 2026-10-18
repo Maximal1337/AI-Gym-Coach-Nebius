@@ -167,11 +167,16 @@ function clip(text: string, max: number): string {
  */
 export const SOURCE_LIMITS = { count: 10, urlMin: 9, urlMax: 500, title: 200 } as const;
 
-/** https, with a host, within the length limits — "https://" alone, left by "see https://.", isn't. */
-function isSourceUrl(url: string): boolean {
+/**
+ * https, with a host, within the length limits — "https://" alone, left by
+ * "see https://.", isn't — and without user info: a link the app would open
+ * with someone's credentials in it, or that hides its real host behind them.
+ */
+export function isSourceUrl(url: string): boolean {
   if (!url.startsWith("https://") || url.length < SOURCE_LIMITS.urlMin || url.length > SOURCE_LIMITS.urlMax) return false;
   try {
-    return new URL(url).hostname !== "";
+    const u = new URL(url);
+    return u.hostname !== "" && u.username === "" && u.password === "";
   } catch {
     return false;
   }

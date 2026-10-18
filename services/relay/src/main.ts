@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { type GatewayConfig, gatewayConfigFromEnv, gatewayFetch, registerGateway, sandboxServiceUrl } from "./gateway.js";
 import { chat } from "./hermes.js";
+import { readTurn } from "./hermes-session.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
 import { staticAcquire, staticSandboxes } from "./sandboxes.js";
 import { OutboxClient } from "./outbox.js";
@@ -38,6 +39,9 @@ import type { RelayEnvironment } from "./signing.js";
  *                             Hermes in the foreground without API_SERVER_KEY in its environment),
  *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
+ *   SANDBOX_KEEP_RUNNING      comma-separated user ids whose sandbox is never stopped as
+ *                             idle: the demo and judge accounts (NH-27). In
+ *                             /etc/notch/<env>.env, not the overlay: the repository is public
  * The environment's OpenShell gateway (NH-29, src/gateway.ts):
  *   OPENSHELL_GATEWAY_ENDPOINT  https://openshell.notch-<env>.svc:8080; with it, the
  *                             CLI is registered against the gateway at startup (with
@@ -60,6 +64,15 @@ function required(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is not set`);
   return value;
+}
+
+/** User ids, comma-separated; anything that isn't one stops the relay rather than being skipped quietly. */
+function userIds(name: string): string[] {
+  const ids = (process.env[name] ?? "").split(",").map((id) => id.trim().toLowerCase()).filter(Boolean);
+  for (const id of ids) {
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id)) throw new Error(`${name}: not a user id`);
+  }
+  return ids;
 }
 
 function number(name: string, fallback: number): number {
@@ -117,6 +130,7 @@ async function main(): Promise<void> {
     if (keySecret.length < 32) throw new Error("SANDBOX_KEY_SECRET must be at least 32 characters");
     if (!gateway) throw new Error("RELAY_SANDBOXES=manager needs OPENSHELL_GATEWAY_ENDPOINT");
     const { endpoint } = gateway;
+    const keepRunning = userIds("SANDBOX_KEEP_RUNNING");
     const manager = new SandboxManager(
       new OpenShellCli(exec, undefined, (name) => sandboxServiceUrl(endpoint, name)),
       { record: (userId, sandboxName, tokenHash) => outbox.recordAgent({ user_id: userId, sandbox_name: sandboxName, tool_token_hash: tokenHash }), list: () => outbox.listAgents() },
@@ -126,6 +140,7 @@ async function main(): Promise<void> {
         command: process.env.SANDBOX_COMMAND_JSON ? (JSON.parse(process.env.SANDBOX_COMMAND_JSON) as string[]) : DEFAULT_SANDBOX_COMMAND,
         maxRunning: number("SANDBOX_MAX_RUNNING", env === "prod" ? 4 : 2),
         idleStopMs: number("SANDBOX_IDLE_MINUTES", 10) * 60_000,
+        keepRunning,
         apiKeySecret: keySecret,
         sandboxEnv: {
           HERMES_HOME: process.env.SANDBOX_HERMES_HOME || "/sandbox/.hermes",
@@ -147,7 +162,11 @@ async function main(): Promise<void> {
       void fn().catch((e) => log("sweep_failed", { sweep: name, error: String(e) }));
     timers.push(setInterval(sweep("idle", () => manager.sweepIdle()), IDLE_SWEEP_MS));
     timers.push(setInterval(sweep("orphans", () => manager.sweepOrphans()), ORPHAN_SWEEP_MS));
-    log("sandbox_manager", { image: process.env.SANDBOX_IMAGE || "gateway default", maxRunning: number("SANDBOX_MAX_RUNNING", env === "prod" ? 4 : 2) });
+    log("sandbox_manager", {
+      image: process.env.SANDBOX_IMAGE || "gateway default",
+      maxRunning: number("SANDBOX_MAX_RUNNING", env === "prod" ? 4 : 2),
+      keepRunning: keepRunning.length,
+    });
   } else {
     const map = staticSandboxes(process.env.RELAY_STATIC_SANDBOXES);
     acquireSandbox = staticAcquire(map);
@@ -166,6 +185,7 @@ async function main(): Promise<void> {
     outbox,
     acquireSandbox,
     chat: (endpoint, messages, options) => chat(endpoint, messages, { ...options, timeoutMs, ...(sandboxFetch ? { fetch: sandboxFetch } : {}) }),
+    readTurn: (endpoint, sessionId) => readTurn(endpoint, sessionId, sandboxFetch ? { fetch: sandboxFetch } : {}),
     model,
     now: () => new Date(),
     log,

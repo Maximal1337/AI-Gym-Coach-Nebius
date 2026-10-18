@@ -160,3 +160,7 @@ test("sources: only links assistant-deliver accepts — a host, within the lengt
   assert.deepEqual(extractSources(`https://a.example/${"p".repeat(SOURCE_LIMITS.urlMax)}`), []);
   assert.deepEqual(extractSources("[Guide](https://a.example/\u0000g)"), [{ title: "Guide", url: "https://a.example/g" }]);
 });
+
+test("sources: never a link with user info — credentials in it, or a real host hidden behind them", () => {
+  assert.deepEqual(extractSources("https://user:pw@a.example/x [Bank](https://bank.example@evil.example/login) https://ok.example/"), [{ url: "https://ok.example/" }]);
+});
