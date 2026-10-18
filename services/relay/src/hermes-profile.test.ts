@@ -93,11 +93,12 @@ test("inference and search go only where the egress policy allows", () => {
   assert.equal(new URL(provider.base_url).pathname, "/v1");
   assert.deepEqual(profile.credentials[0].env_vars, [provider.key_env]);
   assert.equal(provider.api_key, undefined);
-  // D-03: no thinking on tool-calling turns. Hermes' own setting, and the
-  // request field that actually reaches Token Factory: Hermes' built-in
-  // provider drops "none" (seen in the spike, NH-22).
-  assert.equal(config.agent.reasoning_effort, "none");
-  assert.deepEqual(provider.extra_body, { reasoning_effort: "none" });
+  // D-03 as proposed in NH-25: a little thinking on tool-calling turns, no
+  // more. Hermes' own setting, and the request field that actually reaches
+  // Token Factory: Hermes' built-in provider sends none for a Nemotron model
+  // (seen in the spike, NH-22).
+  assert.equal(config.agent.reasoning_effort, "low");
+  assert.deepEqual(provider.extra_body, { reasoning_effort: "low" });
   // The seven Notch tools go to the model as they are, not behind Hermes' tool_search bridge.
   assert.equal(config.tools.tool_search.enabled, "off");
   assert.equal(config.model.default, "${NOTCH_MODEL}");

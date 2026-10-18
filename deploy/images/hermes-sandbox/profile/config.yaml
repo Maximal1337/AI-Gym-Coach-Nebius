@@ -30,14 +30,18 @@ custom_providers:
     base_url: https://api.tokenfactory.nebius.com/v1
     key_env: NEBIUS_API_KEY        # an OpenShell placeholder; the proxy puts the key in (D-28)
     extra_body:
-      reasoning_effort: "none"     # D-03, the way Token Factory takes it
+      reasoning_effort: "low"      # D-03, the way Token Factory takes it
 
 agent:
-  # D-03: no thinking on interactive, tool-calling turns — a reasoning model
-  # can spend its whole token budget thinking and return an empty answer, and
-  # every reasoning token counts against the D-34 ceilings. Hermes' own
-  # setting; what the model is told is custom_providers' extra_body above.
-  reasoning_effort: "none"
+  # D-03 (proposed in NH-25): a little thinking on interactive, tool-calling
+  # turns. With none, a turn that came after an earlier exchange called the
+  # tool it needed in 6 of 16 — promising to check, claiming an undo it never
+  # made, or giving training numbers from nowhere; with low, 16 of 16. More
+  # than low isn't wanted: a reasoning model can spend its budget thinking
+  # and return an empty answer, and every reasoning token counts against the
+  # D-34 ceilings. Hermes' own setting; what the model is told is
+  # custom_providers' extra_body above.
+  reasoning_effort: "low"
   # D-29: off everywhere, whatever a platform default would include.
   #
   # Not `web`, although D-04 keeps its web_extract out: Hermes subtracts a
