@@ -1,6 +1,7 @@
 name: Ops scripts
 
-# The VPS's backup, restore and health scripts (deploy/ops, NH-34, NH-35) and
+# The VPS's backup, restore, health and gateway setup scripts (deploy/ops,
+# NH-34, NH-35, NH-33) and
 # the spike's sandbox probe (deploy/spike, NH-26): shellcheck, then each end to
 # end — the ops scripts against a fake kubectl, the probe against local
 # listeners. Its own workflow, not part of CI, so it never holds up a deploy:
@@ -8,9 +9,9 @@ name: Ops scripts
 on:
   push:
     branches: [main]
-    paths: ["deploy/ops/**", "deploy/spike/**", "deploy/bootstrap/**", ".github/workflows/ops.yml"]
+    paths: ["deploy/ops/**", "deploy/spike/**", "deploy/bootstrap/**", "deploy/platform/openshell/**", ".github/workflows/ops.yml"]
   pull_request:
-    paths: ["deploy/ops/**", "deploy/spike/**", "deploy/bootstrap/**", ".github/workflows/ops.yml"]
+    paths: ["deploy/ops/**", "deploy/spike/**", "deploy/bootstrap/**", "deploy/platform/openshell/**", ".github/workflows/ops.yml"]
 
 permissions:
   contents: read
@@ -20,7 +21,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: sudo apt-get update -qq && sudo apt-get install -y -qq age jq sqlite3 netcat-openbsd
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq age jq sqlite3 netcat-openbsd python3-yaml
       - run: shellcheck -x --severity=warning deploy/ops/*.sh deploy/ops/test/*.sh deploy/spike/*.sh deploy/spike/test/*.sh deploy/bootstrap/*.sh
       - run: bash deploy/ops/test/ops.test.sh
+      - run: bash deploy/ops/test/setup-gateway.test.sh
       - run: bash deploy/spike/test/sandbox-probe.test.sh

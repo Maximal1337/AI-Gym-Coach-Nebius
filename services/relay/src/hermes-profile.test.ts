@@ -261,9 +261,9 @@ test("the Dockerfile makes /opt/notch enterable, patches Hermes twice, links the
   ]) {
     assert.ok(checks.includes(check), check);
   }
-  // The interpreter the profiles and the policy are loaded with (deploy/README.md): a base image
-  // with another one must stop the build, not have every request of Hermes refused on the cluster.
-  const binary = /'s\|@HERMES_BINARY@\|([^|]+)\|'/.exec(readFileSync(repo("deploy/README.md"), "utf8"))?.[1];
+  // The interpreter the profiles and the policy are loaded with (deploy/ops/setup-gateway.sh): a base
+  // image with another one must stop the build, not have every request of Hermes refused on the cluster.
+  const binary = /HERMES_BINARY="\$\{HERMES_BINARY:-([^}]+)\}"/.exec(readFileSync(repo("deploy/ops/setup-gateway.sh"), "utf8"))?.[1];
   assert.equal(binary, "/usr/bin/python3.13");
   assert.ok(checks.includes(`test "$(readlink -f /opt/hermes/.venv/bin/python)" = ${binary}`));
 });

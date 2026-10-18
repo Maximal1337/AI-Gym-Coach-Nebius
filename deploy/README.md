@@ -173,7 +173,13 @@ The relay creates and runs every user's sandbox itself, through the
   (`assistant_defer_job`) and their messages stay in order — while the least
   recently used sandbox that isn't answering anyone is stopped to make room.
   Nobody is ever served from another user's sandbox.
-- **Idle** sandboxes stop after 10 minutes (checked every minute).
+- **Idle** sandboxes stop after 10 minutes (checked every minute), except
+  those of the users in `SANDBOX_KEEP_RUNNING`: the demo and judge accounts,
+  so a demo never waits for a start (NH-27). It is a comma-separated list of
+  user ids in `/etc/notch/<env>.env`, never in the overlay — the repository
+  is public — and takes effect after `secrets.sh` restarts the relay. Each
+  sandbox on it holds one of the capacity's places, and about 0.3 GiB, all
+  the time.
 - **Orphans**: every 15 minutes, sandboxes without an `assistant_agents` row —
   an account deletion cascades it away — are deleted, at most 3 per sweep,
   and their providers on the following sweep.
@@ -182,27 +188,31 @@ Dev runs it since the spike's NH-29 (`RELAY_SANDBOXES=manager` in its
 overlay); prod stays `static` (a hand-made map, empty) until a go in NH-27.
 Before an environment is turned on, per environment (dev shown):
 
-The policy and the provider profiles in `platform/openshell/` carry two
-placeholders: `@SUPABASE_HOST@` (`<project-ref>.supabase.co`) and
-`@HERMES_BINARY@` (the interpreter that runs Hermes in the image:
-`/usr/bin/python3.13` in the pinned one). Fill them in and copy the files into
-the relay's pod, whose CLI is registered with the gateway:
+Steps 1 and 2 — the policy and the profiles — are one script, run on the
+VPS from the repository's checkout, and again after every change to the files
+in `platform/openshell/`: they reach no gateway by themselves, Argo CD has
+nothing to sync there (deviation 6 on the board).
 
 ```bash
-P=$(mktemp -d) && mkdir "$P/profiles"
-fill() { sed -e 's|@SUPABASE_HOST@|<project-ref>.supabase.co|' -e 's|@HERMES_BINARY@|/usr/bin/python3.13|' "$1"; }
-fill deploy/platform/openshell/sandbox-policy.yaml > "$P/sandbox-policy.yaml"
-for f in deploy/platform/openshell/profiles/*.yaml; do fill "$f" > "$P/profiles/$(basename "$f")"; done
-tar -C "$P" -cf - . | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
-  'rm -rf /tmp/openshell && mkdir /tmp/openshell && tar -C /tmp/openshell -xf -'
+deploy/ops/setup-gateway.sh dev <project-ref>.supabase.co
 ```
+
+It fills in the files' two placeholders — `@SUPABASE_HOST@` from the
+argument, `@HERMES_BINARY@` from `HERMES_BINARY` (the interpreter that runs
+Hermes in the image, `/usr/bin/python3.13` in the pinned one) — copies them
+into the relay's pod, whose CLI is registered with the gateway, and sets or
+imports only what the gateway doesn't already hold as in Git: a second run
+changes nothing, and a gateway with live sandboxes reloads nothing it doesn't
+need to. `--check` reports what would change and changes nothing. It ends
+with the shared providers of step 3, present or missing (then it exits with
+status 2). What it does, step by step:
 
 1. Set the policy as the gateway's global policy, and again after every change
    to `sandbox-policy.yaml`:
 
    ```bash
    kubectl -n notch-dev exec deploy/notch-relay -- \
-     openshell policy set --global --policy /tmp/openshell/sandbox-policy.yaml --yes
+     openshell policy set --global --policy /tmp/openshell-setup/sandbox-policy.yaml --yes
    ```
 
    `openshell policy get --global --full` shows what's loaded, and running
@@ -216,7 +226,7 @@ tar -C "$P" -cf - . | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
 
    ```bash
    kubectl -n notch-dev exec deploy/notch-relay -- sh -c \
-     'openshell profile lint --from /tmp/openshell/profiles && openshell profile import --from /tmp/openshell/profiles'
+     'openshell profile lint --from /tmp/openshell-setup/import/tavily && openshell profile import --from /tmp/openshell-setup/import/tavily'
    ```
 
    `openshell profile list` then shows the three, in the relay's workspace
