@@ -10,8 +10,9 @@
  *   cold-start   stop the sandbox, start it, and time it until it's ready and
  *                until its first reply (--runs, default 3)
  *   soak         one turn every --every seconds (60) for --minutes (180), one
- *                line per turn; sample the sandbox's memory on the host meanwhile
- *                (the NH-25 note in the plan)
+ *                line per turn, from the script's messages that change nothing;
+ *                sample the sandbox's memory on the host meanwhile (the NH-25
+ *                note in the plan)
  *
  * Target, one of:
  *   --sandbox <name>   URL from `openshell service get`; key from BENCH_API_KEY,
@@ -33,7 +34,7 @@
  */
 import { pathToFileURL } from "node:url";
 import { gatewayConfigFromEnv, gatewayFetch, sandboxServiceUrl } from "./gateway.js";
-import { chat as hermesChat, type ChatResult, type SandboxEndpoint } from "./hermes.js";
+import { chat as hermesChat, type ChatResult, HermesError, type SandboxEndpoint } from "./hermes.js";
 import { OpenShellCli, execOpenShell } from "./openshell-cli.js";
 import type { JobContext } from "./outbox.js";
 import { buildMessages } from "./prompt.js";
@@ -46,18 +47,25 @@ const TURN_TIMEOUT_MS = 180_000;
 const HISTORY_LIMIT = 20;
 
 /** A conversation that exercises every toolset: history, plan change and undo, a note, web search. */
-export const SCRIPT: Array<{ kind: "chat" | "checkin"; text: string }> = [
+export const SCRIPT: Array<{ kind: "chat" | "checkin"; text: string; writes?: true }> = [
   { kind: "chat", text: "Hey! I only have about 40 minutes on Thursday. What should I focus on?" },
   { kind: "chat", text: "What was my best bench press set in the last two weeks?" },
   { kind: "chat", text: "Should I add weight next session or stay where I am?" },
-  { kind: "chat", text: "Change my bench press to 4 sets of 6 for this week." },
-  { kind: "chat", text: "Actually, undo that." },
+  { kind: "chat", text: "Change my bench press to 4 sets of 6 for this week.", writes: true },
+  { kind: "chat", text: "Actually, undo that.", writes: true },
   { kind: "chat", text: "Which vegetarian foods have about 30 g of protein per serving?" },
   { kind: "chat", text: "My lower back felt tight after deadlifts. Anything I should change?" },
-  { kind: "chat", text: "Save a note for my next workout: one extra warm-up set before deadlifts." },
+  { kind: "chat", text: "Save a note for my next workout: one extra warm-up set before deadlifts.", writes: true },
   { kind: "chat", text: "Thanks! What's on the plan for my next workout?" },
   { kind: "checkin", text: "" },
 ];
+
+/**
+ * A soak's messages: the script's chats that change nothing. Each soak turn
+ * comes without history, so "undo that" would undo nothing, and over a night
+ * the plan change and the notes would pile up in the test account.
+ */
+export const SOAK_SCRIPT = SCRIPT.filter((step) => step.kind === "chat" && !step.writes);
 
 // Plausible facts and settings, so the context block is a real one's size.
 const FACTS: JobContext["facts"] = [
@@ -75,6 +83,8 @@ export interface Turn {
   ms: number;
   ok: boolean;
   error?: string;
+  /** Nothing was listening yet: a refused connection, or the gateway's 502/503 for a port not open yet. */
+  notReady?: boolean;
   tokensIn?: number;
   tokensOut?: number;
   reply?: string;
@@ -118,7 +128,15 @@ async function oneTurn(deps: BenchDeps, endpoint: SandboxEndpoint, userId: strin
     const result = await deps.chat(endpoint, jobFor(userId, step.kind, step.text, history, new Date(started)), sessionKey);
     return { index, kind: step.kind, text: step.text, ms: deps.now() - started, ok: true, tokensIn: result.usage?.tokensInput, tokensOut: result.usage?.tokensOutput, reply: result.text };
   } catch (e) {
-    return { index, kind: step.kind, text: step.text, ms: deps.now() - started, ok: false, error: e instanceof Error ? e.message : String(e) };
+    return {
+      index,
+      kind: step.kind,
+      text: step.text,
+      ms: deps.now() - started,
+      ok: false,
+      error: e instanceof Error ? e.message : String(e),
+      ...(e instanceof HermesError && e.notReady ? { notReady: true } : {}),
+    };
   }
 }
 
@@ -155,8 +173,9 @@ export interface ColdStartDriver {
 
 /**
  * Stop, then start and time until the CLI reports it ready, then until
- * Hermes answers — its API server comes up after the sandbox does, so a
- * refused connection is retried for up to two minutes.
+ * Hermes answers — its API server comes up after the sandbox does, so a turn
+ * that found nothing listening (a refused connection, or the gateway's 502 or
+ * 503 for a port not open yet) is retried for up to two minutes.
  */
 export async function runColdStart(deps: BenchDeps, driver: ColdStartDriver, name: string, apiKey: string, userId: string, runs: number): Promise<ColdStart[]> {
   const out: ColdStart[] = [];
@@ -177,7 +196,7 @@ export async function runColdStart(deps: BenchDeps, driver: ColdStartDriver, nam
           break;
         }
         lastError = turn.error ?? "";
-        if (!/unreachable/.test(lastError)) break;
+        if (!turn.notReady) break;
         await deps.sleep(2_000);
       }
       const t3 = deps.now();
@@ -223,7 +242,8 @@ export function renderTurns(turns: Turn[], prices: { in: number; out: number }, 
 }
 
 export function renderColdStarts(runs: ColdStart[], label: string): string {
-  const worst = Math.max(...runs.filter((r) => r.ok).map((r) => r.readyMs + r.firstReplyMs), 0);
+  const totals = runs.filter((r) => r.ok).map((r) => r.readyMs + r.firstReplyMs);
+  const worst = Math.max(...totals, 0);
   const allOk = runs.length > 0 && runs.every((r) => r.ok);
   return [
     `### Cold start — ${label}`,
@@ -237,6 +257,7 @@ export function renderColdStarts(runs: ColdStart[], label: string): string {
     ),
     "",
     `- **Worst ${s(worst)}** — ≤ ${THRESHOLDS.coldStartMs / 1000} s: ${allOk ? mark(worst <= THRESHOLDS.coldStartMs) : "❌ a run failed"}`,
+    `- Start → first reply: p50 ${s(percentile(totals, 50))}, p95 ${s(percentile(totals, 95))}`,
   ].join("\n");
 }
 
@@ -335,9 +356,8 @@ async function cli(argv: string[]): Promise<void> {
     const endpoint = await target.endpoint();
     const end = deps.now() + args.minutes * 60_000;
     const turns: Turn[] = [];
-    const chats = SCRIPT.filter((step) => step.kind === "chat");
     for (let i = 0; deps.now() < end; i++) {
-      const turn = await oneTurn(deps, endpoint, target.userId, sessionKey, i + 1, chats[i % chats.length], []);
+      const turn = await oneTurn(deps, endpoint, target.userId, sessionKey, i + 1, SOAK_SCRIPT[i % SOAK_SCRIPT.length], []);
       turns.push(turn);
       console.log(`${new Date().toISOString()}\t${turn.index}\t${turn.ok ? "ok" : "FAILED"}\t${turn.ms} ms\t${turn.tokensIn ?? "?"}→${turn.tokensOut ?? "?"}${turn.error ? `\t${turn.error}` : ""}`);
       await deps.sleep(Math.max(0, args.every * 1000 - turn.ms));

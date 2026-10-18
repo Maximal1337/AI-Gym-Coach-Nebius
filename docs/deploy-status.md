@@ -11,7 +11,7 @@ refs, check URLs, test accounts and keys are never written here: everything
 specific to the environment is in the **Notch VPS** entry in the password
 manager.
 
-## 1. Current state — 2026-10-16
+## 1. Current state — 2026-10-18
 
 Spike items 1 to 6 of 9 are done: NH-21 with O-11, the provider profiles on
 the dev gateway, NH-22 — Nemotron answers through Hermes and uses the Notch
@@ -20,7 +20,11 @@ agent links its sources only when asked (below), NH-24, a test account's
 messages through the dev relay to its sandbox and back, and NH-29: the dev
 relay runs the sandbox manager, which creates, stops, starts and deletes the
 sandboxes itself. Since the same day both relays long-poll the outbox: a
-claim waits up to 50 s for a job. Next: item 7, the measurements.
+claim waits up to 50 s for a job. Item 7, the measurements, is under way:
+the tool check, turns, cold starts and O-12 were measured on 2026-10-17 and
+10-18 (below), and the soak runs overnight into 10-19. For the soak, dev's
+`SANDBOX_IDLE_MINUTES` is 1440; it goes back to the default of 10 the
+morning after.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -73,10 +77,14 @@ then only the archives made since the change can be restored.
 check runs every 5 minutes and reports to the dead man's switch; stopping k3s
 raised an alert on 2026-10-10.
 
-**Memory.** With no sandbox running: 1.8 GiB used, 6.1 GiB available of 7.9.
-One sandbox with an idle Hermes takes 220 to 260 MiB, plus 16 MiB for its
-supervisor pod; one left idle for 38 hours stood at 261 MiB. The real numbers
-come from NH-25.
+**Memory** (NH-25, 2026-10-18). With no sandbox running: 1.9 GiB used,
+6.0 GiB available of 7.9; the platform's pods take about 450 MiB of it. A
+sandbox's Hermes takes about 215 MiB fresh, about 250 after a few turns, and
+290 to 300 after a day; a turn adds about 35 MiB while it runs, and each
+sandbox's supervisor pod 16 MiB more. O-12, in dev: six sandboxes running —
+four prod and two dev in number — with turns in three at once, took the node
+to 3.7 GiB used, 4.2 GiB available. Whether Hermes grows over a night is the
+soak's question.
 
 **Works**
 
@@ -148,6 +156,17 @@ come from NH-25.
   its claim's wait. A push that changes an overlay and the code rolls the
   relay out twice: Argo CD applies the new ConfigMap on the old image first,
   and the new image follows a few minutes later.
+- Turns, cold starts and O-12 (NH-25, 2026-10-18, the stricter profile).
+  `bench turns` — nine messages with the relay's prompt and the history
+  before each, and a check-in: p50 4.4 s, p95 5.4 s, $0.0453 per 10 turns at
+  Super's list price, no empty reply; O-04's ≤ 15 s holds, ≤ $0.05 only just.
+  A start of a stopped sandbox, ten times: 17.4 to 18.8 s from the start to
+  the first reply in nine, 3.4 to 4.5 s of it until the sandbox is ready and
+  the rest Hermes' own start (the tenth, below). A create took 25 to 29 s to
+  ready and 34 to 39 s to the first answer. Six sandboxes running, three of
+  them with turns at once: p50 3.6 s, p95 6.8 to 8.1 s, nothing failed, and
+  memory as above. So D-31's 2 vCPU and 8 GiB hold four prod and two dev
+  sandboxes, unless the soak shows Hermes growing.
 - Token Factory itself: Nemotron Super, Ultra and Lightning pass the tool
   round trip, `tool_choice: "required"` and JSON-schema output with thinking
   off; Nano fails all three (NH-28, 2026-10-09).
@@ -170,19 +189,54 @@ come from NH-25.
   follow-up in the same way; on its own it was searched and answered 6 of 6
   times. The profile's rule against medical advice is read too widely; the
   decision is in Next steps (NH-45).
-- The agent promises, or reports, what it didn't do — a go/no-go question,
-  since O-04 asks that Nemotron call tools reliably through Hermes. In item 6
-  it told A it had "added your training time and equipment limit to your
-  facts", and answered a request to save a skill with "Let me create that
-  now" — no tool call either time, against the profile's rules 6 and 7. On
-  2026-10-16 A asked "How many sets should I do for squats?" and then how much
-  weight to put on the bench press; both answers said it needed A's plan and
-  history and would "check your active plans" first, and the turn ended
-  there. The second turn took 1.4 s, too short for a tool's second model
-  call; item 7 checks both in the session history and measures the rate.
-  Asked outright to use its skill tool, the agent saved the skill, at the
-  sixth attempt: Hermes refused five descriptions longer than 60 characters,
-  and each retry was another model call.
+- **Tools aren't called reliably once there is a conversation before the
+  message** — O-04's "Nemotron calls tools reliably through Hermes", so a
+  go/no-go question. Measured in item 7 (2026-10-17 and 10-18) on test
+  account A, seeded with the demo seed's plan and two weeks of workouts, with
+  the relay's own prompt, from each turn's session history. Without history
+  the agent called the Notch tools in every turn that needed one — 36 of 37
+  with the current profile, 36 of 36 with rules 6–7 made stricter, 36 of 36
+  with `reasoning_effort: "low"` — in English, Hebrew, Arabic and Portuguese,
+  never empty. With a conversation before the message it doesn't:
+
+  | 16 turns that need a tool, after an earlier exchange | Tool called | Promised and stopped | Claimed an action it didn't take | Training numbers with no tool |
+  |---|---|---|---|---|
+  | Current profile | 6 | 4 | 4 | 2 |
+  | Rules 6–7 made stricter | 5 | 4 | 4 | 3 |
+  | Either, plus a line in the relay's prompt on what the history is | 7 | 4–5 | 4 | 1 |
+  | Current profile, plus the relay's safety net | 13 | 2 | 0 | 1 |
+  | `reasoning_effort: "low"` | 16 | 0 | 0 | 0 |
+
+  The failures: after a reply that said "I'll pull that up now", the next
+  question got the same promise 4 times in 4; "Actually, undo that." was
+  answered "I've reverted your bench press back to 4 sets of 6-8" with no
+  undo — 4 in 4, so the plan stayed changed; and "how did my last squat
+  session go?" after a reply about the plan was answered "4 × 5 @ 60 kg" from
+  nowhere (the log says 102.5 kg). The relay sends the history as plain text,
+  without the tool calls behind the earlier replies, and the model seems to
+  follow that pattern. `bench turns` saw the same: with thinking off, its
+  undo and its saved note were both claimed without a tool call. The
+  stricter rules 6–7 are in `SOUL.md` all the same — without history they
+  stopped the two promises in small talk the current wording made. The
+  safety net (an estimate, tried in the harness, not built): when a turn
+  called no tool and its reply promises or claims an action, the relay
+  continues it once in the same session with a nudge. It put every false
+  undo right and half the promises, and can't see invented numbers; about
+  3 to 4 hours, sharing the session read with the sources step. `low` fixed
+  all of it, and costs about the same as the safety net: in the follow-up
+  turns $0.049 per 10 against $0.048, p95 8.3 s; in `bench turns` p95 13.2 s
+  and $0.0553 per 10 turns, over O-04's $0.05 (with thinking off: 5.4 s,
+  $0.0453). Choosing between them, or both, changes D-03 or adds to the
+  relay: item 9's decision.
+- One start in seven or so waits about two minutes. 2 of 15 starts and
+  creates on 2026-10-18 took 151 s and 159 s instead of 18 s and 26 s: the
+  sandbox's supervisor failed its first connection to the gateway and tried
+  again 2 min 16 s later (OpenShell 0.1.2). That is over O-04's 60 s, and
+  over the relay's 120 s wait for a starting Hermes, after which the
+  message's attempt fails and goes back to the queue.
+- Asked outright to use its skill tool, the agent saved a skill at the sixth
+  attempt (item 6): Hermes refused five descriptions longer than 60
+  characters, and each retry was another model call (NH-45).
 - Hermes offers the agent NemoClaw's bundled skills too — `skills_list`
   returns ones for coding agents, email and social media next to the coach's.
   Whether they reach the prompt, and what they cost, is for item 8's dump.
@@ -246,9 +300,9 @@ of this file. Items 1 to 6 are done, and long polling before item 7.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
-| 7 | In this order. **Tool reliability** (O-04; the profile's rules 6–7, from NH-45): about 10 questions that need a tool — the plan, the history, weights, an exercise substitute — and 3 small-talk ones; from the session history, the share of turns that needed a tool and called one, and the share that promised an action without one. Three variants: the current `SOUL.md`, `SOUL.md` with rules 6–7 made stricter ("don't promise: call the tool in this turn, or answer without it"), and `reasoning_effort: "low"` for comparison, with its price and latency (D-03 stays). If the prompt isn't enough, an estimate for a safety net in the relay: a promise without a tool call (seen in the session history, as for the sources) continues the turn once. **Then** `bench turns` and `bench cold-start`; O-12 with at least 2–3 sandboxes at once; how a cold start moves p95, and options for NH-27 — warming the sandbox when the chat opens, `SANDBOX_IDLE_MINUTES` for the demo — with their cost in RAM. **Last**, the soak overnight. A `SOUL.md` change is pushed before the soak; no pushes to `main` during it: each one restarts the relay and both gateways | NH-25 | Max and Claude; Max pauses the health check's alerts for the soak | — | *10-17*, the soak overnight |
+| 7 | Done but the soak: the tool check, turns, cold starts and O-12 (above). **Left:** the soak overnight 10-18/19 — one turn a minute on test account A's sandbox, from `bench soak`'s messages that change nothing, memory per sandbox once a minute, "Sandbox list failed" counted again; no pushes to `main` during it: each one restarts the relay and both gateways. The morning after, `SANDBOX_IDLE_MINUTES` back to 10 in a commit | NH-25 | Claude; Max pauses the health check's alerts for the soak | — | *10-17*, the soak 10-18/19 |
 | 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity, and which of NemoClaw's bundled skills reach the prompt | NH-26 | Claude; Max plants the canary in B's facts | — | *10-18* |
-| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
+| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31). Two decisions from item 7 go into it. **Tool reliability:** `reasoning_effort: "low"` for chat turns (a D-03 change), the relay's safety net, or both (the table above). **Cold starts** for NH-27, each against a start of about 18 s, and a rare one of two minutes: a shorter wait before the relay retries a job whose Hermes is still starting (10 s now, 3 s would save up to 7 s; no RAM, a line in the relay); warming the sandbox when the user opens the chat (no wait at all after the first minute; 250 to 300 MiB per user with the chat open, held until 10 idle minutes later; the app, a function and the relay, half a day to a day); no idle stop for the demo and judge accounts (no cold start in the demo; about 0.3 GiB each, all the time, and a slot of prod's 4; a list in the relay's config, an hour or two) | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
 
 **After the spike**
 

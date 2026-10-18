@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { type BenchDeps, costUsd, parseArgs, percentile, renderColdStarts, renderTurns, resolveTarget, runColdStart, runTurns, SCRIPT } from "./bench.js";
+import { type BenchDeps, costUsd, parseArgs, percentile, renderColdStarts, renderTurns, resolveTarget, runColdStart, runTurns, SCRIPT, SOAK_SCRIPT } from "./bench.js";
 import { HermesError } from "./hermes.js";
 import type { JobContext } from "./outbox.js";
 import { sandboxApiKey, sandboxName } from "./sandbox-manager.js";
@@ -51,6 +51,15 @@ test("runTurns: the scripted conversation, each turn with the history before it,
   assert.equal(last.facts.length, 5);
 });
 
+test("soak: the script's chats that change nothing — no plan change, undo or note to pile up overnight", () => {
+  assert.deepEqual(
+    SOAK_SCRIPT.map((step) => step.text),
+    SCRIPT.filter((step) => step.kind === "chat" && !/^(Change|Actually, undo|Save a note)/.test(step.text)).map((step) => step.text),
+  );
+  assert.equal(SOAK_SCRIPT.length, 6);
+  assert.ok(SOAK_SCRIPT.some((step) => /vegetarian foods/.test(step.text)), "the web search stays in");
+});
+
 test("runTurns: a failed turn is recorded and the conversation goes on", async () => {
   const c = clock();
   let calls = 0;
@@ -96,7 +105,7 @@ test("renderTurns: the table, p50/p95 and the cost per 10 turns against O-04", (
   assert.doesNotMatch(bad, /^\| 1 \|/m);
 });
 
-test("runColdStart: stop, start, then retry an unreachable Hermes until it answers", async () => {
+test("runColdStart: stop, start, then retry a Hermes that isn't listening yet until it answers", async () => {
   const c = clock();
   const calls: string[] = [];
   const driver = {
@@ -112,7 +121,9 @@ test("runColdStart: stop, start, then retry an unreachable Hermes until it answe
       assert.equal(ep.baseUrl, "http://sb.svc:8642");
       assert.equal(ep.apiKey, "key");
       c.advance(1_000);
-      if (++attempts % 3 !== 0) throw new HermesError("hermes unreachable: ECONNREFUSED", false);
+      // A refused connection, then the gateway's 502 for a port not open yet: hermes.ts marks both not ready.
+      if (++attempts % 3 === 1) throw new HermesError("hermes unreachable: ECONNREFUSED", false, true);
+      if (attempts % 3 === 2) throw new HermesError("hermes 502: {}", false, true);
       return { text: "hi" };
     },
   };
@@ -123,9 +134,10 @@ test("runColdStart: stop, start, then retry an unreachable Hermes until it answe
     [true, 5_000, 20_000, 7_000],
   ]);
   assert.match(renderColdStarts(runs, "t"), /\*\*Worst 27\.0 s\*\* — ≤ 60 s: ✅/);
+  assert.match(renderColdStarts(runs, "t"), /Start → first reply: p50 27\.0 s, p95 27\.0 s/);
 });
 
-test("runColdStart: an error other than unreachable stops the run; a CLI failure is reported", async () => {
+test("runColdStart: an error from a Hermes that is listening stops the run; a CLI failure is reported", async () => {
   const c = clock();
   const deps: BenchDeps = {
     now: c.now,

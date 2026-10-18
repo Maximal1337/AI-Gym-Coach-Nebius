@@ -646,12 +646,12 @@ while sleep 60; do echo "$(date -u +%H:%M) $(sudo /usr/local/lib/notch-ops/healt
 The write tools run for real (one exercise changed, then undone), so only a test account. Raise the relay's `SANDBOX_IDLE_MINUTES` above the run's length first, or its idle sweep stops the sandbox mid-run. The base platform's RAM: `free -m` and the health report's memory lines with no sandbox running.
 
 - [ ] Tools called reliably (O-04), with the profile's rules 6 and 7 from NH-45: in NH-29 the agent said it had added the user's facts and that it would save a skill, and on 2026-10-16 it twice promised to "check your active plans" and ended the turn, by its length without a tool call. About 10 questions that need a tool and 3 that don't; from the session history, the share of turns that needed a tool and called one, and the share that promised an action without one; for the current profile, one with rules 6 and 7 made stricter, and `reasoning_effort: "low"` for comparison
-- [ ] p50/p95 reply latency, and cold start of a stopped sandbox
-- [ ] Input/output tokens per turn and cost per 10-turn conversation at the routing from D-03
-- [ ] RAM of the base platform and per sandbox, idle and during a heavy turn; O-12 answered with 4 prod + 2 dev sandboxes running
+- [x] p50/p95 reply latency, and cold start of a stopped sandbox — 2026-10-18: turns p50 4.4 s, p95 5.4 s; a start 17.4 to 18.8 s to the first reply in 9 of 10, one 151 s (the supervisor's reconnect, OpenShell 0.1.2)
+- [x] Input/output tokens per turn and cost per 10-turn conversation at the routing from D-03 — $0.0453 per 10 turns with thinking off, $0.0553 with `reasoning_effort: "low"`
+- [x] RAM of the base platform and per sandbox, idle and during a heavy turn; O-12 answered with 4 prod + 2 dev sandboxes running — six sandboxes in dev, three with turns at once: 3.7 GiB used, 4.2 GiB available; a sandbox 215 MiB fresh to 300 after a day, +35 MiB in a turn, 16 MiB for its supervisor
 - [ ] A multi-hour soak of one sandbox to measure Hermes' memory growth; watchdog threshold for NH-35 set from it
 - [ ] Confirmed over a longer session that `content` is never empty because of reasoning
-- [ ] Sample replies in Hebrew, Arabic and Portuguese collected (informational)
+- [x] Sample replies in Hebrew, Arabic and Portuguese collected (informational) — in the tool check: answered in the user's language, the tools called
 
 #### NH-26 · Verify isolation and security controls
 **Priority:** Urgent · **Estimate:** 5 · **Labels:** Area/Security, Type/Spike · **Blocked by:** NH-29

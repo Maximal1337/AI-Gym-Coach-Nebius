@@ -18,6 +18,10 @@ configMapGenerator:
       - SANDBOX_SHARED_PROVIDERS=token-factory,tavily
       # The environment's OpenShell gateway, in this namespace (NH-29).
       - OPENSHELL_GATEWAY_ENDPOINT=https://openshell.notch-dev.svc:8080
+      # The overnight soak of spike item 7 (NH-25): its turns go straight to
+      # the sandbox, not through the relay, so the idle sweep would stop it
+      # mid-run. Back to the default (10) the morning after.
+      - SANDBOX_IDLE_MINUTES=1440
       # The per-sandbox memory limit, the NH-35 watchdog: OpenShell sets it as
       # the pod's memory request and limit. Unset until NH-25 measures Hermes;
       # then e.g. SANDBOX_MEMORY=900Mi (the cap times this must fit the RAM left
