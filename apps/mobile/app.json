@@ -1,22 +1,22 @@
 {
   "expo": {
-    "name": "Notch",
-    "slug": "gymcoach-ai",
-    "version": "1.0.2",
+    "name": "Notch Coach",
+    "slug": "notch-nebius",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "scheme": "gymcoach",
+    "scheme": "gymcoach-nebius",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.dorbob.gymcoach",
+      "bundleIdentifier": "com.dorbob.gymcoach.nebius",
       "usesAppleSignIn": true,
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.dorbob.gymcoach",
+      "package": "com.dorbob.gymcoach.nebius",
       "adaptiveIcon": {
         "backgroundColor": "#0A0B0D",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -50,7 +50,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "1a49acbc-6b71-4dc2-9dae-d9047b2597bc"
+        "projectId": "fd923d4e-10bd-40a2-a6a5-7ea52e51805c"
       }
     },
     "owner": "gymcoach-ai"

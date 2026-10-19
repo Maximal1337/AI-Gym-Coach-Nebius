@@ -207,7 +207,7 @@ As of 2026-09-27:
 | D-13 | One NanoClaw agent group per user | **Superseded by D-26** | 2026-09-27 | Runtime changed |
 | D-14 | The NanoClaw host pulls work from Supabase; no inbound traffic | **Superseded by D-27** | 2026-09-27 | Same principle, new runtime |
 | D-15 | Nebius VM 2 vCPU / 8 GiB, Oct 1 → Dec 15 | **Superseded by D-31** | 2026-09-27 | Sizing, dates and accounts changed |
-| D-16 | Judges test via a **public TestFlight link + seeded demo accounts** (one per judge) | Confirmed | 2026-09-27 | The App Store version for real users stays unchanged |
+| D-16 | Judges test via a **public TestFlight link + seeded demo accounts** (one per judge), in a **separate TestFlight-only app**: "Notch Coach", bundle id `com.dorbob.gymcoach.nebius`, its own EAS project (`@gymcoach-ai/notch-nebius`) and App Store Connect record (revised 2026-10-19) | Confirmed | 2026-10-19 | The App Store version for real users stays unchanged, and judges can install both apps side by side to see before and after. The app is never released to the App Store; its paywall is hidden (`EXPO_PUBLIC_SUBSCRIPTION_PAUSED=true` in its own EAS env, no RevenueCat key) |
 | D-17 | During the hackathon, existing coaching functions and the behavior of `_shared/mod.ts` do not change (NH-14 excepted). New code lives in new functions and `_shared/assistant.ts`; `mod.ts` may only gain new exports. Migrations are additive only | Confirmed | 2026-09-27 | Protects real users |
 | D-18 | Work is tracked in **Linear** (§8) | Confirmed | 2026-09-17 | Team workflow |
 | D-19 | OpenShell, Hermes and NemoClaw's Hermes blueprint are the **runtime, not the product**. The deliverable is our own software on top: the MCP tool server over real training data, the memory pipeline, per-user sandbox provisioning and the relay, the GitOps deployment, and the deterministic progression the agent must obey. README and video lead with those | Confirmed | 2026-09-27 | Stage 1 rejects a superficial rebrand of an open-source base; "deploy Hermes + Nemotron + Tavily" is configuration, not a project |
@@ -969,7 +969,7 @@ Required (D-21): "always-on" is half of what the Personal AI track asks for, and
 
 EAS build and submit commands need explicit team approval and `--non-interactive` (see `apps/mobile/AGENTS.md`). NH-71 ships in the same build if it's ready.
 
-Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testflight-build-nh-72) (2026-09-30). Found while writing it: `app.json` is still `1.0.2`, the version released on 2026-08-20. If that's live, the build needs `1.0.3`, because App Store Connect refuses new builds on an approved version; and `public.app_config.latest_version` must stay as it is, or App Store users are nudged toward a version they can't get.
+Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testflight-build-nh-72) (2026-09-30). Since D-16's revision (2026-10-19) the build is a separate app with its own version line starting at `1.0.0`, so the live app's `1.0.2` doesn't constrain it; `public.app_config.latest_version` still must stay as it is, or App Store users are nudged toward a version they can't get. The server-side subscription check still applies: judge and review accounts must pass it through judging (2026-12-15), not only through a 30-day trial.
 
 - [ ] Build submitted to Beta App Review for external testing by 2026-10-16
 - [ ] Public TestFlight link created
