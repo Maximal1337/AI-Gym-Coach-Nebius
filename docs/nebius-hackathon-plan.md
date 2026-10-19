@@ -988,6 +988,7 @@ Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testfl
   - a write tool changes the plan, and undo reverts it
   - delete a fact, and the next reply doesn't use it — a known limit, left as is on 2026-10-06: the agent sees the last 20 chat messages, so a fact the chat itself mentioned (for example in the answer to "What do you know about me?") can still come back from that history after it's deleted
   - push notification received
+- [ ] Before judging starts on 12-01, on the test Supabase project the judges' build uses: `SUBSCRIPTION_PAUSED` is still set, and the expired-trial test passes again — an account whose trial ended in the past sends the coach a message and gets an answer
 - [ ] Every issue found is filed in Linear
 
 ### M8 — Cancelled
