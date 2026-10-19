@@ -128,6 +128,36 @@ argocd --core app sync root
 - **Egress:** the sandboxes go out only through their gateway's policy; the
   allowlist and the host firewall's outbound rules are NH-32.
 
+### The agent probe (NH-26)
+
+`services/relay/src/agent-probe.ts` checks the tools in the request Hermes
+sends the model, so it reads Hermes' request dump, which is off in every
+sandbox. Turn it on for the run only: the dump holds every request in full,
+the conversation and the user's facts with it.
+
+```bash
+# On the VPS, for a stopped sandbox <name> of notch-dev. The variable is added
+# to its Sandbox object, the way a new image is (below), and applies at the next start.
+kubectl -n notch-dev patch sandboxes.agents.x-k8s.io default--<name> --type=json -p '[
+  {"op":"test","path":"/spec/podTemplate/spec/containers/0/name","value":"agent"},
+  {"op":"add","path":"/spec/podTemplate/spec/containers/0/env/-","value":{"name":"HERMES_DUMP_REQUESTS","value":"1"}}]'
+# Start it, run the probe (the plan's NH-26 has the commands), then take the
+# variable out again: <i> is its index among the container's env entries.
+kubectl -n notch-dev get sandboxes.agents.x-k8s.io default--<name> \
+  -o jsonpath='{range .spec.podTemplate.spec.containers[0].env[*]}{.name}{"\n"}{end}' | grep -n HERMES_DUMP_REQUESTS
+kubectl -n notch-dev patch sandboxes.agents.x-k8s.io default--<name> --type=json -p '[
+  {"op":"test","path":"/spec/podTemplate/spec/containers/0/env/<i>/name","value":"HERMES_DUMP_REQUESTS"},
+  {"op":"remove","path":"/spec/podTemplate/spec/containers/0/env/<i>"}]'
+# Delete the dumps, and stop the sandbox so Hermes starts again without the variable.
+kubectl -n notch-dev exec -i deploy/notch-relay -- openshell sandbox exec -n <name> --no-tty -- \
+  sh -c 'rm -f /sandbox/.hermes/sessions/request_dump_*' < /dev/null
+kubectl -n notch-dev exec deploy/notch-relay -- openshell sandbox stop <name>
+```
+
+The grep prints the line number, one more than `<i>`. The manager stops a
+sandbox 10 minutes after it first sees it running, so start the sandboxes
+right before the probe.
+
 ## Checked only on the VPS
 
 Written and reviewed on a laptop; these need the real cluster (NH-21, NH-26):

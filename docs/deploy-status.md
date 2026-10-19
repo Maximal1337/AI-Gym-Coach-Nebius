@@ -13,22 +13,22 @@ manager.
 
 ## 1. Current state — 2026-10-19
 
-Spike items 1 to 7 of 9 are done: NH-21 with O-11, the provider profiles on
-the dev gateway, NH-22 — Nemotron answers through Hermes and uses the Notch
-tools — NH-23, web search through Tavily, with one question left open: the
-agent links its sources only when asked (below), NH-24, a test account's
-messages through the dev relay to its sandbox and back, and NH-29: the dev
-relay runs the sandbox manager, which creates, stops, starts and deletes the
-sandboxes itself. Since the same day both relays long-poll the outbox: a
-claim waits up to 50 s for a job. Item 7, the measurements, ended with the
-soak on 2026-10-19 (below), and one push brought the branch
-`spike/relay-fixes` into `main`: a little thinking on interactive turns
-(deviation 16, proposed), the pages a turn searched as its reply's sources,
+**The spike is done, and it's a go** (NH-27, 2026-10-19, the plan's D-36).
+All nine items: NH-21 with O-11, the provider profiles on the dev gateway,
+NH-22 — Nemotron answers through Hermes and uses the Notch tools — NH-23, web
+search through Tavily, NH-24, a test account's messages through the dev relay
+to its sandbox and back, NH-29: the dev relay runs the sandbox manager, which
+creates, stops, starts and deletes the sandboxes itself; long polling, a
+claim waiting up to 50 s for a job; NH-25, the measurements, ending with the
+soak on 2026-10-19; NH-26, isolation, the same day (below); and the go/no-go.
+One push on 2026-10-19 brought the branch `spike/relay-fixes` into `main`: a
+little thinking on interactive turns (deviation 16), the pages a turn
+searched as its reply's sources — checked in the app on dev the same day —
 a three-minute wait for a starting Hermes, sandboxes kept running for the
 demo and judge accounts, and the gateway setup script; dev's
 `SANDBOX_IDLE_MINUTES` is back to its default of 10. The prod gateway has had
-the global policy and the three profiles since 2026-10-18; its providers and
-the manager wait for prod's day.
+the global policy and the three profiles since 2026-10-18; its providers, the
+manager and `SANDBOX_MEMORY` are prod's day, 2026-10-20.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -55,8 +55,8 @@ gateways.
 | Relay to its gateway | Registered (`Status: Connected`) | The same |
 | Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` with its three network rules; kept across gateway restarts | **Not set** |
 | Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | None |
-| Providers | `token-factory` with the dev key, `tavily`, and the tool token of test account A, created by the manager | None |
-| Sandboxes | Test account A's, created by the manager; it stops after 10 idle minutes and starts for the next message | None |
+| Providers | `token-factory` with the dev key, `tavily`, and the tool tokens of test accounts A and B, created by the manager | None |
+| Sandboxes | Test accounts A's and B's, created by the manager; each stops after 10 idle minutes and starts for the next message | None |
 
 **Supabase.** Both relays work against a temporary test project, created on
 2026-10-10 so the spike doesn't wait for the main one: migrations, function
@@ -66,8 +66,10 @@ in [Next steps](#3-next-steps).
 
 **Host.** ufw denies incoming traffic except SSH, which is rate-limited; sshd
 takes keys only; fail2ban and unattended upgrades are on. The cluster has no
-NodePort or LoadBalancer service, and only port 22 answers from outside
-(checked 2026-10-10; repeated with live sandboxes in NH-26).
+NodePort or LoadBalancer service and no pod on the host's network, and only
+port 22 answers from outside (checked 2026-10-10, and again on 2026-10-19 in
+NH-26 with sandboxes running: the host listens on 22, 6443 and 10250, and from
+outside only 22 answers).
 
 **Backups** ([runbook](../deploy/README.md#backups-and-restore-nh-34)):
 nightly at 01:30 UTC since 2026-10-10. The backup key was created again — the
@@ -92,7 +94,8 @@ to 3.7 GiB used, 4.2 GiB available. The soak (2026-10-18 14:31 to 10-19
 grew from 218 MiB to 300 in the first seven hours and then stayed at 300 to
 304 for the next eight — no leak. So a watchdog limit of `SANDBOX_MEMORY=640Mi`
 (NH-35) leaves twice the plateau and a turn; six such sandboxes ask for
-3.75 GiB, within what O-12 left free. Proposed, set with prod.
+3.75 GiB, within what O-12 left free. Accepted on 2026-10-19 (NH-27), set
+with prod.
 
 **Works**
 
@@ -185,27 +188,40 @@ grew from 218 MiB to 300 in the first seven hours and then stayed at 300 to
   round trip, `tool_choice: "required"` and JSON-schema output with thinking
   off; Nano fails all three (NH-28, 2026-10-09).
 - Nightly backups and the health check.
+- Sources under the coach's answers (NH-23, 2026-10-19). The agent links a
+  page only when asked (none of 16 searched answers in items 4 and 5 that
+  didn't ask), so the relay now reads the turn's own `web_search` results
+  from its Hermes session and sends up to three of those pages with the
+  reply, after the reply's own links. Test account A asked the app how much
+  protein 100 g of cooked quinoa has: the answer came 31 s after the message,
+  the sandbox starting from stopped, with three sources under it.
+- Isolation (NH-26, 2026-10-19, test accounts A and B, on the image with
+  `low`). From inside A's sandbox: no service account token, nothing
+  key-shaped in the environment — `NEBIUS_API_KEY`, `TAVILY_API_KEY` and
+  `NOTCH_TOOL_TOKEN` hold OpenShell's placeholders — PID 1's environment
+  unreadable, nothing writable but `/sandbox` and `/tmp`, and no volume but
+  its own. No direct connection, from a shell or from Hermes' own
+  interpreter (the one binary the policy lets out), to B's pod, the gateway,
+  the node's 6443, 10250 or 22, the cluster API, the metadata service or the
+  internet; the positive control is that interpreter reaching Token Factory.
+  Each provider's placeholder resolves only for its own host: sent to another
+  provider's host in a header, or in Tavily's body (the one endpoint whose
+  body the proxy rewrites), it gets a 403 `credential_endpoint_mismatch` from
+  the proxy and goes nowhere; with its own host, 200. From the agent's side
+  (`agent-probe.ts`), on A and on B: the request to the model, from Hermes'
+  own dump, carries exactly D-29's twelve tools; the coach's profile opens
+  the system prompt, and no skill index is in it; six prompts after keys,
+  the tool token, a shell, a file, a fetched page and another user's data got
+  nothing. The positive control: asked what its home gym is called, B's agent
+  named what B's facts say — from the fact in the context, and without it
+  through `get_user_facts` — and A's didn't know. The probe matched the name
+  only after a fix: Nemotron wrote it with a narrow no-break space before the
+  number, which a plain comparison missed, and which would have let a leak of
+  a canary through too; canaries are now matched however they're spaced.
 
-**Doesn't work yet**
-
-- No sources under the coach's answers. The answers come from the search
-  results, but the agent links a page only when asked: none of 8 answers in
-  item 4 that didn't ask, none of 8 searched answers in item 5 (5 of them with
-  the relay's own prompt), and 1 to 3 of 4 when the user asked. The
-  `【1†L1-L8】` markers it sometimes writes instead are now dropped by the relay
-  (`5a5efa0`); a URL inside one still becomes a source. Wording in the
-  profile and a reminder from the relay each helped little, so the relay is
-  to take the sources from Hermes' own search results (Next steps).
-- With a conversation before it, the agent sometimes refuses a plain
-  supplement question. "Is creatine safe to take every day, and what dose do
-  studies use?" after a question about the plan was refused as "personalized
-  supplement recommendations" in 2 of 4 turns, without a search, and the
-  follow-up in the same way; on its own it was searched and answered 6 of 6
-  times. The profile's rule against medical advice is read too widely; the
-  decision is in Next steps (NH-45).
-- **Tools weren't called reliably once there was a conversation before the
-  message; `reasoning_effort: "low"` fixes it** (deviation 16, proposed, on
-  `main` after the soak) — O-04's "Nemotron calls tools reliably through Hermes", so a
+- **Tools called reliably with a conversation before the message, since
+  `reasoning_effort: "low"`** (deviation 16, accepted on 2026-10-19, on
+  `main` since that day) — O-04's "Nemotron calls tools reliably through Hermes", so a
   go/no-go question. Measured in item 7 (2026-10-17 and 10-18) on test
   account A, seeded with the demo seed's plan and two weeks of workouts, with
   the relay's own prompt, from each turn's session history. Without history
@@ -269,28 +285,54 @@ grew from 218 MiB to 300 in the first seven hours and then stayed at 300 to
   three sandboxes with turns at once: p50 3.5 s, p95 8.6 s (one sandbox's
   14.6 s), memory never below 4.5 GiB available. None of 160 turns came back
   empty. Its price is O-04's $0.05 itself — hence $0.10 (deviation 17,
-  proposed).
+  accepted on 2026-10-19).
+
+**Doesn't work yet**
+
+- With a conversation before it, the agent sometimes refuses a plain
+  supplement question. "Is creatine safe to take every day, and what dose do
+  studies use?" after a question about the plan was refused as "personalized
+  supplement recommendations" in 2 of 4 turns, without a search, and the
+  follow-up in the same way; on its own it was searched and answered 6 of 6
+  times. The profile's rule against medical advice is read too widely; the
+  decision is in Next steps (NH-45).
 - One start in seven or so waits about two minutes. 2 of 15 starts and
   creates on 2026-10-18 took 151 s and 159 s instead of 18 s and 26 s: the
   sandbox's supervisor failed its first connection to the gateway and tried
-  again 2 min 16 s later (OpenShell 0.1.2). That is over O-04's 60 s, and
-  over the relay's 120 s wait for a starting Hermes, after which the
-  message's attempt fails and goes back to the queue — three minutes in the
-  branch. Two creates that evening failed outright and were rolled back by
-  OpenShell ("timed out waiting for gated workload Pod", then "sandbox not
-  found"); the next one worked.
+  again 2 min 16 s later (OpenShell 0.1.2). That is over O-04's 60 s. The
+  relay now waits three minutes for a starting Hermes, so the message keeps
+  its attempt, and the demo and judge accounts stay running
+  (`SANDBOX_KEEP_RUNNING`); no warming when the chat opens (NH-27). Two
+  creates that evening failed outright and were rolled back by OpenShell
+  ("timed out waiting for gated workload Pod", then "sandbox not found"); the
+  next one worked.
 - Asked outright to use its skill tool, the agent saved a skill at the sixth
   attempt (item 6): Hermes refused five descriptions longer than 60
   characters, and each retry was another model call (NH-45).
 - Hermes offers the agent NemoClaw's bundled skills too — `skills_list`
   returns ones for coding agents, email and social media next to the coach's.
-  Whether they reach the prompt, and what they cost, is for item 8's dump.
+  None reaches the prompt (item 8's dump): Hermes builds the prompt's skill
+  index from a `skills` directory beside its state database, which NemoClaw's
+  image keeps in `runtime/`, where there is none — so the index is empty,
+  and a skill the agent saves itself isn't in it either; only `skills_list`
+  finds it. Costs nothing, and makes Hermes' learned skills invisible until
+  asked for (NH-45).
+- Hermes adds its own guidance to the system prompt after the coach's
+  profile (item 8's dump, about 5,800 of its 11,200 characters), and some of
+  it pulls against the profile: record "the user's preferences and
+  corrections" in skills, where the profile says skills are never personal
+  (D-30); "no markdown", where the profile asks for **bold**; finish the job
+  with "real tool output", written for coding. One part is a door: the model
+  is told to trust an exact "out-of-band user message" marker at the end of a
+  tool result, as the user's own words, and Hermes defangs only its
+  `untrusted_tool_result` tag in what a search returns, not that marker. A
+  page Tavily returns could carry it; the relay never steers a turn, so
+  nothing legitimate uses it. Not a failure of NH-26's checks; for NH-45 —
+  a third image patch that defangs it in tool results, or leave it.
 - Only the team's accounts with a dev mapping can chat, in dev; prod has no
   manager yet.
-- Nothing of this is on prod: its gateway has no global policy, no profiles
-  and no providers, so a sandbox there wouldn't even start.
-- Isolation is unverified (NH-26), nothing is measured (NH-25), and there's no
-  go/no-go (NH-27, due 2026-10-04 in the plan).
+- Prod has the global policy and the profiles, but no providers, so a
+  sandbox there wouldn't start yet (prod's day, 2026-10-20).
 - The host's outbound allowlist (NH-32).
 
 **Known noise.** Each gateway logs "Sandbox list failed" about 15 times an hour
@@ -325,8 +367,8 @@ Decisions taken along the way, each with its reason and where it lives.
 | 13 | NH-23: `web` among Hermes' disabled toolsets, to keep `web_extract` out | `web` is no longer disabled; only `search` (`web_search` alone) is enabled for the API server, and the policy refuses Tavily's `/extract` | A disabled toolset's tools are taken away from every session at the end, and `web` holds `web_search` too: the model never got a search tool at all | `b21c26f` |
 | 14 | NH-54: the relay claims again 2 s after an empty claim | **Closed on 2026-10-16 by 15.** Until then an empty claim waited 10 s in dev and 60 s in prod before the next one (`RELAY_IDLE_POLL_MS`) | Every claim is an Edge Function call: at 2 s the two relays made about 86,000 a day, against the 500,000 a month of the test project's free plan. A message waited up to 10 s in dev before it was claimed | `697f099` |
 | 15 | NH-52, NH-54: a claim answers at once, and the relay claims again 2 s after an empty one | Long polling. A claim takes `wait_seconds`, 0 to 50 (0, the default, is one look, as before); `assistant-outbox` looks at the queue every 2.5 s and answers as soon as a job is there, with `reason: "empty"` when the wait is over, and at once with `reason: "paused"` at the spend ceiling. The relay asks for 50 s and gives the claim 65 s; after an empty answer at the deadline it claims again at once, after a fast one (paused, or under 5 s) or an error it waits `RELAY_IDLE_POLL_MS`, 30 s, growing to a minute as errors repeat. A stopping relay lets a waiting claim come back and hands a job it brings back to the queue unspent | Deviation 14 traded calls for delay; a claim that waits saves both: about 72 calls an hour per idle relay, and a message is claimed at the function's next look. A full wait is about 20 looks, some 20 to 40 ms of the 2 s CPU limit. The relay doesn't cut a claim short because the hosted runtime doesn't tell the function the request is gone (`req.signal` didn't fire in a test on 2026-10-16), and the function would lease a job that arrives after to nobody | `3b948f6`, `8746cc8` |
-| 16 | D-03: no thinking on interactive turns, `reasoning_effort: "none"` | `"low"`, **Proposed** (the plan's D-03) | With thinking off, a turn after an earlier exchange called the tool it needed in 6 of 16 — it promised and stopped, claimed undos it never made, gave numbers from nowhere; with low, 16 of 16, none of 160 turns empty, p95 within 15 s | `95f5465`, on `main` after the soak |
-| 17 | O-04: ≤ $0.05 per 10-turn conversation | ≤ $0.10, **Proposed** (the plan's O-04) | D-34's ceilings bound the spend whatever a turn costs — prod's $1 a day is about 200 turns. A conversation whose turns call their tools came to $0.045–0.055 per 10 | — |
+| 16 | D-03: no thinking on interactive turns, `reasoning_effort: "none"` | `"low"`, accepted on 2026-10-19 (NH-27; the plan's D-03) | With thinking off, a turn after an earlier exchange called the tool it needed in 6 of 16 — it promised and stopped, claimed undos it never made, gave numbers from nowhere; with low, 16 of 16, none of 160 turns empty, p95 within 15 s | `95f5465` |
+| 17 | O-04: ≤ $0.05 per 10-turn conversation | ≤ $0.10, accepted on 2026-10-19 (NH-27; the plan's O-04) | D-34's ceilings bound the spend whatever a turn costs — prod's $1 a day is about 200 turns. A conversation whose turns call their tools came to $0.045–0.055 per 10 | — |
 
 Smaller ones, in the same commits: the policy opens `/opt/hermes` read-only
 next to `/opt/notch`, because Hermes runs from there; the relay builds a
@@ -345,23 +387,23 @@ proposed — set on 2026-10-13 at one spike item a day, moved a day on
 the others are the plan's.
 
 **The spike**, in this order. Each item ends with a short report and an update
-of this file. Items 1 to 6 are done, and long polling before item 7.
+of this file. All nine are done, and long polling before item 7.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
 | 7 | Done on 2026-10-19: the tool check, turns, cold starts, O-12 and the soak (above). The health check's alerts on again (Max) | NH-25 | Claude; Max | — | done 10-19 |
 | — | The history the relay sends: done on 2026-10-18 (above). Hermes' API takes no tool calls in a client's history; continuing the Hermes session works, and goes to the backlog (PH-17); `low` was chosen | NH-25 | Claude | — | done |
-| 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity, and which of NemoClaw's bundled skills reach the prompt | NH-26 | Claude; Max plants the canary in B's facts | — | *10-19* |
-| 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31). Decided from item 7 on 2026-10-18: `low` on interactive turns (D-03, deviation 16), O-04's price at $0.10 (17), no safety net in the relay, the Hermes session to PH-17. Against cold starts, in the branch: a three-minute wait for a starting Hermes, so the supervisor's rare 2 min 16 s doesn't cost the message an attempt, and `SANDBOX_KEEP_RUNNING` for the demo and judge accounts (about 0.3 GiB each, all the time, and a place of prod's 4). Still open, for the go/no-go: a shorter wait before the relay retries a job whose Hermes is starting (10 s now; 3 s saves up to 7 s, no RAM), and warming the sandbox when the user opens the chat (250 to 300 MiB per open chat for 10 idle minutes; the app, a function and the relay, half a day to a day). OpenShell 0.1.3's changelog has "keep session retries during startup" (#3765), nothing on the delay itself; we stay on 0.1.2 | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
+| 8 | Done on 2026-10-19: isolation from inside A's sandbox and from the agent's side on A and B, with B's canary and the positive control; each provider's key only for its own host; NodePort and LoadBalancer again; the tools, the identity and the skills from Hermes' own request dump (above). Nothing failed; Hermes' own prompt guidance goes to NH-45 | NH-26 | Claude; Max planted the canary | — | done 10-19 |
+| 9 | Done on 2026-10-19 — **go** (the plan's D-36). Accepted: `low` on interactive turns (D-03, deviation 16), O-04's price at $0.10 (17), the VPS at 2 vCPU / 8 GiB (O-12, D-31), `SANDBOX_MEMORY=640Mi` with prod on 10-20. Cold starts: the three-minute wait for a starting Hermes and `SANDBOX_KEEP_RUNNING` for the demo and judge accounts, at most 3 in prod (about 0.3 GiB each, all the time); no warming when the chat opens. Decided on 10-18: no safety net in the relay, the Hermes session to PH-17. We stay on OpenShell 0.1.2 | NH-27 | Max | — | done 10-19 |
 
 **After the spike**
 
 | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|
-| Prod: the global policy and the profiles are in its gateway (2026-10-18, `setup-gateway.sh`); left are the providers `token-factory` and `tavily` and the manager | NH-33, NH-55 | Claude; Max enters the prod keys | A go in NH-27 | *10-20* |
-| One idempotent script that sets a gateway up: `deploy/ops/setup-gateway.sh` (in the branch), the runbook's steps 1 and 2 in one command, providers checked but never touched; on dev it found everything as in Git, on prod it set the policy and imported the profiles, and a second run changed nothing | NH-33 | Claude | — | done 10-18 |
-| Sources from Hermes' own search results: in the branch (2026-10-18), each rule with its test — this turn's `web_search` results only, https without user info and within the length limit, no page twice, three at most, titles stripped and cut, never in the reply's text, the session read within about 3 s through one module (`hermes-session.ts`), a failed read leaving the reply its own links. Checked on dev with the morning's push | NH-23 | Claude | — | *10-19* |
-| Rule 1 of the coach's profile, drawn more narrowly: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't (item 5's refused creatine question). The same change caps a skill's description at one sentence of 60 characters. Rules 6 and 7 moved to item 7 on 2026-10-16: they are O-04's tool reliability. The creatine question is in NH-73's checklist | NH-45 | Max and the partner decide; the partner writes the wording; Claude checks it on the spike's questions | — | Before NH-73 |
+| Prod: the global policy and the profiles are in its gateway (2026-10-18, `setup-gateway.sh`); left are the providers `token-factory` and `tavily` (Max's keys), the manager, `SANDBOX_MEMORY=640Mi` and `SANDBOX_KEEP_RUNNING` for the demo and judge accounts (at most 3) | NH-33, NH-55, NH-35 | Claude; Max enters the prod keys | — | *10-20* |
+| One idempotent script that sets a gateway up: `deploy/ops/setup-gateway.sh`, the runbook's steps 1 and 2 in one command, providers checked but never touched; on dev it found everything as in Git, on prod it set the policy and imported the profiles, and a second run changed nothing | NH-33 | Claude | — | done 10-18 |
+| Sources from Hermes' own search results, each rule with its test — this turn's `web_search` results only, https without user info and within the length limit, no page twice, three at most, titles stripped and cut, never in the reply's text, the session read within about 3 s through one module (`hermes-session.ts`), a failed read leaving the reply its own links. Checked in the app on dev on 2026-10-19 | NH-23 | Claude | — | done 10-19 |
+| Rule 1 of the coach's profile, drawn more narrowly: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't (item 5's refused creatine question). The same change caps a skill's description at one sentence of 60 characters. Rules 6 and 7 moved to item 7 on 2026-10-16: they are O-04's tool reliability. The creatine question is in NH-73's checklist. From item 8's dump: Hermes' own guidance in the prompt against the profile, and its out-of-band marker in tool results (above) | NH-45 | Max and the partner decide; the partner writes the wording; Claude checks it on the spike's questions | — | Before NH-73 |
 | The NH-06 rollout on the main Supabase project | NH-06 | Partner | — | *10-19* |
 | TestFlight build submitted to Beta App Review | NH-72 | Partner | The team's go-ahead for the EAS build | *10-18* |
 | The move to the main Supabase project: the same `RELAY_SECRET` values there as in the env files, every sandbox created again (tool tokens and sandbox records belong to a project), `SUBSCRIPTION_PAUSED` checked | NH-06, NH-51 … NH-53 | Partner (Supabase), Max (env files), Claude (the check) | The NH-06 rollout; migrations, secrets and functions on the main project, `assistant-outbox` from `3b948f6` or later (the relays' claims carry `wait_seconds`, which an older one refuses with a 400) | *10-21* |
@@ -390,16 +432,18 @@ of this file. Items 1 to 6 are done, and long polling before item 7.
 
 **Open questions the spike carries**
 
-- Does "Sandbox list failed" grow under load? (item 7)
-- What does a ten-turn conversation cost with the relay's own prompt, the
-  facts and a history? (item 7, against O-04's $0.05)
-- Does the proxy put a provider's key only into requests for that provider's
-  host? (item 8)
-- Which of NemoClaw's bundled skills reach the prompt, and what do they
-  cost? (item 8, from the dump)
 - A search returns five results (the tool's default), 7,000 to 8,500
   characters a time: would fewer keep the answers and cut a search turn's
-  cost? (item 7)
+  cost? Not measured in item 7; with O-04 at $0.10 it isn't urgent.
+
+Answered in item 8: the proxy resolves a provider's placeholder only for that
+provider's host, and refuses a request that carries it anywhere else (403
+`credential_endpoint_mismatch`); none of NemoClaw's bundled skills reaches the
+prompt — the prompt has no skill index at all.
+
+Answered in item 7: "Sandbox list failed" doesn't grow under load (fewer
+during the soak); a ten-turn conversation with the relay's prompt and a
+history costs $0.045 with thinking off and about $0.05 with `low`.
 
 Answered in item 6: a new image reaches only the sandboxes created after it;
 the existing ones get it through the runbook's procedure, at their next start
