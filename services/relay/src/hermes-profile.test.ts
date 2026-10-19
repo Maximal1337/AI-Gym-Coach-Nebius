@@ -128,6 +128,8 @@ test("SOUL.md keeps the non-negotiable rules (NH-40, NH-45)", () => {
     ["no personal data in web queries", /Never put personal details in a query/],
     ["sources cited as links", /\[title\]\(https:\/\/…\)/],
     ["no secrets", /Never ask for, repeat or store passwords, API keys or tokens/],
+    ["general supplement and nutrition evidence is allowed, with sources (NH-45)", /General, evidence-based information on sports nutrition and supplements[\s\S]*search for it and cite the sources/],
+    ["skill descriptions fit Hermes' 60-character limit (NH-45)", /description is one sentence of at most 60 characters/],
   ];
   for (const [name, re] of rules) assert.match(soul, re, name);
 });
