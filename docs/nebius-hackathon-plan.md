@@ -649,8 +649,8 @@ The write tools run for real (one exercise changed, then undone), so only a test
 - [x] p50/p95 reply latency, and cold start of a stopped sandbox — 2026-10-18: turns p50 4.4 s, p95 5.4 s; a start 17.4 to 18.8 s to the first reply in 9 of 10, one 151 s (the supervisor's reconnect, OpenShell 0.1.2)
 - [x] Input/output tokens per turn and cost per 10-turn conversation at the routing from D-03 — $0.0453 per 10 turns with thinking off, $0.0553 with `reasoning_effort: "low"`
 - [x] RAM of the base platform and per sandbox, idle and during a heavy turn; O-12 answered with 4 prod + 2 dev sandboxes running — six sandboxes in dev, three with turns at once: 3.7 GiB used, 4.2 GiB available; a sandbox 215 MiB fresh to 300 after a day, +35 MiB in a turn, 16 MiB for its supervisor
-- [ ] A multi-hour soak of one sandbox to measure Hermes' memory growth; watchdog threshold for NH-35 set from it
-- [ ] Confirmed over a longer session that `content` is never empty because of reasoning
+- [x] A multi-hour soak of one sandbox to measure Hermes' memory growth; watchdog threshold for NH-35 set from it — 2026-10-18/19, 900 turns in 15 hours: 218 MiB to 300 in seven hours, then 300 to 304 for eight, no leak; `SANDBOX_MEMORY=640Mi` proposed, to be set with prod
+- [x] Confirmed over a longer session that `content` is never empty because of reasoning — none empty in the soak's 900 turns with thinking off, nor in 160 with `low`
 - [x] Sample replies in Hebrew, Arabic and Portuguese collected (informational) — in the tool check: answered in the user's language, the tools called
 
 #### NH-26 · Verify isolation and security controls

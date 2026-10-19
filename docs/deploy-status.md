@@ -11,24 +11,24 @@ refs, check URLs, test accounts and keys are never written here: everything
 specific to the environment is in the **Notch VPS** entry in the password
 manager.
 
-## 1. Current state — 2026-10-18
+## 1. Current state — 2026-10-19
 
-Spike items 1 to 6 of 9 are done: NH-21 with O-11, the provider profiles on
+Spike items 1 to 7 of 9 are done: NH-21 with O-11, the provider profiles on
 the dev gateway, NH-22 — Nemotron answers through Hermes and uses the Notch
 tools — NH-23, web search through Tavily, with one question left open: the
 agent links its sources only when asked (below), NH-24, a test account's
 messages through the dev relay to its sandbox and back, and NH-29: the dev
 relay runs the sandbox manager, which creates, stops, starts and deletes the
 sandboxes itself. Since the same day both relays long-poll the outbox: a
-claim waits up to 50 s for a job. Item 7, the measurements, is done but
-the soak, which runs overnight into 10-19 (dev's `SANDBOX_IDLE_MINUTES` is
-1440 for it). The morning after, one push to `main` brings the default of 10
-back and the branch `spike/relay-fixes` in: a little thinking on interactive
-turns (deviation 16, proposed), the pages a turn searched as its reply's
-sources, a three-minute wait for a starting Hermes, sandboxes kept running
-for the demo and judge accounts, and the gateway setup script. The prod
-gateway has had the global policy and the three profiles since 2026-10-18;
-its providers and the manager wait for prod's day.
+claim waits up to 50 s for a job. Item 7, the measurements, ended with the
+soak on 2026-10-19 (below), and one push brought the branch
+`spike/relay-fixes` into `main`: a little thinking on interactive turns
+(deviation 16, proposed), the pages a turn searched as its reply's sources,
+a three-minute wait for a starting Hermes, sandboxes kept running for the
+demo and judge accounts, and the gateway setup script; dev's
+`SANDBOX_IDLE_MINUTES` is back to its default of 10. The prod gateway has had
+the global policy and the three profiles since 2026-10-18; its providers and
+the manager wait for prod's day.
 
 **On the VPS** — one Nebius VM, Ubuntu 24.04, 2 vCPU / 8 GiB / 60 GiB (NH-30),
 bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
@@ -87,8 +87,12 @@ sandbox's Hermes takes about 215 MiB fresh, about 250 after a few turns, and
 290 to 300 after a day; a turn adds about 35 MiB while it runs, and each
 sandbox's supervisor pod 16 MiB more. O-12, in dev: six sandboxes running —
 four prod and two dev in number — with turns in three at once, took the node
-to 3.7 GiB used, 4.2 GiB available. Whether Hermes grows over a night is the
-soak's question.
+to 3.7 GiB used, 4.2 GiB available. The soak (2026-10-18 14:31 to 10-19
+05:31 UTC, one turn a minute on test account A's sandbox, 900 turns): Hermes
+grew from 218 MiB to 300 in the first seven hours and then stayed at 300 to
+304 for the next eight — no leak. So a watchdog limit of `SANDBOX_MEMORY=640Mi`
+(NH-35) leaves twice the plateau and a turn; six such sandboxes ask for
+3.75 GiB, within what O-12 left free. Proposed, set with prod.
 
 **Works**
 
@@ -160,6 +164,12 @@ soak's question.
   its claim's wait. A push that changes an overlay and the code rolls the
   relay out twice: Argo CD applies the new ConfigMap on the old image first,
   and the new image follows a few minutes later.
+- The soak (NH-25, 2026-10-18/19, thinking off, the stricter profile): 900
+  turns over 15 hours, none failed or empty; p50 4.9 s, p95 7.9 s, the same
+  at the end as at the start. Each turn was a tool or search question with no
+  conversation before it, so $0.0678 per 10 turns — about 21,000 input
+  tokens a turn, 10 % more by morning, with Hermes' own memory still empty
+  (the search results' size, not a trend).
 - Turns, cold starts and O-12 (NH-25, 2026-10-18, the stricter profile).
   `bench turns` — nine messages with the relay's prompt and the history
   before each, and a check-in: p50 4.4 s, p95 5.4 s, $0.0453 per 10 turns at
@@ -285,7 +295,8 @@ soak's question.
 
 **Known noise.** Each gateway logs "Sandbox list failed" about 15 times an hour
 (6 to 22), the same in dev and prod, with no trend over 24 hours and no visible
-effect. Counted again during the soak (NH-25).
+effect. During the soak, 15 hours: 73 in dev and 64 in prod, under 5 an
+hour.
 
 **Known limit.** `assistant-outbox` doesn't see a claim the relay drops — at
 its 65 s timeout, or when the network fails — and goes on looking until its
@@ -338,7 +349,7 @@ of this file. Items 1 to 6 are done, and long polling before item 7.
 
 | # | Step | NH | Owner | Blocked by | Due |
 |---|---|---|---|---|---|
-| 7 | Done but the soak: the tool check, turns, cold starts and O-12 (above). **Left:** the soak overnight 10-18/19 — one turn a minute on test account A's sandbox, from `bench soak`'s messages that change nothing, memory per sandbox once a minute, "Sandbox list failed" counted again; no pushes to `main` during it: each one restarts the relay and both gateways. The morning after, `SANDBOX_IDLE_MINUTES` back to 10 in a commit | NH-25 | Claude; Max pauses the health check's alerts for the soak | — | *10-17*, the soak 10-18/19 |
+| 7 | Done on 2026-10-19: the tool check, turns, cold starts, O-12 and the soak (above). The health check's alerts on again (Max) | NH-25 | Claude; Max | — | done 10-19 |
 | — | The history the relay sends: done on 2026-10-18 (above). Hermes' API takes no tool calls in a client's history; continuing the Hermes session works, and goes to the backlog (PH-17); `low` was chosen | NH-25 | Claude | — | done |
 | 8 | Isolation: the probe from inside A's sandbox, the agent probe with A, B and B's canary, NodePort and LoadBalancer checked again with live sandboxes. The tool check reads the tools in the request that goes to the model, from Hermes' own dump: exactly D-29's, no shell, file, code, browser or fetch tool; the same dump shows the coach's profile is the prompt's identity, and which of NemoClaw's bundled skills reach the prompt | NH-26 | Claude; Max plants the canary in B's facts | — | *10-19* |
 | 9 | Go/no-go against the O-04 thresholds, and the VPS size (D-31). Decided from item 7 on 2026-10-18: `low` on interactive turns (D-03, deviation 16), O-04's price at $0.10 (17), no safety net in the relay, the Hermes session to PH-17. Against cold starts, in the branch: a three-minute wait for a starting Hermes, so the supervisor's rare 2 min 16 s doesn't cost the message an attempt, and `SANDBOX_KEEP_RUNNING` for the demo and judge accounts (about 0.3 GiB each, all the time, and a place of prod's 4). Still open, for the go/no-go: a shorter wait before the relay retries a job whose Hermes is starting (10 s now; 3 s saves up to 7 s, no RAM), and warming the sandbox when the user opens the chat (250 to 300 MiB per open chat for 10 idle minutes; the app, a function and the relay, half a day to a day). OpenShell 0.1.3's changelog has "keep session retries during startup" (#3765), nothing on the delay itself; we stay on 0.1.2 | NH-27 | Max decides; Claude writes the summary | Items 4, 7 and 8 | *10-19* |
