@@ -806,7 +806,7 @@ D-21: acting on the user's behalf is what the track is judged on, so Stage A isn
 - [x] Hermes' own memory keeps coaching know-how, not personal facts about the user: a fact deleted in "What the coach remembers" (NH-71) must stop being used, and our delete can't reach inside Hermes' memory. Checked in NH-73: delete a fact, and the next reply doesn't use it — Hermes' USER.md profile store is off (`user_profile_enabled: false`), and SOUL.md keeps personal facts out of MEMORY.md; the live check stays in NH-73
 - [x] Tavily only for knowledge questions (nutrition labels, exercise substitutions, equipment), no personal data in queries, sources cited — SOUL.md; the agent cites markdown links, and the relay turns each into plain text plus a tappable source, since the chat renders only bold
 - [x] Medical safety rule preserved: pain or injury → stop the exercise and consult a professional
-- [ ] Rule 1 drawn more narrowly, decided with the partner: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't. In the spike the agent refused "Is creatine safe to take every day, and what dose do studies use?" as personal supplement advice, without a search, in 2 of 4 turns with a conversation before it (NH-24). Rules 6 and 7 moved to NH-25 on 2026-10-16: they are O-04's tool reliability
+- [ ] Rule 1 drawn more narrowly, decided with the partner: general, evidence-based information on sports nutrition and supplements, with sources, is fine; individual medical advice isn't. In the spike the agent refused "Is creatine safe to take every day, and what dose do studies use?" as personal supplement advice, without a search, in 2 of 4 turns with a conversation before it (NH-24). Rules 6 and 7 moved to NH-25 on 2026-10-16: they are O-04's tool reliability — the partner's wording, with the 60-character skill description, merged on 2026-10-19 (PR #4); item 7's tool check runs again on it before the build goes to Apple
 - [ ] Checked in a real sandbox: the rules hold against the scripted cases in NH-73
 
 ### M5 — Channel, relay and sandbox lifecycle · target 2026-10-14
@@ -992,7 +992,7 @@ Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testfl
   - delete a fact, and the next reply doesn't use it — a known limit, left as is on 2026-10-06: the agent sees the last 20 chat messages, so a fact the chat itself mentioned (for example in the answer to "What do you know about me?") can still come back from that history after it's deleted
   - push notification received
 - [ ] During judging, once a week: the test Supabase project's Usage page — Edge Function calls, database size, egress and active users against the Free plan's limits (D-16)
-- [ ] Before judging starts on 12-01, on the test Supabase project the judges' build uses: `SUBSCRIPTION_PAUSED` is still set, and the expired-trial test passes again — an account whose trial ended in the past sends the coach a message and gets an answer
+- [ ] Before judging starts on 12-01, on the test Supabase project the judges' build uses: `SUBSCRIPTION_PAUSED` is still set, and a message from test account A gets an answer. A's trial has been over since 2026-10-19 and stays that way on purpose: its answer is the standing proof that an account past its trial gets through (it did on 2026-10-19)
 - [ ] Every issue found is filed in Linear
 
 ### M8 — Cancelled
