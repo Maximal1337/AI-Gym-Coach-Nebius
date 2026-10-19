@@ -3,8 +3,9 @@
 The TestFlight runbook, drafts to paste into Devpost, the video script, and
 the checklist for keeping the demo alive through judging. Plan: [`nebius-hackathon-plan.md`](./nebius-hackathon-plan.md), §2 for the rules.
 
-- **Nothing secret goes in this file** — the repository is public. Judge
-  addresses go only into Devpost's testing instructions.
+- **Nothing secret goes in this file** — the repository is public. Demo and
+  judge addresses go only into App Review Information and Devpost's private
+  testing instructions.
 - **⟨…⟩ marks what's filled in before submitting:** links (NH-72, NH-91),
   numbers measured on the VPS (NH-25, NH-27), and what the spike and the
   deployment actually taught us. Replace every one, or cut the sentence.
@@ -12,26 +13,32 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
 
 ## The TestFlight build (NH-72)
 
-Submitted to Beta App Review by **2026-10-16** (review usually takes a day;
-leave two). EAS build and submit need the team's go-ahead first
-(`apps/mobile/AGENTS.md`).
+Submitted to Beta App Review on **2026-10-20**, once prod answers (review
+usually takes a day; leave two). EAS build and submit need the team's go-ahead
+first (`apps/mobile/AGENTS.md`).
 
 **Before building**
 
-- [ ] **The version.** `app.json` says `1.0.2`, bumped on 2026-08-20 for the
-      App Store release. If 1.0.2 is live in App Store Connect, set
-      `"version": "1.0.3"`: App Store Connect refuses new builds on a version
-      that's already been approved. The build number increments by itself
-      (`eas.json`: `autoIncrement`, remote version source).
-- [ ] **Leave the version gate alone.** Don't change `public.app_config` for
-      this build (`app-version-gate` skill): `latest_version` set to a
-      TestFlight-only version would show every App Store user an update they
-      can't get.
+- [x] **A separate app** (D-16, 2026-10-19): "Notch Coach",
+      `com.dorbob.gymcoach.nebius`, its own EAS project and App Store Connect
+      record, never released to the App Store, on the **test** Supabase
+      project until judging ends. Its version line starts at `1.0.0`; the
+      build number increments by itself (`eas.json`: `autoIncrement`, remote
+      version source).
+- [x] **The version gate on the test project**: `latest_version` is `1.0.0`
+      there (set on 2026-10-19), so the build isn't nudged to the App Store.
+      The live app's project is untouched.
 - [ ] **Checks** from the `verify` skill: typecheck, the full non-lazy Metro
       bundle, `node scripts/check-locales.mjs`.
-- [ ] It's the production app against the production Supabase project, like
-      the App Store build. Only flagged accounts see the assistant, so anyone
-      else who installs from the public link sees today's Notch.
+- [ ] **Who meets the coach**: only the demo accounts — addresses allowlisted
+      for instant sign-in on the test project, seeded, with the assistant
+      flags (`dev-test-scenario-accounts` skill). Anyone else who installs
+      from the public link gets the app without the coach, so strangers never
+      spend prod's daily ceiling or its sandboxes. Sign in with Apple works
+      (the test project's Apple provider has the bundle id) but gives such an
+      account; email codes reach only the team (Supabase's built-in email).
+      The demo addresses go only into App Review Information and Devpost's
+      private testing instructions, never into the README or this file.
 
 **Build and upload** — from `apps/mobile`, the commands that already worked:
 
@@ -44,10 +51,13 @@ eas submit --platform ios --id <build id> --non-interactive
 
 - [ ] An external group, "Hackathon judges", with this build.
 - [ ] Test information: the beta description and "What to Test" below, a
-      feedback email, and the App Review account (NH-06) for Beta App Review.
-      Decide first whether that account gets the assistant flags: with them,
-      the review covers what the build is for; without them, the reviewer sees
-      only today's app.
+      feedback email, and the App Review account for Beta App Review — a demo
+      account with the assistant flags (decided 2026-10-19), in prod's
+      `SANDBOX_KEEP_RUNNING` while the review lasts. In App Review
+      Information: sign-in required; user name, the review account's demo
+      email; password: none; notes: "Sign in with the demo email: choose
+      email sign-in and enter the address — you're signed in at once, with no
+      code or password. The Coach is available on demo accounts only."
 - [ ] Submit for Beta App Review; once approved, turn on the **public link**
       and put it in the README and Devpost.
 - [ ] **Never** "Submit for Review" on the App Store tab: the App Store version
@@ -67,7 +77,7 @@ eas submit --platform ios --id <build id> --non-interactive
 
 **What to Test**
 
-> Sign in with the address from the hackathon's testing instructions, then
+> Sign in with the demo email from the hackathon's testing instructions, then
 > open the Assistant tab. Ask what the coach knows about you; ask it to change
 > an exercise's sets or reps, then to undo it; ask a nutrition question and tap
 > a source; open "What the coach remembers" and delete a fact. Allow
@@ -242,10 +252,11 @@ Paste with the addresses filled in, one per judge (`private.demo_accounts`),
 and only after the check in the form table above.
 
 > **Get the app.** On an iPhone, open ⟨TestFlight public link⟩, install
-> TestFlight if asked, then install Notch.
+> TestFlight if asked, then install Notch Coach.
 >
-> **Sign in.** Choose email sign-in and enter your address — you're in at once,
-> no code or password:
+> **Sign in with the demo email.** Choose email sign-in and enter your
+> address — you're in at once, no code or password. (Sign in with Apple gives
+> a fresh account without the Coach.)
 >
 > - Judge 1: ⟨judge address⟩
 > - Judge 2: ⟨judge address⟩
