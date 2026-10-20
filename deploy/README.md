@@ -52,6 +52,12 @@ k3s' bundled `kubectl` otherwise reads `/etc/rancher/k3s/k3s.yaml`, which only
 root can. Open a new SSH session after the first run. In a non-login shell, such
 as `ssh <vps> 'kubectl …'`, run `export KUBECONFIG=~/.kube/config` first.
 
+Only the user who ran `bootstrap.sh` gets that kubeconfig. Any other admin on
+the VPS — Max's own user, later the partner's — runs it as root, `sudo
+kubectl …`, and the steps below meant for your own SSH session are written that
+way. Piping into `sudo kubectl … exec -i` works: sudo asks for its password on
+the terminal, not on the pipe.
+
 Then the secrets, one env file per environment, written on the VPS only:
 
 ```bash
@@ -272,7 +278,7 @@ status 2). What it does, step by step:
 
    ```bash
    read -rsp 'Token Factory key: ' K; echo
-   printf '%s\n' "$K" | kubectl -n notch-dev exec -i deploy/notch-relay -- sh -c \
+   printf '%s\n' "$K" | sudo kubectl -n notch-dev exec -i deploy/notch-relay -c relay -- sh -c \
      'IFS= read -r NEBIUS_API_KEY && [ -n "$NEBIUS_API_KEY" ] && export NEBIUS_API_KEY &&
       openshell provider create --name token-factory --type token-factory --credential NEBIUS_API_KEY'
    unset K

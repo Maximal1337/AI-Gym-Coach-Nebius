@@ -43,7 +43,7 @@ ns="notch-$env"
 value() { grep -m1 -E "^$1=" "$file" | cut -d= -f2- | tr -d '\r' || true; }
 
 required=(RELAY_SECRET SUPABASE_FUNCTIONS_URL TOKEN_FACTORY_MODEL)
-optional=(SANDBOX_KEY_SECRET RELAY_STATIC_SANDBOXES)
+optional=(SANDBOX_KEY_SECRET RELAY_STATIC_SANDBOXES SANDBOX_KEEP_RUNNING)
 for key in "${required[@]}"; do
   [[ -n "$(value "$key")" ]] || die "$key is missing or empty in $file"
 done
@@ -52,6 +52,12 @@ done
   || die "SUPABASE_FUNCTIONS_URL must look like https://<project-ref>.supabase.co/functions/v1"
 if [[ -n "$(value SANDBOX_KEY_SECRET)" ]]; then
   (( $(value SANDBOX_KEY_SECRET | tr -d '\n' | wc -c) >= 32 )) || die "SANDBOX_KEY_SECRET must be at least 32 characters"
+fi
+# The relay refuses to start on anything but user ids here, so say it now.
+uuid='[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}'
+if [[ -n "$(value SANDBOX_KEEP_RUNNING)" ]]; then
+  [[ $(value SANDBOX_KEEP_RUNNING) =~ ^$uuid(,$uuid)*$ ]] \
+    || die "SANDBOX_KEEP_RUNNING must be user ids separated by commas, no spaces"
 fi
 
 # The namespace normally comes from Argo CD (notch-<env> app); create it if
@@ -87,6 +93,6 @@ else
   [[ $(base64 -d < "$tmp/kek" 2>/dev/null | wc -c) -eq 32 ]] || die "the key-encryption key must be 32 bytes, base64-encoded"
   kubectl -n "$ns" create secret generic openshell-credential-kek --from-file=key-encryption-key="$tmp/kek"
   echo "created openshell-credential-kek in $ns — back it up now (NH-34):"
-  echo "  kubectl -n $ns get secret openshell-credential-kek -o jsonpath='{.data.key-encryption-key}' | base64 -d"
+  echo "  sudo kubectl -n $ns get secret openshell-credential-kek -o jsonpath='{.data.key-encryption-key}' | base64 -d"
 fi
 echo "secrets for $ns are in place"
