@@ -28,7 +28,7 @@
  * --price-in 0.30 --price-out 0.90.
  *
  * Prints Markdown for NH-25 with the O-04 thresholds checked: p95 ≤ 15 s,
- * cold start ≤ 60 s, ≤ $0.05 per 10 turns. On a sandbox the relay manages, set
+ * cold start ≤ 60 s, ≤ $0.10 per 10 turns. On a sandbox the relay manages, set
  * SANDBOX_IDLE_MINUTES above the run's length first, or its idle sweep stops
  * the sandbox mid-run.
  */
@@ -42,7 +42,8 @@ import { HERMES_BOOT_MS } from "./relay.js";
 import { sandboxApiKey, sandboxName } from "./sandbox-manager.js";
 import { staticSandboxes } from "./sandboxes.js";
 
-export const THRESHOLDS = { p95Ms: 15_000, coldStartMs: 60_000, usdPer10Turns: 0.05 };
+/** O-04's go/no-go thresholds; the price moved from $0.05 to $0.10 in NH-27 (2026-10-19). */
+export const THRESHOLDS = { p95Ms: 15_000, coldStartMs: 60_000, usdPer10Turns: 0.1 };
 const HERMES_PORT = 8642;
 const TURN_TIMEOUT_MS = 180_000;
 const HISTORY_LIMIT = 20;
@@ -235,7 +236,7 @@ export function renderTurns(turns: Turn[], prices: { in: number; out: number }, 
     "",
     ...(table ? ["| # | Message | Latency | Tokens in → out | Cost | Result |", "|---|---|---|---|---|---|", ...rows, ""] : []),
     `- **p50 ${s(p50)}, p95 ${s(p95)}** — p95 ≤ ${THRESHOLDS.p95Ms / 1000} s: ${p95 === undefined ? "❌ no reply" : mark(p95 <= THRESHOLDS.p95Ms)}`,
-    `- **Per 10 turns: ${per10 === undefined ? "unknown (no usage reported)" : `$${per10.toFixed(4)}`}** at $${prices.in} / $${prices.out} per 1M tokens — ≤ $${THRESHOLDS.usdPer10Turns}: ${per10 === undefined ? "❌" : mark(per10 <= THRESHOLDS.usdPer10Turns)}`,
+    `- **Per 10 turns: ${per10 === undefined ? "unknown (no usage reported)" : `$${per10.toFixed(4)}`}** at $${prices.in} / $${prices.out} per 1M tokens — ≤ $${THRESHOLDS.usdPer10Turns.toFixed(2)}: ${per10 === undefined ? "❌" : mark(per10 <= THRESHOLDS.usdPer10Turns)}`,
     `- **Failed or empty replies: ${turns.length - okTurns.length} of ${turns.length}**`,
   ];
   const missing = turns.filter((t) => t.ok && t.tokensIn === undefined).length;

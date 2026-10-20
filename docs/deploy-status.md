@@ -44,19 +44,22 @@ bootstrapped on 2026-10-09 with `deploy/bootstrap/bootstrap.sh`.
 
 The two image tags are the lines marked `# image-tag:` in
 `deploy/notch/base/kustomization.yaml` and
-`deploy/platform/openshell/values-{dev,prod}.yaml`. CI moves them on every push
-to `main`, a docs-only one included, and each move restarts the relay and both
-gateways.
+`deploy/platform/openshell/values-{dev,prod}.yaml`. Since 2026-10-20 CI builds
+an image, and moves its tag, only when that image's own inputs changed
+(`scripts/image-inputs-changed.mjs`): a new relay image restarts both relays,
+a new sandbox image both gateways — it is their default image — and a push of
+docs alone restarts nothing. Until then every push moved both.
 
 | | `notch-dev` | `notch-prod` |
 |---|---|---|
-| Relay mode | `RELAY_SANDBOXES=manager`: the relay creates, starts, stops and deletes the sandboxes | `RELAY_SANDBOXES=static`, no sandbox mapped |
+| Relay mode | `RELAY_SANDBOXES=manager`: the relay creates, starts, stops and deletes the sandboxes | The same since 2026-10-20 (D-36); the demo accounts in `SANDBOX_KEEP_RUNNING` never stop |
 | Relay to Supabase | Long polling, no errors: each claim waits up to 50 s for a job (deviation 15) | The same |
 | Relay to its gateway | Registered (`Status: Connected`) | The same |
-| Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` with its three network rules; kept across gateway restarts | **Not set** |
-| Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | None |
-| Providers | `token-factory` with the dev key, `tavily`, and the tool tokens of test accounts A and B, created by the manager | None |
-| Sandboxes | Test accounts A's and B's, created by the manager; each stops after 10 idle minutes and starts for the next message | None |
+| Global sandbox policy | Set, from `deploy/platform/openshell/sandbox-policy.yaml` with its three network rules; kept across gateway restarts | The same, since 2026-10-18 (`setup-gateway.sh`) |
+| Provider profiles | `token-factory`, `tavily` and `notch-tools` imported from `deploy/platform/openshell/profiles`, lint clean | The same, since 2026-10-18 |
+| Providers | `token-factory` with the dev key, `tavily`, and the tool tokens of test accounts A and B, created by the manager | `token-factory` with the prod key and `tavily` (2026-10-20), and the demo accounts' tool tokens, created by the manager |
+| Sandbox limits | `SANDBOX_MEMORY=640Mi` for sandboxes created from 2026-10-20 (A's and B's predate it) | `SANDBOX_MEMORY=640Mi` |
+| Sandboxes | Test accounts A's and B's, created by the manager; each stops after 10 idle minutes and starts for the next message | The demo accounts', created by the manager at their first message |
 
 **Supabase.** Both relays work against a temporary test project, created on
 2026-10-10 so the spike doesn't wait for the main one: migrations, function

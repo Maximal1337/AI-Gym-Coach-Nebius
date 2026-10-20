@@ -94,7 +94,7 @@ test("renderTurns: the table, p50/p95 and the cost per 10 turns against O-04", (
   const report = renderTurns(turns, prices, "test");
   assert.match(report, /^\| 10 \| \(daily check-in\) \| 10\.0 s \| 3000 → 200 \| \$0\.0011 \| ✅ Sure \\\| here \|$/m);
   assert.match(report, /\*\*p50 5\.0 s, p95 10\.0 s\*\* — p95 ≤ 15 s: ✅/);
-  assert.match(report, /\*\*Per 10 turns: \$0\.0108\*\* at \$0\.3 \/ \$0\.9 per 1M tokens — ≤ \$0\.05: ✅/);
+  assert.match(report, /\*\*Per 10 turns: \$0\.0108\*\* at \$0\.3 \/ \$0\.9 per 1M tokens — ≤ \$0\.10: ✅/);
   assert.match(report, /\*\*Failed or empty replies: 0 of 10\*\*/);
 
   const slow = turns.map((t) => ({ ...t, ms: 20_000, tokensIn: undefined, tokensOut: undefined }));

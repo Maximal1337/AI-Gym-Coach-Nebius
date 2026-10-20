@@ -318,7 +318,10 @@ up); that `sandbox create --detach` returns only once the sandbox is ready, 25
 seconds with the image on the node.
 
 **A new sandbox image for the sandboxes that exist** (NH-29). CI moves the
-gateway's default image on every push to `main`, but that reaches only the
+gateway's default image on every push to `main` that changes the image's
+inputs (`deploy/images/hermes-sandbox`; `scripts/image-inputs-changed.mjs`
+skips the build otherwise, and a docs-only push restarts nothing), but that
+reaches only the
 sandboxes created after it: the gateway writes the image into each sandbox's
 `Sandbox` object when it creates it, and a stop and start — the manager's idle
 stop, then the next message — reuse that object. To move the existing ones,

@@ -37,7 +37,7 @@ import type { RelayEnvironment } from "./signing.js";
  *   SANDBOX_IDLE_MINUTES (10), SANDBOX_HERMES_HOME (/sandbox/.hermes),
  *   SANDBOX_COMMAND_JSON (the image's start-hermes.sh: installs the profile, then runs
  *                             Hermes in the foreground without API_SERVER_KEY in its environment),
- *   SANDBOX_CPU, SANDBOX_MEMORY (unset until NH-25 measures), OPENSHELL_BIN (openshell),
+ *   SANDBOX_CPU, SANDBOX_MEMORY (640Mi in both overlays, from NH-25's soak), OPENSHELL_BIN (openshell),
  *   SANDBOX_IMAGE (unset: the gateway's default sandbox image, bumped by CI in Git)
  *   SANDBOX_KEEP_RUNNING      comma-separated user ids whose sandbox is never stopped as
  *                             idle: the demo and judge accounts (NH-27). In

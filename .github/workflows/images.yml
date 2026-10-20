@@ -8,6 +8,11 @@
 # build doesn't hold back a relay that built, or the other way round. The
 # image that failed keeps its previous tag, and the run still goes red.
 #
+# An image builds only when its own inputs changed since the commit the
+# cluster runs it from (scripts/image-inputs-changed.mjs): a push of docs
+# alone builds nothing, moves no tag and restarts nothing. During judging a
+# README fix would otherwise restart prod's relay and both gateways.
+#
 # GitHub-hosted runners only; a self-hosted runner on a public repository
 # would run strangers' pull-request code on our machine.
 name: Images
@@ -39,10 +44,13 @@ jobs:
       packages: write
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
+      built: ${{ steps.inputs.outputs.changed }}
     steps:
+      # Full history, to compare with the commit the cluster runs.
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - id: meta
@@ -53,15 +61,24 @@ jobs:
           echo "tag=sha-${SHA:0:12}" >> "$GITHUB_OUTPUT"
           echo "registry=ghcr.io/${OWNER,,}" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/setup-buildx-action@v4
+      # A script that fails builds, as when it can't tell.
+      - id: inputs
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/image-inputs-changed.mjs notch-relay "$SHA" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
 
-      - uses: docker/login-action@v4
+      - if: steps.inputs.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - if: steps.inputs.outputs.changed == 'true'
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Relay
+        if: steps.inputs.outputs.changed == 'true'
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -89,10 +106,12 @@ jobs:
     outputs:
       tag: ${{ steps.meta.outputs.tag }}
       dockerfile: ${{ steps.meta.outputs.dockerfile }}
+      built: ${{ steps.meta.outputs.dockerfile == 'true' && steps.inputs.outputs.changed == 'true' }}
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
           persist-credentials: false
 
       - id: meta
@@ -106,10 +125,16 @@ jobs:
             if [ -f deploy/images/hermes-sandbox/Dockerfile ]; then echo "dockerfile=true"; else echo "dockerfile=false"; fi
           } >> "$GITHUB_OUTPUT"
 
-      - if: steps.meta.outputs.dockerfile == 'true'
+      # A script that fails builds, as when it can't tell.
+      - id: inputs
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/image-inputs-changed.mjs notch-hermes-sandbox "$SHA" >> "$GITHUB_OUTPUT" || echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - if: steps.meta.outputs.dockerfile == 'true' && steps.inputs.outputs.changed == 'true'
         uses: docker/setup-buildx-action@v4
 
-      - if: steps.meta.outputs.dockerfile == 'true'
+      - if: steps.meta.outputs.dockerfile == 'true' && steps.inputs.outputs.changed == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -117,7 +142,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Hermes sandbox
-        if: steps.meta.outputs.dockerfile == 'true'
+        if: steps.meta.outputs.dockerfile == 'true' && steps.inputs.outputs.changed == 'true'
         uses: docker/build-push-action@v7
         with:
           context: deploy/images/hermes-sandbox
@@ -133,11 +158,11 @@ jobs:
   deploy:
     needs: [relay, hermes]
     # Whenever at least one image was built, whatever happened to the other;
-    # never after a cancel.
+    # never after a cancel, and not at all when neither had to be.
     if: >-
       !cancelled() &&
-      (needs.relay.result == 'success' ||
-      (needs.hermes.result == 'success' && needs.hermes.outputs.dockerfile == 'true'))
+      ((needs.relay.result == 'success' && needs.relay.outputs.built == 'true') ||
+      (needs.hermes.result == 'success' && needs.hermes.outputs.built == 'true'))
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -159,9 +184,9 @@ jobs:
       - id: bump
         env:
           SHA: ${{ github.event.workflow_run.head_sha }}
-          RELAY: ${{ needs.relay.result == 'success' }}
+          RELAY: ${{ needs.relay.result == 'success' && needs.relay.outputs.built == 'true' }}
           RELAY_TAG: ${{ needs.relay.outputs.tag }}
-          HERMES: ${{ needs.hermes.result == 'success' && needs.hermes.outputs.dockerfile == 'true' }}
+          HERMES: ${{ needs.hermes.result == 'success' && needs.hermes.outputs.built == 'true' }}
           HERMES_TAG: ${{ needs.hermes.outputs.tag }}
         run: |
           failed=""

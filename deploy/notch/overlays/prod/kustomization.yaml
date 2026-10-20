@@ -10,14 +10,17 @@ configMapGenerator:
   - name: notch-relay-config
     literals:
       - RELAY_ENV=prod
-      # static until a go in NH-27; dev runs the sandbox manager (NH-55)
-      # since the spike's NH-29.
-      - RELAY_SANDBOXES=static
+      # The sandbox manager (NH-55), on since NH-27's go (D-36); dev since the
+      # spike's NH-29. The demo and judge accounts kept running are
+      # SANDBOX_KEEP_RUNNING in /etc/notch/prod.env, never here.
+      - RELAY_SANDBOXES=manager
       # The environment's shared OpenShell providers every sandbox gets (NH-33).
       - SANDBOX_SHARED_PROVIDERS=token-factory,tavily
       # The environment's OpenShell gateway, in this namespace (NH-29).
       - OPENSHELL_GATEWAY_ENDPOINT=https://openshell.notch-prod.svc:8080
       # The per-sandbox memory limit, the NH-35 watchdog: OpenShell sets it as
-      # the pod's memory request and limit. Unset until NH-25 measures Hermes;
-      # then e.g. SANDBOX_MEMORY=900Mi (the cap times this must fit the RAM left
-      # for sandboxes). It applies to sandboxes created after the change.
+      # the pod's memory request and limit. NH-25's soak: Hermes levels off at
+      # 300-304 MiB and a turn adds about 35, so 640Mi is twice the plateau
+      # and a turn; six sandboxes ask for 3.75 GiB, within what O-12 left free
+      # (D-36). It applies to sandboxes created after the change.
+      - SANDBOX_MEMORY=640Mi
