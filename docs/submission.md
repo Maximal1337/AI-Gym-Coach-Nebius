@@ -11,6 +11,28 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
   deployment actually taught us. Replace every one, or cut the sentence.
 - **Dates:** submit on **2026-10-26**; the hard deadline is 2026-10-30, 10:00 PT.
 
+## What the rules require (checked 2026-10-21)
+
+- [x] **A license in the repository** — `LICENSE`, MIT; GitHub shows it in
+      the About panel.
+- [x] **A README with instructions to run it** — the root `README.md`,
+      "Setup": requirements, the workspace, Supabase, the app, the
+      in-workout coach service and the cluster.
+      ⟨Fix before submitting: its Supabase step deploys only the
+      assistant's functions, and the app's own — `plan-generate`,
+      `session-start`, `coach-turn`, `session-complete`, `plan-import`,
+      `history-import`, `studio-session`, `accept-terms`, `account-delete` —
+      with what they need, are missing (DOR-135).⟩
+- [x] **A written explanation of the significant changes**, since Notch
+      existed before the hackathon — the README's "What changed during the
+      submission period (after 2026-08-26)", and the Devpost field drafted
+      below ("What changed after 2026-08-26").
+- [ ] **Feedback on Nebius and NVIDIA's tools** — drafted below
+      ("Feedback"), with ⟨…⟩ still to fill from the live runs; it goes into
+      Devpost's feedback field (NH-93).
+- [ ] **A video under 3 minutes, public on YouTube** — the script and shot
+      list below; not recorded yet (NH-91, the partner, 10-24).
+
 ## The TestFlight build (NH-72)
 
 Submitted to Beta App Review on **2026-10-20**, once prod answers (review
