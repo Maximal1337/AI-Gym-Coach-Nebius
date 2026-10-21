@@ -5,28 +5,33 @@
 # how many accounts (auth.users) and facts (public.user_facts) it holds with
 # what the source held at dump time, and deletes it: it holds every account.
 #
-#   sudo /usr/local/lib/notch-ops/db-check.sh <dump> <users> <facts>
+#   sudo /usr/local/lib/notch-ops/db-check.sh <dump> <source.json>
 #   sudo /usr/local/lib/notch-ops/db-check.sh --archive <archive.tar.gz.age> <identity>
 #
-# backup.sh runs the first form on each night's dump before archiving it. The
-# second takes an archive apart, for a restore drill, with the team's backup
-# key put on the host for the drill only.
+# <source.json> is what backup.sh records about the source, the manifest's
+# "supabase" entry: {users, facts, roles, extensions}. backup.sh runs the
+# first form on each night's dump before archiving it. The second takes an
+# archive apart, for a restore drill, with the team's backup key put on the
+# host for the drill only.
 #
-# The server binaries are PGDG's postgresql-<major> (install.sh). The dump is
-# restored without owners or grants: Supabase's roles don't exist here, apart
-# from the three its policies name. Nothing of the data is printed — a failed
-# COPY names its table only.
+# The dump is restored without owners or grants: Supabase's own roles don't
+# exist here. What its objects need does, made first from the source's list:
+# the roles its policies name, NOLOGIN, and the source's extensions in their
+# schemas (`extensions`, on Supabase) — those that ship with PostgreSQL;
+# Supabase's own, such as pg_graphql, are named as missing. The server
+# binaries are PGDG's postgresql-<major> (install.sh). Nothing of the data is
+# printed: a failed COPY names its table only.
 set -euo pipefail
 umask 077
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=deploy/ops/lib.sh
 . "$HERE/lib.sh"
 
-usage() { die "usage: $0 <dump> <users> <facts> | --archive <archive.tar.gz.age> <identity>"; }
+usage() { die "usage: $0 <dump> <source.json> | --archive <archive.tar.gz.age> <identity>"; }
 
 require_root
 require_commands pg_restore psql jq
-(( $# == 3 )) || usage
+(( $# == 2 || $# == 3 )) || usage
 
 tmp="$(mktemp -d)"
 pgdir=""
@@ -38,15 +43,19 @@ stop_server() {
 trap 'stop_server; rm -rf "$tmp" ${pgdir:+"$pgdir"}' EXIT
 
 if [[ $1 == --archive ]]; then
+  (( $# == 3 )) || usage
   require_commands age tar gzip
   age -d -i "$3" "$2" | gzip -dc | tar -C "$tmp" -xf - MANIFEST.json supabase
   dump="$tmp/supabase/db.dump"
-  users="$(jq -r '.supabase.users // empty' "$tmp/MANIFEST.json")"
-  facts="$(jq -r '.supabase.facts // empty' "$tmp/MANIFEST.json")"
+  jq '.supabase' "$tmp/MANIFEST.json" > "$tmp/source.json"
+  source_json="$tmp/source.json"
 else
-  dump="$1" users="$2" facts="$3"
+  (( $# == 2 )) || usage
+  dump="$1" source_json="$2"
 fi
 [[ -s $dump ]] || die "no dump at $dump"
+users="$(jq -r '.users // empty' "$source_json")"
+facts="$(jq -r '.facts // empty' "$source_json")"
 [[ $users =~ ^[0-9]+$ && $facts =~ ^[0-9]+$ ]] || die "the source's counts must be numbers (users '$users', facts '$facts')"
 
 # The newest PostgreSQL installed, unless the tests name one.
@@ -60,6 +69,7 @@ else
   as_postgres() { "$@"; }
 fi
 
+started=$SECONDS
 pgdir="$(mktemp -d "${TMPDIR:-/var/tmp}/notch-dbcheck.XXXXXX")"
 if [[ $EUID -eq 0 ]]; then chown postgres: "$pgdir"; fi
 as_postgres "$bin/initdb" -D "$pgdir/data" -U postgres -A trust -E UTF8 --no-locale > "$pgdir/initdb.log" 2>&1 \
@@ -71,19 +81,49 @@ as_postgres "$bin/pg_ctl" -D "$pgdir/data" -l "$pgdir/server.log" -w -t 60 \
 unset PGSERVICE PGSERVICEFILE PGPASSWORD
 export PGHOST="$pgdir" PGPORT=5432 PGUSER=postgres PGDATABASE=postgres
 q() { psql -X -q -A -t -v ON_ERROR_STOP=1 -c "$1"; }
-q "create role anon nologin; create role authenticated nologin; create role service_role nologin;" > /dev/null
+ident='^[a-z_][a-z0-9_$-]{0,62}$'
+
+# The roles the source's policies name; anon, authenticated and service_role
+# at the least.
+mapfile -t roles < <(jq -r '(.roles // []) + ["anon", "authenticated", "service_role"] | unique[]' "$source_json")
+for r in "${roles[@]}"; do
+  [[ $r =~ $ident ]] || die "unexpected role name in $source_json: $r"
+  q "do \$\$ begin if not exists (select from pg_roles where rolname = '$r') then create role \"$r\" nologin; end if; end \$\$" > /dev/null
+done
+
+# The source's extensions, in the source's schemas, where this PostgreSQL has them.
+missing=()
+while IFS=$'\t' read -r name schema; do
+  [[ -n $name ]] || continue
+  [[ $name =~ $ident && $schema =~ $ident ]] || die "unexpected extension in $source_json: $name in $schema"
+  if [[ -z $(q "select 1 from pg_available_extensions where name = '$name'") ]]; then
+    missing+=("$name")
+    continue
+  fi
+  q "create schema if not exists \"$schema\"; create extension if not exists \"$name\" schema \"$schema\" cascade" > /dev/null 2> "$tmp/ext.err" \
+    || missing+=("$name ($(head -n1 "$tmp/ext.err" | sed -E 's/^(psql:[^:]*:[0-9]+: )?ERROR: +//' | cut -c1-80))")
+done < <(jq -r '(.extensions // [])[] | [.name, .schema] | @tsv' "$source_json")
 
 # pg_restore goes on past an error and reports them all; its exit status only
 # says there were some.
 pg_restore --no-owner --no-privileges -d postgres "$dump" 2> "$tmp/restore.err" || true
-copy_failed="$(sed -nE 's/^pg_restore: error: COPY failed for table "([^"]+)".*/\1/p' "$tmp/restore.err" | sort -u | paste -sd' ' -)"
+# A table's data didn't load when its COPY failed midway, or never ran (the
+# table wasn't created): pg_restore names the first, and quotes the command
+# of the second.
+copy_failed="$(
+  {
+    sed -nE 's/^pg_restore: error: COPY failed for table "([^"]+)".*/\1/p' "$tmp/restore.err"
+    sed -nE 's/^Command was: COPY ([^ ]+) .*/\1/p' "$tmp/restore.err" | tr -d '"'
+  } | sort -u | paste -sd' ' -
+)"
 other="$(grep -E '^pg_restore: error:' "$tmp/restore.err" | grep -v 'COPY failed for table' \
   | sed -E 's/^pg_restore: error: (could not execute query: )?(ERROR: +)?//' | cut -c1-160 | sort | uniq -c || true)"
 
-got_users="$(q 'select count(*) from auth.users')"
-got_facts="$(q 'select count(*) from public.user_facts')"
+got_users="$(q 'select count(*) from auth.users' 2> /dev/null || echo none)"
+got_facts="$(q 'select count(*) from public.user_facts' 2> /dev/null || echo none)"
 tables="$(q "select count(*) from pg_tables where schemaname in ('auth', 'public')")"
-log "restore check: auth.users $got_users (source $users), public.user_facts $got_facts (source $facts), $tables tables in auth and public"
+log "restore check: auth.users $got_users (source $users), public.user_facts $got_facts (source $facts), $tables tables in auth and public, $(( SECONDS - started )) s"
+if (( ${#missing[@]} )); then log "  extensions not made here: ${missing[*]}"; fi
 if [[ -n $other ]]; then
   log "  not restored here (Supabase-only objects):"
   while IFS= read -r line; do log "   $line"; done <<<"$other"

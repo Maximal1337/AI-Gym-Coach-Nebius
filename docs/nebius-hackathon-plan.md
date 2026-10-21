@@ -719,7 +719,7 @@ Run on 2026-10-19 on test accounts A and B, both sandboxes on the image with `lo
 **Priority:** Urgent · **Estimate:** 3 · **Labels:** Area/Security, Type/Chore · **Blocked by:** NH-26, NH-36
 
 - [ ] Sandbox egress through OpenShell policy only: Token Factory, Tavily search, `notch-tools`
-- [ ] Host firewall: outbound limited to what k3s, Argo CD (GitHub, GHCR), the relay (Supabase) and updates need
+- [ ] Host firewall: outbound limited to what k3s, Argo CD (GitHub, GHCR), the relay (Supabase) and updates need — the updates including PGDG's apt repository (`apt.postgresql.org`), and the nightly backup the Supabase project's Session pooler (its pooler host, TCP 5432, Postgres over TLS; DOR-133) besides Nebius Object Storage when `BACKUP_S3_*` is set
 - [ ] A request from a sandbox to any other host fails (tested)
 
 #### NH-33 · OpenShell gateways for dev and prod through Argo CD

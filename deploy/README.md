@@ -492,8 +492,13 @@ migrations ran. The rest of the database is Supabase's own. Before it is
 archived, `ops/db-check.sh` restores the dump into a throwaway PostgreSQL on
 the VPS — never into Supabase; a Unix socket in a private directory, no TCP,
 deleted afterwards — and the accounts (`auth.users`) and facts
-(`public.user_facts`) must come back as many as the source held; the
-manifest records both. A failed dump or check fails the night's run (the
+(`public.user_facts`) must come back as many as the source held. A plain
+PostgreSQL lacks what Supabase's objects lean on, so the check first makes
+it from the source's own list, read at dump time: the roles the policies
+name (`anon`, `authenticated`, `service_role`), and the source's extensions
+in their schemas (`extensions`) where PostgreSQL ships them — Supabase's
+own, such as `pg_graphql`, are named as missing. The manifest records the
+counts, the list, the dump's size and whether the check passed. A failed dump or check fails the night's run (the
 volumes are archived all the same), which the health check reports.
 `pg_dump` has to be at least the server's major version; `backup.sh` checks
 it every night, and `PG_MAJOR` in `install.sh` moves with Supabase's. A

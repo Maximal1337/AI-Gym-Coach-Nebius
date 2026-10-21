@@ -355,8 +355,10 @@ check "--ping needs HEALTHCHECK_URL" fails_with "HEALTHCHECK_URL" env NOTCH_OPS_
 
 # --------------------------------------------------------- Supabase (DOR-133)
 # A real PostgreSQL stands in for the Supabase project: the three schemas, a
-# policy for one of Supabase's roles, a few accounts and facts. Skipped where
-# no PostgreSQL server is installed.
+# policy for one of Supabase's roles, a default from an extension in the
+# `extensions` schema, as Supabase keeps them, and a few accounts and facts.
+# Without the role and the extension, user_facts wouldn't restore. Skipped
+# where no PostgreSQL server is installed.
 echo "== supabase dump"
 pgbin="${NOTCH_PG_BIN:-$( (find /usr/lib/postgresql -mindepth 2 -maxdepth 2 -type d -name bin 2> /dev/null || true) | sort -V | tail -n1)}"
 if [[ -z $pgbin || ! -x $pgbin/initdb ]]; then
@@ -369,10 +371,13 @@ else
   pg_ctl -D "$src/data" -l "$src/log" -w -o "-c listen_addresses='' -c unix_socket_directories='$src'" start > /dev/null
   psql -X -q -v ON_ERROR_STOP=1 -h "$src" -U postgres -d postgres <<'EOF'
 create role anon nologin; create role authenticated nologin; create role service_role nologin;
+create schema extensions;
+create extension pgcrypto schema extensions;
 create schema auth;
 create schema supabase_migrations;
 create table auth.users (id uuid primary key default gen_random_uuid(), email text);
-create table public.user_facts (id bigint generated always as identity primary key, user_id uuid references auth.users, text text);
+create table public.user_facts (id bigint generated always as identity primary key, user_id uuid references auth.users, text text,
+  token text default encode(extensions.gen_random_bytes(8), 'hex'));
 alter table public.user_facts enable row level security;
 create policy own_facts on public.user_facts for select to authenticated using (true);
 create table supabase_migrations.schema_migrations (version text primary key);
@@ -395,10 +400,17 @@ EOF
   check "the manifest: the source's counts, the schemas, a passed restore check" \
     eq "$(jq -c '.supabase | [.users, .facts, .schemas, .restore_check]' "$T/out-db/MANIFEST.json")" \
     '[3,6,["auth","public","supabase_migrations"],"passed"]'
+  check "the manifest: the source's extensions with their schemas, and the roles its policies name" \
+    eq "$(jq -c '.supabase | [.extensions, .roles]' "$T/out-db/MANIFEST.json")" \
+    '[[{"name":"pgcrypto","schema":"extensions"}],["authenticated"]]'
   check "no connection settings in the archive" test ! -e "$T/out-db/pg"
   check "the archive's dump restores" quiet bash "$OPS/db-check.sh" --archive "$dba" "$T/identity"
+  jq '.supabase | .users = 4' "$T/out-db/MANIFEST.json" > "$T/wrong.json"
   check "a count that differs fails the check" fails_with "auth.users differs from the source" \
-    bash "$OPS/db-check.sh" "$T/out-db/supabase/db.dump" 4 6
+    bash "$OPS/db-check.sh" "$T/out-db/supabase/db.dump" "$T/wrong.json"
+  jq '.supabase | .extensions = []' "$T/out-db/MANIFEST.json" > "$T/no-ext.json"
+  check "without the source's extension, a table's data doesn't load" fails_with "didn't load: public.user_facts" \
+    bash "$OPS/db-check.sh" "$T/out-db/supabase/db.dump" "$T/no-ext.json"
   check "the throwaway servers are gone" eq "$(find "$TMPDIR" -maxdepth 1 -name 'notch-dbcheck.*' | wc -l | tr -d ' ')" 0
 
   pg_ctl -D "$src/data" -m fast stop > /dev/null

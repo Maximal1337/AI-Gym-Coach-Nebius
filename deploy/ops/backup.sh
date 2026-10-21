@@ -177,33 +177,50 @@ for k, v in conf.items():
 # returns non-zero if either step failed. Runs under `if`, where set -e is
 # off: every step says what happens when it fails.
 dump_supabase() {
-  local url="$1" server major client counts users facts bytes s
+  local url="$1" server version major client source users facts bytes s t0 secs
   require_commands pg_dump psql python3
   mkdir -p "$work/pg" "$work/supabase"
   pg_service_file <<<"$url" > "$work/pg/service.conf" || { log "supabase: SUPABASE_DB_URL isn't a postgresql:// URL"; return 1; }
   local -x PGSERVICEFILE="$work/pg/service.conf" PGSERVICE=notch PGCONNECT_TIMEOUT=30 PGAPPNAME=notch-backup
   server="$(psql -X -q -A -t -c 'show server_version_num' 2> "$work/pg/err")" || { log "supabase: can't connect: $(head -c 300 "$work/pg/err")"; return 1; }
   [[ $server =~ ^[0-9]+$ ]] || { log "supabase: unexpected server version '$server'"; return 1; }
+  version="$(psql -X -q -A -t -c 'show server_version' 2> /dev/null | cut -d' ' -f1)"
   major=$(( server / 10000 ))
   client="$(pg_dump --version | grep -oE '[0-9]+' | head -n1)"
   (( client >= major )) || { log "supabase: pg_dump $client is older than the server's PostgreSQL $major — set PG_MAJOR in deploy/ops/install.sh and re-run it"; return 1; }
-  # How many accounts and facts the source holds, for the restore check. A
-  # moment before the dump's own snapshot: a sign-up in between would show.
-  counts="$(psql -X -q -A -t -F ' ' -c 'select (select count(*) from auth.users), (select count(*) from public.user_facts)' 2> "$work/pg/err")" \
-    || { log "supabase: counting failed: $(head -c 300 "$work/pg/err")"; return 1; }
-  read -r users facts <<<"$counts"
-  [[ $users =~ ^[0-9]+$ && $facts =~ ^[0-9]+$ ]] || { log "supabase: unexpected counts '$counts'"; return 1; }
-  log "supabase: PostgreSQL $major, $users account(s), $facts fact(s); dumping ${SUPABASE_SCHEMAS[*]}"
+  # What the restore check needs to know about the source: how many accounts
+  # and facts it holds (a moment before the dump's own snapshot, so a sign-up
+  # in between would show), its extensions and their schemas, and the roles
+  # its policies name — a plain PostgreSQL has none of them.
+  local schema_list
+  schema_list="$(printf "'%s'," "${SUPABASE_SCHEMAS[@]}")"
+  source="$(psql -X -q -A -t 2> "$work/pg/err" -c "select json_build_object(
+      'users', (select count(*) from auth.users),
+      'facts', (select count(*) from public.user_facts),
+      'extensions', coalesce((select json_agg(json_build_object('name', e.extname, 'schema', n.nspname) order by e.extname)
+                              from pg_extension e join pg_namespace n on n.oid = e.extnamespace where e.extname <> 'plpgsql'), '[]'),
+      'roles', coalesce((select json_agg(distinct r.rolname order by r.rolname)
+                         from pg_policy p join pg_class c on c.oid = p.polrelid join pg_namespace n on n.oid = c.relnamespace
+                         join pg_roles r on r.oid = any(p.polroles) where n.nspname in (${schema_list%,})), '[]'))")" \
+    || { log "supabase: reading the source failed: $(head -c 300 "$work/pg/err")"; return 1; }
+  users="$(jq -r .users <<<"$source")" facts="$(jq -r .facts <<<"$source")"
+  [[ $users =~ ^[0-9]+$ && $facts =~ ^[0-9]+$ ]] || { log "supabase: unexpected counts"; return 1; }
+  log "supabase: PostgreSQL $version, $users account(s), $facts fact(s); dumping ${SUPABASE_SCHEMAS[*]}"
   local schemas=()
   for s in "${SUPABASE_SCHEMAS[@]}"; do schemas+=(-n "$s"); done
+  t0=$SECONDS
   timeout 900 pg_dump --format=custom --quote-all-identifiers "${schemas[@]}" -f "$work/supabase/db.dump" 2> "$work/pg/err" \
     || { log "supabase: pg_dump failed: $(head -c 300 "$work/pg/err")"; rm -rf "$work/supabase"; return 1; }
+  secs=$(( SECONDS - t0 ))
   bytes="$(du -sb "$work/supabase/db.dump" | cut -f1)"
-  local check=passed
-  "$HERE/db-check.sh" "$work/supabase/db.dump" "$users" "$facts" || check=failed
-  jq -n --argjson major "$major" --argjson users "$users" --argjson facts "$facts" --argjson bytes "$bytes" --arg check "$check" \
-    '{postgres: $major, schemas: $ARGS.positional, users: $users, facts: $facts, bytes: $bytes, restore_check: $check}' \
+  log "supabase: dump of $bytes bytes in $secs s"
+  jq -n --arg version "$version" --argjson major "$major" --argjson bytes "$bytes" --argjson secs "$secs" --argjson source "$source" \
+    '$source + {postgres: $version, major: $major, schemas: $ARGS.positional, bytes: $bytes, dump_seconds: $secs}' \
     --args "${SUPABASE_SCHEMAS[@]}" > "$work/supabase.json" || return 1
+  local check=passed
+  "$HERE/db-check.sh" "$work/supabase/db.dump" "$work/supabase.json" || check=failed
+  jq --arg check "$check" '. + {restore_check: $check}' "$work/supabase.json" > "$work/supabase.json.new" \
+    && mv "$work/supabase.json.new" "$work/supabase.json" || return 1
   [[ $check == passed ]]
 }
 
