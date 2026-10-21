@@ -357,6 +357,7 @@ hour.
 and 12.5 s on the image before it, in a control at the same hour, so it was
 Token Factory, not the image (D-36's runs: 5.0 to 10.0 s). If the next run
 is as slow, it goes to Next steps: judging's turns live on that margin.
+At 06:44 the same day a one-sentence turn on dev took 26 s.
 
 **Known limit.** `assistant-outbox` doesn't see a claim the relay drops — at
 its 65 s timeout, or when the network fails — and goes on looking until its
@@ -382,7 +383,9 @@ spent as before. Checked with the relay's own code against dev's gateway,
 restarted mid-queue, on a spike sandbox with the outbox faked and a failed
 attempt claimed again after 1 s: the relay before the fix spent 3 of the
 message's 5 attempts in 3 s and answered after 15 s; the fix spent none in
-3 of 3 runs and answered after 22 to 32 s. A gateway restarts on a new sandbox
+3 of 3 runs and answered after 22 to 32 s. On dev since 10-21 (`84c1a59`),
+and the same check against the deployed relay: no attempts spent, answered
+after 46 s (the turn itself took 26 s). A gateway restarts on a new sandbox
 image (dev only, D-37), a chart or gateway config change, or by hand.
 
 ## 2. Deviations from the plan
