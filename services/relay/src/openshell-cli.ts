@@ -24,10 +24,21 @@ export interface ExecResult {
 
 export type Exec = (args: string[], options?: { env?: Record<string, string>; timeoutMs?: number }) => Promise<ExecResult>;
 
+/**
+ * The CLI never reached the gateway. While dev's gateway restarted (2026-10-21)
+ * 0.1.2 printed "× transport error", "├─▶ tcp connect error", "╰─▶ deadline has
+ * elapsed"; a refused connection or gRPC's Unavailable is the same thing.
+ */
+const GATEWAY_UNREACHABLE = /\btransport error\b|\btcp connect error\b|connection refused|\bstatus: Unavailable\b/i;
+
 export class OpenShellError extends Error {
+  /** The gateway couldn't be reached (the sandbox manager waits for it: gatewayUnreachable()). */
+  readonly gatewayUnreachable: boolean;
+
   constructor(message: string, readonly args: string[], readonly stderr: string) {
     super(message);
     this.name = "OpenShellError";
+    this.gatewayUnreachable = GATEWAY_UNREACHABLE.test(stderr);
   }
 }
 

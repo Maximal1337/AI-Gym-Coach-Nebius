@@ -194,7 +194,11 @@ test("SKIP in a normal chat is just a reply", async () => {
 
 test("a sandbox started moments ago with Hermes not up yet: the job waits unspent instead of failing", async () => {
   const now = new Date("2026-10-10T08:00:00Z").getTime();
-  const notUp = [new HermesError("hermes unreachable: ECONNREFUSED", false, true), new HermesError("hermes 503: {}", true, true)];
+  const notUp = [
+    new HermesError("hermes unreachable: ECONNREFUSED", false, true),
+    new HermesError("hermes 503: {}", true, true),
+    new HermesError("hermes 412: {}", false, true),
+  ];
   for (const error of notUp) {
     const { d, log } = deps({
       acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, startedAt: now - 5_000 }),
@@ -206,7 +210,61 @@ test("a sandbox started moments ago with Hermes not up yet: the job waits unspen
   }
 });
 
-test("Hermes still not up after the boot window, or a sandbox the relay didn't just start: the attempt fails as before", async () => {
+test("a running sandbox the gateway can't reach — refused, 412, 502, 503 — waits unspent, three minutes at most", async () => {
+  const now = new Date("2026-10-10T08:00:00Z").getTime();
+  const notUp = [
+    new HermesError("hermes unreachable: ECONNREFUSED", false, true),
+    new HermesError("hermes 412: {}", false, true),
+    new HermesError("hermes 502: {}", true, true),
+    new HermesError("hermes 503: {}", true, true),
+  ];
+  for (const error of notUp) {
+    // Started long ago, answering until the gateway restarted moments ago.
+    const { d, log } = deps({
+      acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, startedAt: now - 3_600_000, unanswered: () => now - 5_000 }),
+      chat: () => Promise.reject(error),
+    });
+    assert.equal(await processJob(job(), d), "deferred", error.message);
+    assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 10, reason: "sandbox_unreachable" }]);
+    assert.deepEqual([log.failed, log.delivered], [[], []]);
+  }
+  // Silent since its start, as the manager reports it: still "starting".
+  const started = deps({
+    acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, startedAt: now - 5_000, unanswered: () => now - 5_000 }),
+    chat: () => Promise.reject(notUp[1]),
+  });
+  assert.equal(await processJob(job(), started.d), "deferred");
+  assert.equal(started.log.deferred[0].reason, "hermes_starting");
+  // Out of reach for three minutes: the attempts are spent again, so a sandbox that never comes back ends in a failure.
+  const gone = deps({
+    acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, unanswered: () => now - HERMES_BOOT_MS }),
+    chat: () => Promise.reject(notUp[0]),
+  });
+  assert.equal(await processJob(job(), gone.d), "failed");
+  assert.equal(gone.log.deferred.length, 0);
+});
+
+test("only a turn that found nothing listening counts as unanswered: the lease's record is left alone otherwise", async () => {
+  for (const [chat, recorded] of [
+    [() => Promise.reject(new HermesError("hermes 412: {}", false, true)), 1],
+    [() => Promise.reject(new HermesError("hermes timed out after 120000 ms", true, false)), 0],
+    [() => Promise.reject(new HermesError("hermes 500: {}", true, false)), 0],
+    [() => Promise.resolve({ text: "hi" }), 0],
+  ] as const) {
+    let calls = 0;
+    const { d } = deps({
+      acquireSandbox: () => Promise.resolve({ endpoint: ENDPOINT, release: () => {}, unanswered: () => {
+        calls++;
+        return 0;
+      } }),
+      chat,
+    });
+    await processJob(job(), d);
+    assert.equal(calls, recorded);
+  }
+});
+
+test("Hermes still not up after the boot window, or no record of a start or a silence (the static map): the attempt fails as before", async () => {
   const now = new Date("2026-10-10T08:00:00Z").getTime();
   for (const startedAt of [now - HERMES_BOOT_MS, undefined]) {
     const { d, log } = deps({
@@ -472,6 +530,8 @@ test("hermes: missing usage is left for the fallback charge", async () => {
 test("hermes: errors say whether tokens may have been spent, and whether anything was listening", async () => {
   const cases: Array<[() => Promise<Response>, boolean, boolean]> = [
     [() => Promise.resolve(new Response("{}", { status: 429 })), false, false],
+    // The gateway's answer for a sandbox whose supervisor hasn't registered (again, after a restart).
+    [() => Promise.resolve(new Response("{}", { status: 412 })), false, true],
     [() => Promise.resolve(new Response("{}", { status: 500 })), true, false],
     [() => Promise.resolve(new Response("{}", { status: 502 })), true, true],
     [() => Promise.resolve(new Response("{}", { status: 503 })), true, true],

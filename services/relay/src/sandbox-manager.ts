@@ -107,9 +107,29 @@ export interface ManagerConfig {
 }
 
 export type SandboxLease =
-  /** startedAt: when this manager last created or started the sandbox, if it did. */
-  | { endpoint: SandboxEndpoint; release: () => void; startedAt?: number }
+  | {
+      endpoint: SandboxEndpoint;
+      release: () => void;
+      /** When this manager last created or started the sandbox, if it did. */
+      startedAt?: number;
+      /**
+       * Records that the sandbox didn't answer — nothing listening, or the
+       * gateway not routing to it — and returns since when it hasn't: its
+       * start, if it hasn't answered since, or else the first turn that
+       * found it silent. A lease released without calling this counts as
+       * an answer and resets it.
+       */
+      unanswered?: () => number;
+    }
   | { defer: number; reason: string };
+
+/**
+ * A driver call that never reached the gateway — it is restarting, say. The
+ * driver marks its error (openshell-cli.ts: OpenShellError).
+ */
+export function gatewayUnreachable(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { gatewayUnreachable?: unknown }).gatewayUnreachable === true;
+}
 
 export class SandboxError extends Error {
   constructor(message: string) {
@@ -120,6 +140,12 @@ export class SandboxError extends Error {
 
 /** How long a job waits before it's claimed again. */
 export const DEFER_SECONDS = { capacity: 20, busy: 10 } as const;
+/**
+ * How long jobs wait for a gateway that can't be reached before they spend
+ * their attempts: a restart takes seconds (2.5 to 13 on dev, 2026-10-21);
+ * three minutes, like a starting Hermes (relay.ts, HERMES_BOOT_MS).
+ */
+export const GATEWAY_WAIT_MS = 180_000;
 /** A sandbox used this recently is never stopped to make room: two users would take turns cold-starting. */
 export const EVICT_GRACE_MS = 60_000;
 export const MANAGED_BY = "notch-relay";
@@ -165,6 +191,10 @@ export class SandboxManager {
   private readonly lastUsed = new Map<string, number>();
   private readonly urls = new Map<string, string>();
   private readonly startedAt = new Map<string, number>();
+  /** Since when each sandbox hasn't answered: its start, or the first turn that found it silent. */
+  private readonly unansweredSince = new Map<string, number>();
+  /** Since when the gateway hasn't been reached, while it isn't. */
+  private gatewayDownSince: number | undefined;
   private queue: Promise<unknown> = Promise.resolve();
 
   constructor(
@@ -217,7 +247,18 @@ export class SandboxManager {
   private async acquireNow(job: JobContext): Promise<SandboxLease> {
     const userId = job.job.user_id;
     const name = sandboxName(this.config.env, userId);
-    const sandboxes = await this.driver.list(this.labels);
+    let sandboxes: SandboxInfo[];
+    try {
+      sandboxes = await this.driver.list(this.labels);
+      this.gatewayDownSince = undefined;
+    } catch (e) {
+      // A restarting gateway: wait for it, the attempt unspent. One that stays
+      // away GATEWAY_WAIT_MS fails the attempts as any other error.
+      if (!gatewayUnreachable(e)) throw e;
+      this.gatewayDownSince ??= this.now();
+      if (this.now() - this.gatewayDownSince >= GATEWAY_WAIT_MS) throw e;
+      return { defer: DEFER_SECONDS.busy, reason: "gateway_unreachable" };
+    }
     this.seen(sandboxes);
     const sandbox = sandboxes.find((s) => s.name === name);
 
@@ -237,34 +278,55 @@ export class SandboxManager {
     if (!sandbox) {
       this.log("sandbox_create", { sandbox: name });
       await this.driver.create(this.spec(name));
-      this.startedAt.set(name, this.now());
+      this.started(name);
     } else if (!mapped) {
       // A running process keeps the credential placeholder it started with.
       this.log("sandbox_restart", { sandbox: name, reason: "new_token" });
       if (sandbox.phase === "ready") await this.driver.stop(name);
       await this.driver.start(name);
-      this.startedAt.set(name, this.now());
+      this.started(name);
     } else if (needsCompute) {
       this.log("sandbox_start", { sandbox: name, from: sandbox.phase });
       await this.driver.start(name);
-      this.startedAt.set(name, this.now());
+      this.started(name);
     }
 
     const endpoint = { baseUrl: await this.url(name), apiKey: sandboxApiKey(this.config.apiKeySecret, name) };
     this.inFlight.set(name, (this.inFlight.get(name) ?? 0) + 1);
     this.lastUsed.set(name, this.now());
     let released = false;
+    let silent = false;
     const startedAt = this.startedAt.get(name);
     return {
       endpoint,
       ...(startedAt !== undefined ? { startedAt } : {}),
+      unanswered: () => {
+        silent = true;
+        const since = this.unansweredSince.get(name) ?? this.now();
+        this.unansweredSince.set(name, since);
+        return since;
+      },
       release: () => {
         if (released) return;
         released = true;
+        if (!silent) this.unansweredSince.delete(name);
         this.inFlight.set(name, Math.max(0, (this.inFlight.get(name) ?? 1) - 1));
         this.lastUsed.set(name, this.now());
       },
     };
+  }
+
+  private started(name: string): void {
+    const now = this.now();
+    this.startedAt.set(name, now);
+    this.unansweredSince.set(name, now);
+  }
+
+  /** The sandbox stopped or is gone: nothing to wait for. */
+  private forget(name: string): void {
+    this.lastUsed.delete(name);
+    this.startedAt.delete(name);
+    this.unansweredSince.delete(name);
   }
 
   /** Frees running slots if needed, never stopping a sandbox that's answering or was just used. */
@@ -280,8 +342,7 @@ export class SandboxManager {
     for (const s of idle.slice(0, needed)) {
       this.log("sandbox_evict", { sandbox: s.name, for: name });
       await this.driver.stop(s.name);
-      this.lastUsed.delete(s.name);
-      this.startedAt.delete(s.name);
+      this.forget(s.name);
     }
     return true;
   }
@@ -326,8 +387,7 @@ export class SandboxManager {
       if (now - (this.lastUsed.get(s.name) ?? now) < this.config.idleStopMs) continue;
       try {
         await this.driver.stop(s.name);
-        this.lastUsed.delete(s.name);
-        this.startedAt.delete(s.name);
+        this.forget(s.name);
         stopped.push(s.name);
       } catch (e) {
         this.log("sandbox_stop_failed", { sandbox: s.name, error: String(e) });
@@ -350,8 +410,7 @@ export class SandboxManager {
       try {
         await this.driver.delete(s.name);
         this.urls.delete(s.name);
-        this.lastUsed.delete(s.name);
-        this.startedAt.delete(s.name);
+        this.forget(s.name);
         deleted.push(s.name);
       } catch (e) {
         this.log("sandbox_delete_failed", { sandbox: s.name, error: String(e) });

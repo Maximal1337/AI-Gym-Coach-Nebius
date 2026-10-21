@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext, RecordAgentStatus } from "./outbox.js";
 import {
-  type AgentStore, DEFER_SECONDS, EVICT_GRACE_MS, type ManagerConfig, MANAGED_BY, sandboxApiKey, SandboxError,
+  type AgentStore, DEFER_SECONDS, EVICT_GRACE_MS, GATEWAY_WAIT_MS, type ManagerConfig, MANAGED_BY, sandboxApiKey, SandboxError,
   SANDBOX_NAME_MAX, type SandboxInfo, SandboxManager, sandboxName, type SandboxPhase, type SandboxSpec, sha256hex, toolsProviderName,
 } from "./sandbox-manager.js";
 
@@ -205,6 +205,66 @@ test("a lease says when this manager last created or started the sandbox, and no
   const fresh = new SandboxManager(driver, setup().store, CONFIG, () => clock.t);
   const found = await fresh.acquire({ ...job("u1"), agent: { sandbox_name: name, provisioned: true } }) as { startedAt?: number };
   assert.equal("startedAt" in found, false);
+});
+
+type Leased = { release: () => void; startedAt?: number; unanswered: () => number };
+
+test("a sandbox unanswered: since its start until it first answers, then since the first silent turn; an answer resets it", async () => {
+  const { clock, manager, job } = setup();
+  const created = await manager.acquire(job("u1")) as Leased;
+  const start = clock.t;
+  clock.t += 5_000;
+  assert.equal(created.unanswered(), start, "Hermes still booting: since the start");
+  created.release();
+  clock.t += 5_000;
+  const again = await manager.acquire(job("u1")) as Leased;
+  assert.equal(again.unanswered(), start, "still not answered since the start");
+  again.release();
+  const answered = await manager.acquire(job("u1")) as Leased;
+  answered.release(); // a turn that got through
+  clock.t += 20 * 1000;
+  const restarting = await manager.acquire(job("u1")) as Leased;
+  const silent = clock.t;
+  assert.equal(restarting.unanswered(), silent, "a running sandbox found silent: since now");
+  restarting.release();
+  clock.t += 10_000;
+  const still = await manager.acquire(job("u1")) as Leased;
+  assert.equal(still.unanswered(), silent, "and from then on, until it answers");
+  still.release();
+  (await manager.acquire(job("u1")) as Leased).release();
+  clock.t += 1_000;
+  assert.equal((await manager.acquire(job("u1")) as Leased).unanswered(), clock.t, "the answer reset it");
+});
+
+test("a sandbox stopped and started again is unanswered since the new start", async () => {
+  const { clock, manager, job } = setup();
+  const lease = await manager.acquire(job("u1")) as Leased;
+  lease.unanswered();
+  lease.release();
+  clock.t += 11 * MIN;
+  assert.equal((await manager.sweepIdle()).length, 1);
+  const restarted = await manager.acquire(job("u1")) as Leased;
+  assert.equal(restarted.unanswered(), clock.t);
+  assert.equal(restarted.startedAt, clock.t);
+});
+
+test("a gateway that can't be reached: jobs wait unspent for GATEWAY_WAIT_MS, then fail; any other error fails at once", async () => {
+  const { driver, clock, manager, job } = setup();
+  const list = driver.list.bind(driver);
+  const unreachable = Object.assign(new Error("openshell sandbox list failed: Error:   × transport error"), { gatewayUnreachable: true });
+  driver.list = () => Promise.reject(unreachable);
+  assert.deepEqual(await manager.acquire(job("u1")), { defer: DEFER_SECONDS.busy, reason: "gateway_unreachable" });
+  clock.t += GATEWAY_WAIT_MS - 1;
+  assert.deepEqual(await manager.acquire(job("u1")), { defer: DEFER_SECONDS.busy, reason: "gateway_unreachable" });
+  clock.t += 1;
+  await assert.rejects(() => manager.acquire(job("u1")), /transport error/);
+  // Back: the next outage gets its own wait.
+  driver.list = list;
+  assert.ok("endpoint" in (await manager.acquire(job("u1"))));
+  driver.list = () => Promise.reject(unreachable);
+  assert.deepEqual(await manager.acquire(job("u1")), { defer: DEFER_SECONDS.busy, reason: "gateway_unreachable" });
+  driver.list = () => Promise.reject(new Error("openshell sandbox list failed: permission denied"));
+  await assert.rejects(() => manager.acquire(job("u1")), /permission denied/);
 });
 
 test("a running sandbox without its mapping gets a new token and a restart to pick it up", async () => {

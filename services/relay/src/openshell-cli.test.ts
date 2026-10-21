@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { type Exec, OpenShellCli, parsePhase, parseSandbox } from "./openshell-cli.js";
+import { type Exec, OpenShellCli, OpenShellError, parsePhase, parseSandbox } from "./openshell-cli.js";
+import { gatewayUnreachable } from "./sandbox-manager.js";
 
 type Call = { args: string[]; env?: Record<string, string> };
 
@@ -110,4 +111,23 @@ test("lifecycle and providers: the documented commands", async () => {
   assert.deepEqual(calls.map((c) => c.args.join(" ")), [
     "sandbox start s", "sandbox stop s", "sandbox delete s", "provider delete p", "provider list -o json",
   ]);
+});
+
+test("errors: one that never reached the gateway says so, for the manager to wait on", () => {
+  // What 0.1.2 printed while dev's gateway restarted (2026-10-21).
+  const restarting = [
+    "Error:   × transport error",
+    "  ├─▶ tcp connect error",
+    "  ├─▶ tcp connect error",
+    "  ╰─▶ deadline has elapsed",
+  ].join("\n");
+  for (const stderr of [restarting, "Error: transport error: Connection refused (os error 111)", "Error: status: Unavailable, message: \"tcp connect error\""]) {
+    const e = new OpenShellError("openshell sandbox list failed", ["sandbox", "list"], stderr);
+    assert.equal(e.gatewayUnreachable, true, stderr);
+    assert.equal(gatewayUnreachable(e), true);
+  }
+  for (const stderr of ["Error: sandbox not found", "Error: × timed out waiting for gated workload Pod", ""]) {
+    assert.equal(gatewayUnreachable(new OpenShellError("openshell sandbox create failed", ["sandbox", "create"], stderr)), false, stderr);
+  }
+  assert.equal(gatewayUnreachable(new Error("transport error")), false, "only the driver's own errors");
 });

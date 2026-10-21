@@ -51,12 +51,15 @@ export interface RelayDeps {
 
 const DELIVER_ATTEMPTS = 3;
 /**
- * How long after the relay starts a sandbox its Hermes may still be booting:
- * until then a turn that finds nothing listening waits in the queue, unspent,
- * instead of using up the job's attempts. A start takes about 18 s, but now
- * and then OpenShell 0.1.2's supervisor misses its first connection to the
- * gateway and tries again 2 min 16 s later (NH-25): three minutes covers that.
- * The bench allows the same.
+ * How long a sandbox may go unanswered — its Hermes booting after the relay
+ * started it, or the gateway restarting under one already running — while a
+ * turn that finds nothing listening waits in the queue, unspent, instead of
+ * using up the job's attempts. A start takes about 18 s, but now and then
+ * OpenShell 0.1.2's supervisor misses its first connection to the gateway and
+ * tries again 2 min 16 s later (NH-25): three minutes covers that. A gateway
+ * restart kept a running sandbox out of reach 2.5 to 13 s on dev, and its
+ * supervisor registers again the same way (2026-10-21). The bench allows the
+ * same.
  */
 export const HERMES_BOOT_MS = 180_000;
 
@@ -110,21 +113,29 @@ export async function processJob(job: JobContext, deps: RelayDeps): Promise<Outc
     return "deferred";
   }
   try {
-    return await runInSandbox(job, lease.endpoint, lease.startedAt, deps);
+    return await runInSandbox(job, lease, deps);
   } finally {
     lease.release();
   }
 }
 
-async function runInSandbox(job: JobContext, endpoint: SandboxEndpoint, startedAt: number | undefined, deps: RelayDeps): Promise<Outcome> {
+type Lease = Extract<SandboxLease, { endpoint: SandboxEndpoint }>;
+
+async function runInSandbox(job: JobContext, lease: Lease, deps: RelayDeps): Promise<Outcome> {
   const base = { job_id: job.id, lease_token: job.lease_token };
+  const endpoint = lease.endpoint;
   let result: ChatResult;
   try {
     result = await deps.chat(endpoint, buildMessages(job, deps.now()), { sessionKey: job.job.user_id });
   } catch (e) {
-    if (e instanceof HermesError && e.notReady && startedAt !== undefined && deps.now().getTime() - startedAt < HERMES_BOOT_MS) {
-      deps.log("deferred", { job: job.id, reason: "hermes_starting", seconds: DEFER_SECONDS.busy });
-      await deps.outbox.defer({ ...base, seconds: DEFER_SECONDS.busy, reason: "hermes_starting" });
+    // Nothing listening: Hermes still booting, or the gateway restarting —
+    // whether or not this relay started the sandbox. Without the manager's
+    // record (the spike's static map), only a start it reported counts.
+    const since = e instanceof HermesError && e.notReady ? (lease.unanswered ? lease.unanswered() : lease.startedAt) : undefined;
+    if (since !== undefined && deps.now().getTime() - since < HERMES_BOOT_MS) {
+      const reason = since === lease.startedAt ? "hermes_starting" : "sandbox_unreachable";
+      deps.log("deferred", { job: job.id, reason, seconds: DEFER_SECONDS.busy });
+      await deps.outbox.defer({ ...base, seconds: DEFER_SECONDS.busy, reason });
       return "deferred";
     }
     const spent = e instanceof HermesError ? e.mayHaveSpent : true;

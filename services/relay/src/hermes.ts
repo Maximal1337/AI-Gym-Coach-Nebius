@@ -23,9 +23,10 @@ export interface ChatResult {
 export class HermesError extends Error {
   /**
    * mayHaveSpent: the model may already have run (and spent tokens) before the failure.
-   * notReady: nothing was listening — a refused connection, or the gateway's 502/503
-   * for a sandbox port that isn't open yet. Hermes' API server comes up some time
-   * after its sandbox does.
+   * notReady: nothing was listening — a refused connection, the gateway's 502/503
+   * for a sandbox port that isn't open yet, or its 412 for a sandbox whose
+   * supervisor hasn't registered with it (yet, or again after the gateway
+   * restarted). Hermes' API server comes up some time after its sandbox does.
    * usage: what the turn reported spending before it failed, when it got that far.
    */
   constructor(message: string, readonly mayHaveSpent: boolean, readonly notReady = false, readonly usage?: Usage) {
@@ -81,7 +82,8 @@ export async function chat(endpoint: SandboxEndpoint, messages: ChatMessage[], o
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) {
     // 4xx is refused before the model runs (auth, bad request, too many runs); 5xx may be mid-turn.
-    throw new HermesError(`hermes ${res.status}: ${JSON.stringify(body).slice(0, 300)}`, res.status >= 500, res.status === 502 || res.status === 503);
+    const notReady = res.status === 412 || res.status === 502 || res.status === 503;
+    throw new HermesError(`hermes ${res.status}: ${JSON.stringify(body).slice(0, 300)}`, res.status >= 500, notReady);
   }
   const choice = (body.choices as Array<{ message?: { content?: unknown }; finish_reason?: unknown }> | undefined)?.[0];
   const hermes = body.hermes as { failed?: unknown; error?: unknown } | undefined;
