@@ -18,9 +18,13 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { rewrite } from "./bump-image-tag.mjs";
 
-/** What each image is built from: its Dockerfile's context and the files it copies. */
+/**
+ * What each image is built from: its Dockerfile's context and the files it
+ * copies. The relay's tests ship in its image but never run there, so a change
+ * to them alone doesn't rebuild it — and doesn't restart prod's relay.
+ */
 export const IMAGE_INPUTS = {
-  "notch-relay": ["services/relay", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc"],
+  "notch-relay": ["services/relay", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", ".npmrc", ":(exclude,glob)services/relay/**/*.test.ts"],
   "notch-hermes-sandbox": ["deploy/images/hermes-sandbox"],
 };
 

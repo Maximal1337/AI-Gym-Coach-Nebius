@@ -1,8 +1,12 @@
 # notch-prod's gateway. Its default sandbox image is the Hermes image from
-# NH-21 (deploy/images/hermes-sandbox); CI moves the tag (NH-37).
+# NH-21 (deploy/images/hermes-sandbox). CI moves dev's tag only (NH-37): a new
+# image changes a gateway's config and restarts it, and prod runs the App
+# Review and judge accounts. Prod gets an image dev has run, by a commit of its
+# own — the line's marker is notch-hermes-sandbox-prod, which CI never bumps:
+#   node scripts/bump-image-tag.mjs notch-hermes-sandbox-prod sha-<commit>
 server:
   name: openshell-prod
 sandbox:
   image:
     repository: ghcr.io/maximal1337/notch-hermes-sandbox
-    tag: sha-effb7e11f6af # image-tag: notch-hermes-sandbox
+    tag: sha-effb7e11f6af # image-tag: notch-hermes-sandbox-prod

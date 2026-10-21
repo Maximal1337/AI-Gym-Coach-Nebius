@@ -326,7 +326,12 @@ seconds with the image on the node.
 **A new sandbox image for the sandboxes that exist** (NH-29). CI moves the
 gateway's default image on every push to `main` that changes the image's
 inputs (`deploy/images/hermes-sandbox`; `scripts/image-inputs-changed.mjs`
-skips the build otherwise, and a docs-only push restarts nothing), but that
+skips the build otherwise, and a docs-only push restarts nothing) — dev's
+gateway only. Prod's line in `platform/openshell/values-prod.yaml` is marked
+`notch-hermes-sandbox-prod`, which CI never bumps: once dev has run an image,
+a commit moves prod to it,
+`node scripts/bump-image-tag.mjs notch-hermes-sandbox-prod sha-<commit>`, and
+that restarts prod's gateway — never during a review or judging. Either way it
 reaches only the
 sandboxes created after it: the gateway writes the image into each sandbox's
 `Sandbox` object when it creates it, and a stop and start — the manager's idle
@@ -511,7 +516,9 @@ Added on 2026-10-04. The first build (`sha-4655445706c5`) came out public, so st
    ```
 
    Without the marker the deploy job fails on purpose: an image nobody points
-   at would be built and never used. The relay's tag still moves first, so
+   at would be built and never used. Since 2026-10-21 only dev's file carries
+   that marker; prod's is `notch-hermes-sandbox-prod`, moved by hand (above,
+   "A new sandbox image for the sandboxes that exist"). The relay's tag still moves first, so
    relay deploys don't wait for this.
 3. After the first run that pushes it, set the `notch-hermes-sandbox` package
    to public, as for the relay above, or the cluster can't pull it.

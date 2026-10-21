@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -31,8 +31,15 @@ test("decide: an input changed, or it can't tell — build", () => {
 });
 
 test("the relay's inputs are what its Dockerfile copies, the sandbox image's its context", () => {
-  assert.deepEqual(IMAGE_INPUTS["notch-relay"].sort(), [".npmrc", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "services/relay"]);
+  assert.deepEqual([...IMAGE_INPUTS["notch-relay"]].sort(), [".npmrc", ":(exclude,glob)services/relay/**/*.test.ts", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "services/relay"]);
   assert.deepEqual(IMAGE_INPUTS["notch-hermes-sandbox"], ["deploy/images/hermes-sandbox"]);
+});
+
+test("the manifests: CI's markers on the relay and dev's sandbox image; prod's sandbox image moves only by a commit of its own", () => {
+  const read = (p) => readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8");
+  assert.match(read("deploy/notch/base/kustomization.yaml"), /# image-tag: notch-relay\r?\n/);
+  assert.match(read("deploy/platform/openshell/values-dev.yaml"), /tag: \S+ # image-tag: notch-hermes-sandbox\r?\n/);
+  assert.match(read("deploy/platform/openshell/values-prod.yaml"), /tag: \S+ # image-tag: notch-hermes-sandbox-prod\r?\n/);
 });
 
 test("in a real repository: docs alone build nothing, the image's own files do", () => {
@@ -63,6 +70,10 @@ test("in a real repository: docs alone build nothing, the image's own files do",
   assert.equal(skip.status, 0, skip.stderr);
   assert.equal(skip.stdout, "changed=false\n");
   assert.match(skip.stderr, /notch-relay: skip/);
+
+  write("services/relay/src/main.test.ts", "1");
+  const tests = commit("tests");
+  assert.equal(check(tests).stdout, "changed=false\n", "the relay's tests alone build nothing");
 
   write("services/relay/src/main.ts", "2");
   const code = commit("code");
