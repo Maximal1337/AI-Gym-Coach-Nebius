@@ -35,9 +35,11 @@ test("the relay's inputs are what its Dockerfile copies, the sandbox image's its
   assert.deepEqual(IMAGE_INPUTS["notch-hermes-sandbox"], ["deploy/images/hermes-sandbox"]);
 });
 
-test("the manifests: CI's markers on the relay and dev's sandbox image; prod's sandbox image moves only by a commit of its own", () => {
+test("the manifests: CI's markers on dev's images; prod's move only by a commit of their own", () => {
   const read = (p) => readFileSync(fileURLToPath(new URL(`../${p}`, import.meta.url)), "utf8");
-  assert.match(read("deploy/notch/base/kustomization.yaml"), /# image-tag: notch-relay\r?\n/);
+  assert.doesNotMatch(read("deploy/notch/base/kustomization.yaml"), /image-tag:/);
+  assert.match(read("deploy/notch/overlays/dev/kustomization.yaml"), /newTag: \S+ # image-tag: notch-relay\r?\n/);
+  assert.match(read("deploy/notch/overlays/prod/kustomization.yaml"), /newTag: \S+ # image-tag: notch-relay-prod\r?\n/);
   assert.match(read("deploy/platform/openshell/values-dev.yaml"), /tag: \S+ # image-tag: notch-hermes-sandbox\r?\n/);
   assert.match(read("deploy/platform/openshell/values-prod.yaml"), /tag: \S+ # image-tag: notch-hermes-sandbox-prod\r?\n/);
 });
@@ -60,7 +62,7 @@ test("in a real repository: docs alone build nothing, the image's own files do",
   write("services/relay/src/main.ts", "1");
   write("docs/a.md", "1");
   const built = commit("relay");
-  write("deploy/notch/base/kustomization.yaml", `    newTag: sha-${built.slice(0, 12)} # image-tag: notch-relay\n`);
+  write("deploy/notch/overlays/dev/kustomization.yaml", `    newTag: sha-${built.slice(0, 12)} # image-tag: notch-relay\n`);
   commit("deploy");
   write("docs/a.md", "2");
   const docs = commit("docs");

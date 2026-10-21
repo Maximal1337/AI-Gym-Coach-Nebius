@@ -68,7 +68,9 @@ test("cli: rewrites files under --root, keeps unrelated files, and fails without
   assert.throws(() => execFileSync("node", [script, "missing", "v1", "--root", root], { stdio: "pipe" }), /no line marked/);
 });
 
-test("the repository's own manifests carry the relay marker", () => {
-  const kustomization = fileURLToPath(new URL("../deploy/notch/base/kustomization.yaml", import.meta.url));
-  assert.equal(rewrite(readFileSync(kustomization, "utf8"), "notch-relay", "sha-0123456789ab").marked, 1);
+test("the repository's own manifests carry the relay markers: CI's on dev, prod's own", () => {
+  const read = (env) => readFileSync(fileURLToPath(new URL(`../deploy/notch/overlays/${env}/kustomization.yaml`, import.meta.url)), "utf8");
+  assert.equal(rewrite(read("dev"), "notch-relay", "sha-0123456789ab").marked, 1);
+  assert.equal(rewrite(read("prod"), "notch-relay", "sha-0123456789ab").marked, 0);
+  assert.equal(rewrite(read("prod"), "notch-relay-prod", "sha-0123456789ab").marked, 1);
 });

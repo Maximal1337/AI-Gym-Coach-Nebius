@@ -7,6 +7,12 @@ namespace: notch-dev
 resources:
   - namespace.yaml
   - ../../base
+# The relay's image. Only CI changes the tag, after green tests (NH-37):
+# scripts/bump-image-tag.mjs rewrites the line marked `# image-tag: notch-relay`.
+images:
+  - name: notch-relay
+    newName: ghcr.io/maximal1337/notch-relay
+    newTag: sha-11b2de321a80 # image-tag: notch-relay
 configMapGenerator:
   - name: notch-relay-config
     literals:

@@ -1,6 +1,7 @@
 # Wave 0: prod — its Namespace, NetworkPolicies and the relay
 # (deploy/notch/overlays/prod). Tracks main like every app here (D-32); the
-# relay's image tag is changed only by CI after green tests (NH-37).
+# relay's image tag moves only by a commit of its own, to an image dev has run
+# (D-37).
 # Frozen 2026-12-01 → 12-15 by the sync window in deploy/argocd/projects.yaml.
 apiVersion: argoproj.io/v1alpha1
 kind: Application

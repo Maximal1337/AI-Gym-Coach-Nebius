@@ -26,8 +26,8 @@ Argo CD (core) on the VPS ── root ── deploy/argocd
 | `argocd/` | Everything the root Application syncs |
 | `platform/agent-sandbox/` | The Agent Sandbox controller and CRDs, pinned release |
 | `platform/openshell/` | OpenShell gateway values, shared and per environment |
-| `notch/base/` | The relay and the NetworkPolicies; the relay's image tag |
-| `notch/overlays/{dev,prod}/` | The namespace and `RELAY_ENV` per environment |
+| `notch/base/` | The relay and the NetworkPolicies |
+| `notch/overlays/{dev,prod}/` | The namespace, `RELAY_ENV` and the relay's image tag per environment |
 | `ops/` | On the host, outside Argo CD: nightly backups, the restore onto a new host, the health check every 5 minutes (NH-34, NH-35) |
 
 Pinned versions: k3s `v1.36.4+k3s1` and Argo CD `v3.5.3` (bootstrap.sh),
@@ -111,6 +111,21 @@ argocd --core app sync root
   and the Hermes image build in separate jobs and deploy separately: one that
   fails to build keeps its previous tag, the other still deploys, and the run
   goes red.
+- **Prod gets what dev has run** (D-37, since 2026-10-21). CI moves dev's
+  tags only. Prod's lines carry markers of their own, which CI never bumps:
+  `notch-relay-prod` in `notch/overlays/prod/kustomization.yaml` and
+  `notch-hermes-sandbox-prod` in `platform/openshell/values-prod.yaml`. A
+  commit moves them, with the owner's OK and never during a review or
+  judging, to a tag dev already runs — each restarts prod's relay or
+  gateway:
+
+  ```bash
+  node scripts/bump-image-tag.mjs notch-relay-prod sha-<commit>
+  ```
+
+  ```bash
+  node scripts/bump-image-tag.mjs notch-hermes-sandbox-prod sha-<commit>
+  ```
 - **Rolling back** is `git revert` of the tag commit ("Deploy <sha> to the
   cluster"), pushed to `main`. Don't `kubectl edit`: self-heal reverts it.
 - **Secrets** change only through `secrets.sh`, which restarts the relay.
@@ -329,11 +344,9 @@ inputs (`deploy/images/hermes-sandbox`; `scripts/image-inputs-changed.mjs`
 skips the build otherwise, and a docs-only push restarts nothing) — dev's
 gateway only. Prod's line in `platform/openshell/values-prod.yaml` is marked
 `notch-hermes-sandbox-prod`, which CI never bumps: once dev has run an image,
-a commit moves prod to it,
-`node scripts/bump-image-tag.mjs notch-hermes-sandbox-prod sha-<commit>`, and
-that restarts prod's gateway — never during a review or judging. Either way it
-reaches only the
-sandboxes created after it: the gateway writes the image into each sandbox's
+a commit moves prod to it (D-37, "Prod gets what dev has run" above), and
+that restarts prod's gateway. Either way it reaches only the sandboxes
+created after it: the gateway writes the image into each sandbox's
 `Sandbox` object when it creates it, and a stop and start — the manager's idle
 stop, then the next message — reuse that object. To move the existing ones,
 after a change to the profile, the start script or the patches to Hermes

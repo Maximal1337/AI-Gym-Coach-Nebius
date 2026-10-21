@@ -5,7 +5,7 @@
 //
 // Every YAML line under --root (default deploy/) that ends with the marker
 // `# image-tag: <image>` gets <tag> as its value, e.g. in
-// deploy/notch/base/kustomization.yaml:
+// deploy/notch/overlays/dev/kustomization.yaml:
 //
 //     newTag: sha-0123456789ab # image-tag: notch-relay
 //
