@@ -113,7 +113,8 @@ export function dailyCaps(get: EnvGetter = denoEnv) {
  * A turn already running when the ceiling is hit still finishes, so a day can
  * overshoot by at most the turns in flight — at most one per user.
  */
-export type SpendBucket = "prod" | "dev" | "memory";
+/** The assistant per environment, the nightly memory job, and My Coach on Token Factory (DOR-135). */
+export type SpendBucket = "prod" | "dev" | "memory" | "coach";
 
 /** Error code assistant-send returns at the ceiling; the app shows its own localized message. */
 export const LIMIT_REACHED_ERROR = "daily_limit_reached";
@@ -128,6 +129,7 @@ export function spendCeilingsCents(get: EnvGetter = denoEnv): Record<SpendBucket
     prod: envNumber("ASSISTANT_SPEND_CEILING_CENTS_PROD", 100, get),
     dev: envNumber("ASSISTANT_SPEND_CEILING_CENTS_DEV", 50, get),
     memory: envNumber("ASSISTANT_SPEND_CEILING_CENTS_MEMORY", 50, get),
+    coach: envNumber("ASSISTANT_SPEND_CEILING_CENTS_COACH", 50, get),
   };
 }
 

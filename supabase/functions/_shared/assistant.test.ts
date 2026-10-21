@@ -70,7 +70,7 @@ Deno.test("usageOrFallback: malformed or missing usage is charged the fallback",
 // ------------------------------------------------------------ ceilings
 
 Deno.test("spendCeilingsCents: D-34 defaults", () => {
-  assertEquals(spendCeilingsCents(noEnv), { prod: 100, dev: 50, memory: 50 });
+  assertEquals(spendCeilingsCents(noEnv), { prod: 100, dev: 50, memory: 50, coach: 50 });
 });
 
 Deno.test("spendCeilingsCents: secrets override; 0 switches a bucket off; garbage falls back", () => {
@@ -79,8 +79,9 @@ Deno.test("spendCeilingsCents: secrets override; 0 switches a bucket off; garbag
       ASSISTANT_SPEND_CEILING_CENTS_PROD: "80",
       ASSISTANT_SPEND_CEILING_CENTS_DEV: "0",
       ASSISTANT_SPEND_CEILING_CENTS_MEMORY: "abc",
+      ASSISTANT_SPEND_CEILING_CENTS_COACH: "30",
     })),
-    { prod: 80, dev: 0, memory: 50 },
+    { prod: 80, dev: 0, memory: 50, coach: 30 },
   );
   assertEquals(spendCeilingsCents(env({ ASSISTANT_SPEND_CEILING_CENTS_PROD: "-5" })).prod, 100);
   assertEquals(spendCeilingsCents(env({ ASSISTANT_SPEND_CEILING_CENTS_PROD: " " })).prod, 100);
@@ -90,8 +91,10 @@ Deno.test("budget invariant: the default ceilings fit the credits for the whole 
   const days = 78; // 2026-09-29 → 2026-12-15 inclusive
   const tokenFactoryCreditsCents = 150 * 100; // per member
   const c = spendCeilingsCents(noEnv);
-  // Member A's keys: the agent, prod + dev.
-  assert((c.prod + c.dev) * days <= tokenFactoryCreditsCents, `agent worst case ${(c.prod + c.dev) * days}¢`);
+  // Member A's keys: the agent, prod + dev, and from 2026-10-22 My Coach's (DOR-135).
+  const coachDays = 55; // 2026-10-22 → 2026-12-15 inclusive
+  const memberA = (c.prod + c.dev) * days + c.coach * coachDays;
+  assert(memberA <= tokenFactoryCreditsCents, `member A's worst case ${memberA}¢`);
   // Member B's key: the nightly memory job.
   assert(c.memory * days <= tokenFactoryCreditsCents, `memory worst case ${c.memory * days}¢`);
 });
@@ -107,7 +110,7 @@ Deno.test("spendBucketFor: environments map to their own buckets", () => {
 
 // ------------------------------------------------------------ checkSpend
 
-const CEILINGS = { prod: 100, dev: 50, memory: 50 };
+const CEILINGS = { prod: 100, dev: 50, memory: 50, coach: 50 };
 
 Deno.test("checkSpend: under the ceiling is allowed, at it is not", async () => {
   const under = fakeDb({ data: 99.999, error: null });

@@ -130,6 +130,7 @@ Deno.test("spend adds up per UTC day and bucket, and refuses negative amounts", 
   assertEquals(await record("prod", 1.25), 1.25);
   assertEquals(await record("prod", 0.5), 1.75);
   assertEquals(await record("memory", 3), 3);
+  assertEquals(await record("coach", 0.25), 0.25, "My Coach's own bucket (DOR-135)");
   const today = await asService(db, async (tx) => Number((await tx.query<{ t: string }>("select public.assistant_spend_today('prod') t")).rows[0].t));
   assertEquals(today, 1.75);
   assertEquals(await one(db, "select calls, tokens_input::int ti from public.assistant_spend where bucket = 'prod'"), { calls: 2, ti: 200 });

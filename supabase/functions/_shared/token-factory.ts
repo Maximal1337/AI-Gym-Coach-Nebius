@@ -27,6 +27,8 @@ export interface TokenFactoryRequest {
   maxTokens?: number;
   /** "none" turns thinking off (interactive turns); omit to keep the model's default. */
   reasoningEffort?: "none" | "low" | "medium" | "high";
+  /** Omitted: the model's default. */
+  temperature?: number;
   baseUrl?: string;
   timeoutMs?: number;
   /** Backoff before each retry; its length is the number of retries. */
@@ -68,6 +70,7 @@ export async function tokenFactoryChat(req: TokenFactoryRequest): Promise<TokenF
     messages: req.messages,
     ...(req.maxTokens ? { max_tokens: req.maxTokens } : {}),
     ...(req.reasoningEffort ? { reasoning_effort: req.reasoningEffort } : {}),
+    ...(req.temperature !== undefined ? { temperature: req.temperature } : {}),
     ...(req.jsonSchema ? { response_format: { type: "json_schema", json_schema: { name: req.jsonSchema.name, schema: req.jsonSchema.schema } } } : {}),
   });
 

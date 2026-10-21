@@ -2,7 +2,6 @@ import {
   admin,
   allowRate,
   budgetRemaining,
-  callAgent,
   corsHeaders,
   getUser,
   json,
@@ -10,6 +9,11 @@ import {
   subscriptionAccess,
   withSentry,
 } from "../_shared/mod.ts";
+import { checkSpend, costCents, LIMIT_REACHED_ERROR, recordSpend, usageOrFallback } from "../_shared/assistant.ts";
+import { type CommonExercise, type GeneratePlanInput, generatePlan, PlanGenerationError } from "../_shared/plan-generation.ts";
+
+/** Nemotron Super until DOR-135's run against Lightning decides; COACH_PLAN_MODEL overrides it. */
+const DEFAULT_PLAN_MODEL = "nvidia/nemotron-3-super-120b-a12b";
 
 const GOALS = ["strength", "hypertrophy", "general_fitness", "fat_loss"];
 const LEVELS = ["beginner", "intermediate", "advanced"];
@@ -27,7 +31,12 @@ const LANGUAGES = ["en", "he", "ar", "es", "de", "pt", "fr", "it"];
  *
  * Budget is checked the same way session-start checks it (§10/§21): a
  * generation call is a real LLM call, drawing from the same monthly cap,
- * not a separate cost model.
+ * not a separate cost model. In the hackathon's app the call is Nemotron's
+ * on Token Factory (_shared/plan-generation.ts, DOR-135), also counted
+ * against My Coach's daily ceiling.
+ *
+ * Secrets: COACH_TOKEN_FACTORY_API_KEY (the notch-supabase key),
+ * COACH_PLAN_MODEL (optional), ASSISTANT_SPEND_CEILING_CENTS_COACH.
  */
 Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -131,18 +140,29 @@ Deno.serve(withSentry(async (req) => {
     isCompound: r.is_compound,
   }));
 
-  const res = await callAgent({ intake, commonExercises }, "/generate-plan");
-  if (!res.ok) {
-    return json(res.status === 422 ? 422 : 503, {
-      error: res.status === 422 ? "ungeneratable" : "generator_unavailable",
-    });
-  }
-  const result = await res.json() as {
-    plans: unknown;
-    linterChecks: unknown;
-    usage: { tokensInput: number; tokensOutput: number; costCents: number };
-  };
+  // Nemotron on Token Factory (DOR-135), on My Coach's own key and daily
+  // ceiling ('coach', D-34), not the live app's agent service: the hackathon
+  // app runs on its own project (D-16).
+  const apiKey = Deno.env.get("COACH_TOKEN_FACTORY_API_KEY") ?? "";
+  const model = Deno.env.get("COACH_PLAN_MODEL") ?? DEFAULT_PLAN_MODEL;
+  if (!apiKey) return json(503, { error: "generator_unavailable" });
+  if (!(await checkSpend(db, "coach")).allowed) return json(503, { error: "generator_unavailable", reason: LIMIT_REACHED_ERROR });
 
+  let result;
+  try {
+    result = await generatePlan(intake as GeneratePlanInput, commonExercises as CommonExercise[], { apiKey, model });
+  } catch (e) {
+    const failure = e instanceof PlanGenerationError ? e : new PlanGenerationError(String(e), true);
+    console.error("plan generation failed", { userId: user.id, model, error: failure.message });
+    if (failure.spent) {
+      const usage = usageOrFallback(failure.usage);
+      await recordSpend(db, "coach", model, usage);
+      await recordUsage(db, user.id, { ...usage, costCents: costCents(model, usage) });
+    }
+    return json(503, { error: "generator_unavailable" });
+  }
+
+  await recordSpend(db, "coach", result.model, result.usage);
   await recordUsage(db, user.id, result.usage);
 
   return json(200, { plans: result.plans, linterChecks: result.linterChecks });
