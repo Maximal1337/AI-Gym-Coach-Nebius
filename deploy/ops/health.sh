@@ -17,7 +17,9 @@
 # Problems: disk, memory or load over its limit; k3s or the node down; a
 # workload not ready; an Argo CD application degraded or missing; a container
 # crash-looping or unable to start; more sandboxes running than the cap; relay
-# errors piling up; the last backup failed or is too old.
+# errors piling up; the relays together calling Supabase's Edge Functions
+# faster than the Free plan's month allows; the last backup failed or is too
+# old.
 # Also reported: sandboxes running per environment, memory per pod, containers
 # restarted at their memory limit (the per-sandbox watchdog, SANDBOX_MEMORY),
 # the relay's recent errors, applications out of sync, the latest backup.
@@ -51,6 +53,7 @@ disk_max="$(setting HEALTH_DISK_MAX_PCT 85)"
 mem_min="$(setting HEALTH_MEM_MIN_PCT 10)"
 load_max="$(setting HEALTH_LOAD_MAX_PER_CPU 2)"
 relay_errors_max="$(setting HEALTH_RELAY_ERRORS_MAX 5)"
+edge_calls_max="$(setting HEALTH_EDGE_CALLS_MAX_PER_DAY 12000)"
 backup_max_hours="$(setting HEALTH_BACKUP_MAX_AGE_HOURS 26)"
 declare -A sandbox_cap=(
   [notch-prod]="$(setting HEALTH_SANDBOX_CAP_PROD 4)"
@@ -154,6 +157,8 @@ else
 
   # The relay's own events (services/relay/src; health-events.test.ts there
   # fails when the relay logs an error event this list misses).
+  edge_total=0
+  edge_rates=()
   for ns in "${NOTCH_NAMESPACES[@]}"; do
     kubectl -n "$ns" get deployment notch-relay > /dev/null 2>&1 || continue
     events="$(kubectl -n "$ns" logs deployment/notch-relay --since=10m 2> /dev/null | jq -R -c 'fromjson? | objects' || true)"
@@ -174,7 +179,22 @@ else
       note "relay $ns: $count error(s) in 10 minutes, the last: $(tail -n1 <<<"$errors" | jq -r '.event + " " + ((.error // .reason // "") | tostring)')"
     fi
     (( count < relay_errors_max )) || problem "relay:$ns" "relay $ns: $count errors in 10 minutes (limit $relay_errors_max)"
+    # Its Edge Function calls (DOR-133): the last hour's pace per day, logged
+    # every 5 minutes (services/relay/src/edge-calls.ts). None from a relay
+    # that started less than a quarter of an hour ago, or that predates it.
+    rate="$(jq -s -r 'map(select(.event == "edge_calls" and (.perDay | type) == "number")) | last | .perDay // empty' <<<"$events" || true)"
+    if [[ $rate =~ ^[0-9]+$ ]]; then
+      edge_total=$(( edge_total + rate ))
+      edge_rates+=("${ns#notch-} $rate")
+    fi
   done
+  # Dev and prod share one Supabase project, and Free allows 500,000 calls a
+  # month; the sandboxes' own calls to notch-tools come on top.
+  if (( ${#edge_rates[@]} )); then
+    note "edge function calls a day, at the last hour's pace: $(printf '%s, ' "${edge_rates[@]}" | sed 's/, $//')"
+    (( edge_total <= edge_calls_max )) \
+      || problem edge-calls "edge function calls: the relays at $edge_total a day together (limit $edge_calls_max; Supabase Free allows 500,000 a month)"
+  fi
 fi
 
 # ------------------------------------------------------------------ backups

@@ -329,6 +329,20 @@ check "dev paused at its spend ceiling is reported" has "$report" "relay notch-d
 check "dev paused at its spend ceiling isn't a problem" has "$report" "OK on "
 rm -f "$K/relay-notch-dev.log"
 
+# The relays' Edge Function calls (DOR-133): the latest report of each, added up.
+edge() { printf '{"event":"edge_calls","minutes":%s,"calls":0,"perDay":%s,"day":"2026-10-21","today":0,"byCall":{}}\n' "$1" "$2"; }
+{ edge 55 1500; edge 60 6000; } > "$K/relay-notch-dev.log"
+{ edge 10 null; edge 60 5900; } > "$K/relay-notch-prod.log"
+report="$(bash "$OPS/health.sh" 2>&1 || true)"
+check "reports each relay's Edge Function calls a day, the latest report" has "$report" "edge function calls a day, at the last hour's pace: dev 6000, prod 5900"
+check "both under the limit together: OK" has "$report" "OK on "
+edge 60 6100 >> "$K/relay-notch-prod.log"
+check "the relays together over the limit" fails_with "edge function calls: the relays at 12100 a day together (limit 12000" bash "$OPS/health.sh"
+edge 15 null > "$K/relay-notch-prod.log"
+check "a relay without a rate yet adds nothing" has "$(bash "$OPS/health.sh" 2>&1 || true)" "at the last hour's pace: dev 6000"
+rm -f "$K/relay-notch-dev.log"
+: > "$K/relay-notch-prod.log"
+
 { sandbox_pod notch-dev d1 ""; sandbox_pod notch-dev d2 ""; sandbox_pod notch-dev d3 ""; } | jq -s '{items: .}' > "$K/pods.json"
 check "more sandboxes than the cap" fails_with "notch-dev: 3 sandboxes running, over the cap of 2" bash "$OPS/health.sh"
 echo '{"items": []}' > "$K/pods.json"

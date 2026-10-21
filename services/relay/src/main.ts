@@ -2,6 +2,7 @@ import { writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { type GatewayConfig, gatewayConfigFromEnv, gatewayFetch, registerGateway, sandboxServiceUrl } from "./gateway.js";
+import { EDGE_CALLS_EVERY_MS, EdgeCallMeter } from "./edge-calls.js";
 import { chat } from "./hermes.js";
 import { readTurn } from "./hermes-session.js";
 import { execOpenShell, OpenShellCli } from "./openshell-cli.js";
@@ -96,9 +97,14 @@ async function main(): Promise<void> {
   const env = required("RELAY_ENV");
   if (env !== "dev" && env !== "prod") throw new Error("RELAY_ENV must be dev or prod");
   const functionsUrl = required("SUPABASE_FUNCTIONS_URL").replace(/\/+$/, "");
-  const outbox = new OutboxClient({ functionsUrl, env: env as RelayEnvironment, secret: required("RELAY_SECRET") });
+  // Its Edge Function calls, logged every 5 minutes for the health check (DOR-133).
+  const meter = new EdgeCallMeter();
+  const outbox = new OutboxClient({ functionsUrl, env: env as RelayEnvironment, secret: required("RELAY_SECRET"), meter });
   const model = required("TOKEN_FACTORY_MODEL");
   const timers: NodeJS.Timeout[] = [];
+  timers.push(setInterval(() => {
+    for (const [event, fields] of meter.report()) log(event, fields);
+  }, EDGE_CALLS_EVERY_MS));
   let acquireSandbox: RelayDeps["acquireSandbox"];
   const mode = process.env.RELAY_SANDBOXES?.trim() || "static";
   if (mode !== "static" && mode !== "manager") throw new Error("RELAY_SANDBOXES must be static or manager");

@@ -74,6 +74,8 @@ export interface OutboxConfig {
   secret: string;
   fetch?: typeof fetch;
   nowSec?: () => number;
+  /** Counts every request: each is an Edge Function invocation (edge-calls.ts). */
+  meter?: { record: (fn: string, action?: string) => void };
 }
 
 /** Per request to assistant-outbox / assistant-deliver that answers at once: well under a second. */
@@ -114,7 +116,10 @@ export class OutboxClient {
     this.nowSec = config.nowSec ?? (() => Math.floor(Date.now() / 1000));
   }
 
-  private async post(fn: string, payload: unknown, timeoutMs = OUTBOX_TIMEOUT_MS): Promise<{ status: number; body: Record<string, unknown> }> {
+  private async post(fn: string, payload: object, timeoutMs = OUTBOX_TIMEOUT_MS): Promise<{ status: number; body: Record<string, unknown> }> {
+    // Counted before it's sent: one that fails on the way may have been invoked all the same.
+    const action = (payload as { action?: unknown }).action;
+    this.config.meter?.record(fn, typeof action === "string" ? action : undefined);
     const body = JSON.stringify(payload);
     const res = await this.fetch(`${this.config.functionsUrl}/${fn}`, {
       method: "POST",

@@ -587,7 +587,8 @@ It's a problem when the disk is over 85%, memory available under 10%, or load
 over 2 per CPU; k3s or the node is down; a deployment or StatefulSet isn't
 ready; an Argo CD application is degraded or missing; a container is
 crash-looping or can't pull its image; more sandboxes run than the cap (4 prod,
-2 dev); the relay logged 5 or more errors in 10 minutes; or the last backup
+2 dev); the relay logged 5 or more errors in 10 minutes; the relays together
+call Supabase's Edge Functions at more than 12,000 a day; or the last backup
 failed or is over 26 hours old. A problem is reported once two runs in a row
 see it, so a single pod restart doesn't page anyone. The limits are in
 `ops/ops.env.example`.
@@ -603,6 +604,15 @@ sudo /usr/local/lib/notch-ops/health.sh
 
 - **Queue length and failed jobs** live in Supabase, which the VPS can't read:
   [`docs/assistant-ops.md`](../docs/assistant-ops.md), "Queue right now".
+- **Edge Function calls** (DOR-133): dev and prod share one Supabase project,
+  and Free allows 500,000 invocations a month. Each relay counts its own calls
+  (`services/relay/src/edge-calls.ts`) and logs them every 5 minutes as
+  `edge_calls`: the last hour's pace per day, by function and action, and the
+  UTC day's count so far, with each day's total as `edge_calls_day`. The
+  health check adds the relays' latest paces up and alerts above
+  `HEALTH_EDGE_CALLS_MAX_PER_DAY` (12,000, some 360,000 a month). Idle, a relay
+  makes about 1,700 a day (a long poll every 50 s). The sandboxes' calls to
+  `notch-tools` aren't in it: the project's Usage page has the whole.
 - **Per-sandbox memory watchdog:** `SANDBOX_MEMORY` in each overlay (set from
   NH-25's soak test). OpenShell makes it the sandbox pod's memory request and
   limit, so a Hermes that keeps growing is killed at that size, and the relay

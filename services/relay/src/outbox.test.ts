@@ -44,6 +44,18 @@ test("claim: a long-polling claim asks for its wait, and gives up only after the
   assert.equal(calls[1].body, JSON.stringify({ action: "claim", limit: 2, lease_seconds: 180 }));
 });
 
+test("every request is counted for the meter, by function and action, failed ones too", async () => {
+  const counted: string[] = [];
+  const meter = { record: (fn: string, action?: string) => void counted.push(action ? `${fn}:${action}` : fn) };
+  const ok = new OutboxClient({ ...config(fakeFetch(200, { jobs: [], ok: true }).f), meter });
+  await ok.claim(2, 180);
+  await ok.defer({ job_id: 1, lease_token: "l", seconds: 3, reason: "busy" });
+  await ok.deliver({ job_id: 1, lease_token: "l", model: "m", reply: { text: "hi" } });
+  const refused = new OutboxClient({ ...config(fakeFetch(500, {}).f), meter });
+  await assert.rejects(() => refused.fail({ job_id: 1, lease_token: "l", error: "x" }));
+  assert.deepEqual(counted, ["assistant-outbox:claim", "assistant-outbox:defer", "assistant-deliver", "assistant-outbox:fail"]);
+});
+
 test("claim: a refused request throws with its status", async () => {
   const { f } = fakeFetch(401, { error: "unauthorized" });
   await assert.rejects(() => new OutboxClient(config(f)).claim(2, 180), (e: unknown) => e instanceof OutboxError && e.status === 401);
