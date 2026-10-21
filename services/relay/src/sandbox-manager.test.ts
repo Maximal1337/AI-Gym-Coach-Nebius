@@ -248,6 +248,12 @@ test("a sandbox stopped and started again is unanswered since the new start", as
   assert.equal(restarted.startedAt, clock.t);
 });
 
+test("a job whose sandbox can't answer yet is looked at again within seconds, at most 60 claims over the whole wait", () => {
+  assert.equal(DEFER_SECONDS.busy, 3);
+  assert.ok(GATEWAY_WAIT_MS / 1000 / DEFER_SECONDS.busy <= 60);
+  assert.ok(DEFER_SECONDS.capacity > DEFER_SECONDS.busy, "a full environment frees up slower than a sandbox starts");
+});
+
 test("a gateway that can't be reached: jobs wait unspent for GATEWAY_WAIT_MS, then fail; any other error fails at once", async () => {
   const { driver, clock, manager, job } = setup();
   const list = driver.list.bind(driver);

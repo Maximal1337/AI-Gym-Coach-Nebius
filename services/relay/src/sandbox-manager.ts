@@ -138,8 +138,15 @@ export class SandboxError extends Error {
   }
 }
 
-/** How long a job waits before it's claimed again. */
-export const DEFER_SECONDS = { capacity: 20, busy: 10 } as const;
+/**
+ * How long a job waits before it's claimed again. `busy`: its sandbox can't
+ * answer yet — mid-transition, Hermes starting, or out of reach while the
+ * gateway restarts — which takes seconds; assistant-outbox looks at the queue
+ * every 2.5 s, so 3 s loses next to nothing (a gateway restart on dev cost
+ * 22 to 46 s with 10). `capacity`: the environment is full, until someone's
+ * sandbox goes idle.
+ */
+export const DEFER_SECONDS = { capacity: 20, busy: 3 } as const;
 /**
  * How long jobs wait for a gateway that can't be reached before they spend
  * their attempts: a restart takes seconds (2.5 to 13 on dev, 2026-10-21);

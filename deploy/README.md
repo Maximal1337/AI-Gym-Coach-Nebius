@@ -196,7 +196,11 @@ own session, `sudo kubectl`.
    kubectl -n notch-prod exec deploy/notch-relay -c relay -- openshell sandbox start <sandbox>
    ```
 
-   And the reviewer's path again, from each demo account.
+   Then a first message from each demo and judge account, sent by someone on
+   the team: each gets its answer, which is the reviewer's path again, and
+   no one outside the team meets a sandbox's first turn on the new image
+   (NH-73: these accounts' sandboxes always exist before they are handed
+   out).
 
 A step that goes wrong is undone by `git revert` of its commit, pushed with
 the same OK.

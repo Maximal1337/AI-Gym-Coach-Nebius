@@ -205,7 +205,7 @@ test("a sandbox started moments ago with Hermes not up yet: the job waits unspen
       chat: () => Promise.reject(error),
     });
     assert.equal(await processJob(job(), d), "deferred", error.message);
-    assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 10, reason: "hermes_starting" }]);
+    assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 3, reason: "hermes_starting" }]);
     assert.deepEqual([log.failed, log.delivered], [[], []]);
   }
 });
@@ -225,7 +225,7 @@ test("a running sandbox the gateway can't reach — refused, 412, 502, 503 — w
       chat: () => Promise.reject(error),
     });
     assert.equal(await processJob(job(), d), "deferred", error.message);
-    assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 10, reason: "sandbox_unreachable" }]);
+    assert.deepEqual(log.deferred, [{ job_id: 7, lease_token: "lease-7", seconds: 3, reason: "sandbox_unreachable" }]);
     assert.deepEqual([log.failed, log.delivered], [[], []]);
   }
   // Silent since its start, as the manager reports it: still "starting".
