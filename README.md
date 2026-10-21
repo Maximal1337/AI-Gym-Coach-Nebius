@@ -12,18 +12,18 @@ you undo it — and checks in every day on its own. Every user gets their
 own agent: **Hermes Agent running in their own NVIDIA OpenShell sandbox**,
 thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 
-- **Demo build:** public TestFlight link — *added with the build (by 2026-10-16)*
-- **Demo video:** *link added at submission*
+- **Demo build:** public TestFlight link ⟨added once Beta App Review approves the build⟩
+- **Demo video:** ⟨link added at submission⟩
 - **Judge accounts:** in the Devpost testing instructions (never in this public repository)
 
-> **Status on 2026-10-06.** Everything on the Supabase side, the relay, the
-> sandbox manager, the memory pipeline, the Hermes coach profile, the cluster
-> manifests and the app screens is written and tested in CI. CI builds both
-> images after every green run on `main` (the relay, and the Hermes sandbox
-> image on NemoClaw's) and publishes them on GHCR. What's left needs the Nebius
-> VPS: bringing the cluster up and running the whole path end to end. This
-> README is updated as those land; [the plan](docs/nebius-hackathon-plan.md)
-> tracks every item.
+> **Status on 2026-10-21.** Live on one Nebius VPS since 2026-10-20: a dev
+> and a prod environment, each with its own OpenShell gateway, relay and
+> per-user sandboxes. The hackathon build ("Notch Coach", TestFlight only) is
+> in Beta App Review. The spike's go/no-go passed on 2026-10-19; its numbers
+> are [below](#measured-on-the-live-system).
+> ⟨The nightly memory job's first run and its evaluation set on Token
+> Factory: 2026-10-22.⟩ [The plan](docs/nebius-hackathon-plan.md) tracks every
+> item; [the board](docs/deploy-status.md) has the details.
 
 ## What the Coach assistant does
 
@@ -43,14 +43,14 @@ OpenAI-compatible), and both use **NVIDIA Nemotron**:
 
 | Where | Model | Why this one | How it's called |
 |---|---|---|---|
-| Every Coach assistant reply and daily check-in | Nemotron **Super** (`TOKEN_FACTORY_MODEL`) | Interactive: a person is waiting, and the turn calls tools, so it needs reliable tool calling at low latency and cost | By Hermes, inside the user's sandbox, through a provider entry for Token Factory in its config. The key never enters the sandbox: OpenShell's proxy adds it to the request, and only for Token Factory's host. Thinking is off — every request carries `reasoning_effort: "none"`, set in that provider entry because Hermes' built-in Token Factory provider doesn't send it: on a tool-calling turn a reasoning model can spend its whole budget thinking and answer with nothing |
+| Every Coach assistant reply and daily check-in | Nemotron **Super** (`TOKEN_FACTORY_MODEL`) | Interactive: a person is waiting, and the turn calls tools, so it needs reliable tool calling at low latency and cost | By Hermes, inside the user's sandbox, through a provider entry for Token Factory in its config. The key never enters the sandbox: OpenShell's proxy adds it to the request, and only for Token Factory's host. A little thinking — every request carries `reasoning_effort: "low"`, set in that provider entry because Hermes' built-in Token Factory provider doesn't send it. With thinking off, a turn that came after an earlier exchange called the tool it needed in only 6 of 16 — it promised, or claimed an action it never took; with `low`, 16 of 16. More would risk the opposite: a reasoning model can spend its whole budget thinking and answer with nothing |
 | The nightly memory job | Nemotron **Ultra** (`MEMORY_MODEL`) | A batch job nobody waits for: quality over latency, and thinking on | From a Supabase Edge Function (`memory-nightly`) with a JSON-schema response; every operation it proposes is validated, and the facts' scores are computed in code, not by the model |
 
 Spend is bounded by construction: `_shared/assistant.ts` prices every call
 from the usage Token Factory reports (a conservative fallback when it
-doesn't), and at a daily ceiling — $1 for prod, $0.50 for dev, $0.50 for the
-nightly memory job — the assistant says the day's limit is reached and
-nothing more is sent. Hermes' own background model calls (post-turn reviews, session
+doesn't), and at a daily ceiling — $1 for prod ($2 while judging runs,
+2026-12-01 to 12-15), $0.30 for dev, $0.50 for the nightly memory job — the
+assistant says the day's limit is reached and nothing more is sent. Hermes' own background model calls (post-turn reviews, session
 titles), whose tokens no one could count, are switched off.
 
 Two things stay on Google Gemini through OpenRouter, as before the hackathon:
@@ -59,6 +59,12 @@ in-workout coach real users have today, which we didn't change during the
 hackathon.
 
 ## Architecture
+
+A message's path: **the app → Supabase Edge Functions → the job queue
+(outbox) → the relay on the Nebius VPS → the user's own OpenShell sandbox →
+Hermes Agent → Nemotron on Token Factory**, with Tavily search and our tools
+reached only through the sandbox's network policy — and the reply back the
+same way.
 
 ```mermaid
 flowchart LR
@@ -88,9 +94,9 @@ flowchart LR
   deliver -- push --> app
   relay -- "create · start · stop · delete" --> gw --> sb
   relay -- "chat, with the user's facts" --> hermes
-  hermes -- "key added by OpenShell" --> tf
-  hermes -- "search, key added by OpenShell" --> tavily
-  hermes -- "user's token added by OpenShell" --> tools --> db
+  hermes -- "policy: chat completions only<br/>key added by OpenShell" --> tf
+  hermes -- "policy: POST /search only<br/>key added by OpenShell" --> tavily
+  hermes -- "policy: notch-tools only<br/>user's token added by OpenShell" --> tools --> db
   nightly --> tf
   nightly --> db
 ```
@@ -113,6 +119,11 @@ flowchart LR
 - **Hermes** in each sandbox reads the coach's character and rules from
   `SOUL.md` and has exactly four toolsets: the Notch tools, web search, its own
   memory and skills. Terminal, files, code execution and the browser are off.
+- **The sandbox's network policy** (`deploy/platform/openshell/sandbox-policy.yaml`)
+  lets exactly one binary, Hermes' interpreter, reach exactly three places:
+  Token Factory's chat completions, Tavily's `POST /search` and our
+  `notch-tools`. Everything else — Tavily's other endpoints, any other host,
+  the cluster — is refused.
 - **`notch-tools`** is our MCP server: four read tools (profile, plans,
   history with progression computed in code, facts) and three write tools
   (`save_note`, `adjust_plan_exercise`, `undo_last_change`). A tool never takes
@@ -126,16 +137,69 @@ flowchart LR
   tests and commits their tags; Argo CD pulls them. A prod sync window freezes
   the demo during judging.
 
+## Security
+
+What we guard against: one user's agent reaching another user's data, anyone's
+keys leaving the gateway, and a web page steering the agent. Checked on the
+live cluster with two test accounts (NH-26 on 2026-10-19, NH-45 on 10-20 and
+10-21) — our own tests, not an external audit:
+
+- **One sandbox per user, closed from inside.** From inside a user's sandbox:
+  no Kubernetes service-account token; nothing key-shaped in the environment —
+  the Token Factory key, the Tavily key and the user's tool token are
+  OpenShell's placeholders; nothing writable but `/sandbox` and `/tmp`; no
+  volume but its own. No direct connection — from a shell, or from Hermes'
+  own interpreter, the one binary the policy lets out — to the other user's
+  sandbox, the gateway, the node's ports, the cluster API, the cloud metadata
+  service or the internet. The positive control: the same interpreter reaches
+  Token Factory.
+- **Keys bound to their hosts.** OpenShell's proxy puts the real key in only
+  on requests to that key's own host. Each placeholder sent to another
+  provider's host — in a header, or in Tavily's request body — got a 403
+  (`credential_endpoint_mismatch`) and went nowhere; to its own host, 200.
+- **From the agent's side.** The request Hermes sends the model carries
+  exactly the twelve tools we allow; six prompts after keys, the tool token,
+  a shell, a file, a fetched page and another user's data got nothing. Asked
+  something only user B's facts answer, B's agent knew and A's didn't.
+- **No forged instructions from a tool result.** Hermes tells the model to
+  trust an "out-of-band user message" marker inside a tool result as the
+  user's own words, and a page Tavily returns could carry one. Our third patch
+  to Hermes defangs the marker in every tool result and drops the note that
+  says to trust it. With `web_search` stubbed to return a page with a forged
+  marker and an instruction, the model obeyed it in **10 of 10** turns before
+  the patch and in **0 of 10** after — on the image as CI builds it, too.
+- **No way in.** From outside, the VPS answers SSH only; the relay pulls its
+  work from Supabase over HMAC-signed requests; NetworkPolicies keep dev and
+  prod apart; a tool takes the user from the per-user token, never from the
+  model.
+
+## Measured on the live system
+
+The spike (NH-21 to NH-27) ran on the same VPS, with the Hermes image as CI
+builds it and Nemotron Super on Token Factory:
+
+| What | Result | When |
+|---|---|---|
+| The soak: one turn a minute for 15 hours | 900 turns, none failed or empty; p50 4.9 s, p95 7.9 s, the same at the end as at the start. Hermes' memory levelled off at 300–304 MiB — no leak | 2026-10-18/19 (thinking off) |
+| A ten-turn conversation with history (`bench turns`, three runs) | p95 5.0 to 10.0 s; $0.048 to $0.052 per 10 turns at Super's list price | 2026-10-19 (`low`) |
+| Tool calls when a turn needs one | 40 of 40; 16 of 16 after an earlier exchange; none of 160 turns empty | 2026-10-18 (`low`) |
+| Cold start | A stopped sandbox: 17 to 19 s to the first reply; a new one, 34 to 39 s. About one start in seven waits 2 min 16 s more for OpenShell 0.1.2's supervisor — so the demo and judge accounts' sandboxes are created ahead and kept running | 2026-10-18 |
+| Capacity, 2 vCPU / 8 GiB | Six sandboxes running, three with turns at once: p95 6.8 to 8.1 s, 4.2 GiB still free | 2026-10-18 |
+| A gateway restart under running sandboxes | The sandboxes live through it; a message that arrives meanwhile waits, keeps its attempts, and is answered 15 to 20 s later | 2026-10-21 |
+| The relay's long polling | About 3,500 Edge Function calls a day for both relays, against 86,000 polling every 2 s | 2026-10-16 |
+
 ## What we built, and what we build on
 
 OpenShell, Hermes Agent and NemoClaw's Hermes sandbox image are the runtime;
 the product is the software around them. None of the upstream source is vendored
 in this repository: each piece is pulled at a pinned version, under its own
-license. Two upstream functions are changed, when our sandbox image is built:
-Hermes' API server gets five lines so that it also takes its key from an
-`X-Hermes-Api-Key` header, and a gate NemoClaw adds to Hermes, which holds
-every turn until a directory belongs to root, is switched off, because on a
-Kubernetes volume it never does
+license. Three patches change Hermes when our sandbox image is built, and each
+fails the build if Hermes' code isn't what it was written for: its API server
+also takes its key from an `X-Hermes-Api-Key` header (OpenShell's gateway
+removes `Authorization`); a gate NemoClaw adds, which holds every turn until a
+directory belongs to root, is switched off, because on a Kubernetes volume it
+never does; and the prompt patch above, which also stops Hermes filing the
+user's preferences into skills, where nothing about the user belongs
 ([why](deploy/images/hermes-sandbox/README.md#our-patches-to-hermes)).
 
 | Ours (MIT, this repository) | Where |
@@ -144,7 +208,7 @@ Kubernetes volume it never does
 | The chat channel: queue with leases, deferral and per-user ordering, signed relay endpoints, idempotent delivery | `supabase/functions/assistant-*`, `_shared/relay-auth.ts` |
 | The relay and the per-user sandbox manager | `services/relay` |
 | The memory pipeline: extraction with per-operation validation, scoring and eviction in code, nightly job, evaluation set | `_shared/memory-*.ts`, `supabase/functions/memory-nightly`, `supabase/eval/memory` |
-| The coach's character and rules, the tool allowlist, the sandbox's start script, the two patches to Hermes | `deploy/images/hermes-sandbox` |
+| The coach's character and rules, the tool allowlist, the sandbox's start script, the three patches to Hermes | `deploy/images/hermes-sandbox` |
 | Spend ceilings, the kill switch, operations runbooks | `_shared/assistant.ts`, `docs/assistant-ops.md`, `docs/budget-runbook.md` |
 | GitOps: bootstrap, Argo CD app of apps, NetworkPolicies, image pipeline | `deploy/`, `.github/workflows/images.yml` |
 | Encrypted nightly backups, the restore onto a new host, the health check | `deploy/ops` |
@@ -154,7 +218,7 @@ Kubernetes volume it never does
 | Upstream | License | How it's used |
 |---|---|---|
 | [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) | Apache-2.0 | Gateway Helm chart 0.1.2 and the `openshell` CLI (shipped in the relay image with its LICENSE and THIRD-PARTY-NOTICES) |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox, as NemoClaw's image ships it (v0.21.3), with our two patches: to its API server's key check, and to the cron-restore drain gate NemoClaw adds |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox, as NemoClaw's image ships it (v0.21.3), with our three patches: to its API server's key check, to the cron-restore drain gate NemoClaw adds, and to what tool results and its own guidance put in the prompt |
 | [NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw) | Apache-2.0 | Its published Hermes sandbox image (v0.0.130, pinned by digest) is the base of ours; we add the coach's profile and start Hermes with our own script, not with its start script or its `hermes` wrapper |
 | [Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | Apache-2.0 | The Sandbox CRD and controller OpenShell runs on, v1.0.4 |
 | [k3s](https://github.com/k3s-io/k3s), [Argo CD](https://github.com/argoproj/argo-cd) | Apache-2.0 | The cluster and its GitOps sync |
@@ -265,8 +329,11 @@ sudo deploy/ops/install.sh
 
 The first installs pinned k3s and Argo CD core and hands everything else to
 Argo CD; the second loads one environment's secrets from a root-only file on
-the host; the third sets up nightly encrypted backups and a health check every
-5 minutes (`/etc/notch/ops.env`: `HEALTHCHECK_URL`, optionally `BACKUP_S3_*`).
+the host; the third sets up nightly encrypted backups — with
+`SUPABASE_DB_URL`, the Supabase database's accounts and data too, checked by
+restoring them into a throwaway PostgreSQL — and a health check every 5
+minutes (`/etc/notch/ops.env`: `HEALTHCHECK_URL`, optionally `BACKUP_S3_*`
+and `SUPABASE_DB_URL`).
 
 The relay reads `RELAY_SECRET`, `SUPABASE_FUNCTIONS_URL`, `TOKEN_FACTORY_MODEL`
 and `SANDBOX_KEY_SECRET` from the environment's secrets file, and `RELAY_ENV`,

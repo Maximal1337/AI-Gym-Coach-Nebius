@@ -146,15 +146,17 @@ The **Coach assistant** is a new tab in the Notch app:
   10 idle minutes and deleted with their account. When the sandboxes that fit
   on our VM are all busy, a message waits its turn — users never share one.
 - **Nemotron on Nebius Token Factory** for both model calls. **Nemotron Super**
-  answers every message and check-in, driving Hermes' tool calls with thinking
-  off — a person is waiting, and a reasoning model can spend its whole budget
+  answers every message and check-in and drives Hermes' tool calls with a
+  little thinking (`reasoning_effort: "low"`): with none, it promised actions
+  it never took; with more, a reasoning model can spend its whole budget
   thinking and answer with nothing. **Nemotron Ultra** runs the nightly memory
   job with thinking on and a JSON schema; every operation it proposes is
   validated, and the facts' scores are computed in code. Daily spend ceilings
   in our code bound what either can cost.
 - **Keys the agent never sees.** OpenShell's proxy adds the Token Factory key,
   the Tavily key and the user's own tool token to outgoing requests — each only
-  for its own host.
+  for its own host. The sandbox's network policy lets Hermes reach exactly
+  three places: Token Factory, Tavily's search and our tools.
 - **Tools that act safely.** `notch-tools` is our MCP server over the user's
   real training data: four read tools and three write tools, with an audit
   trail and undo. A tool never takes a user id from the model; the per-user
@@ -182,39 +184,69 @@ The **Coach assistant** is a new tab in the Notch app:
   as sharing.
 - **Reasoning models and tool calls.** A reasoning model can spend its token
   budget thinking and return empty content, which a tool loop reads as
-  "nothing to say". We turned thinking off where tools are called, test for
-  that failure before any wiring, and make our client fail loudly on it.
+  "nothing to say", so we first turned thinking off. That had its own
+  failure: once a conversation had history, the agent called the tool a turn
+  needed in only 6 of 16 — it said "I'll pull that up now" and stopped, or
+  answered "I've reverted your bench press" without undoing anything. A
+  little thinking (`low`) fixed it: 16 of 16, and 40 of 40 across the whole
+  tool check, for about the same cost. Our client fails loudly on an empty
+  reply either way.
 - **Memory the user controls.** Deleting a fact has to really delete it. That
   ruled out letting the agent keep its own profile of the user, and made our
   facts — visible and deletable — the only memory about the person.
 - **Secrets in a public repository.** Keys live in the gateway, not in the
   agent or in Git; an old sign-in allowlist in the history was moved into a
   secret and its addresses retired ⟨once NH-06 is rolled out⟩.
-- ⟨What the spike and the deployment actually hit — NH-21 to NH-27.⟩
+- **OpenShell on Kubernetes, the less traveled path.** Its gateway strips
+  `Authorization` on the way to a sandbox, so Hermes needed a patch to take
+  its key from another header; a gate NemoClaw adds to Hermes waits forever
+  on a Kubernetes volume; about one sandbox start in seven waits 2 min 16 s
+  more for OpenShell 0.1.2's supervisor; and a gateway restart left running
+  sandboxes out of reach for up to 13 s, which used up a message's retries
+  until the relay learned to wait instead. Each one found on the real
+  cluster, and each with a test now.
+- **A web page that talks like the user.** Hermes trusts an "out-of-band user
+  message" marker inside a tool result as the user's own words, and a page
+  Tavily returns could carry one. With a forged one in a stubbed search
+  result, the model obeyed it in 10 of 10 turns. A build-time patch defangs
+  the marker in every tool result: 0 of 10.
 
 ### Accomplishments that we're proud of
 
-- Real per-user isolation that holds under load: waiting, never sharing.
+- Real per-user isolation that holds under load: waiting, never sharing — and
+  checked from inside a sandbox: no keys, no other user's data, no way out
+  but the three hosts the policy names.
 - An assistant that changes things but can always be undone.
 - A memory users can read and edit, with the rules for what's kept written in
   code, not left to the model.
 - Spend that can't run away, by construction.
-- ⟨Numbers from the live system: reply latency, cold start, cost per ten-turn
-  conversation (NH-25).⟩
+- Numbers from the live system: 900 turns over a 15-hour soak with none
+  failed or empty (p95 7.9 s); a ten-turn conversation at p95 5 to 10 s and
+  about $0.05; the tools called in 40 of 40 turns that needed one; six
+  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare.
 
 ### What we learned
 
-- ⟨From the spike: how OpenShell behaves on Kubernetes, and Nemotron's tool
-  calling with thinking off (NH-28, NH-22).⟩
+- Measure the agent with history, not just single questions: with thinking
+  off and no conversation before it, Nemotron called the tool a turn needed
+  in 36 of 37 turns; after an earlier exchange, in 6 of 16. The second number
+  decided the setting.
+- Read what the framework adds to the prompt. Hermes' own guidance was about
+  half of the system prompt, and some of it pulled against our coach — one
+  part of it was the forged-marker door above.
+- On a small VM, a sandbox per user is affordable if sandboxes stop when
+  idle: Hermes levels off at about 300 MiB, so six fit in 8 GiB.
 - Keeping the model out of anything that must be exact — progression numbers,
   fact scores, which user a tool acts for — made the agent far easier to trust.
 
 ### What's next
 
 Releasing the assistant to every Notch user, which needs a capacity plan for
-sandboxes at scale and privacy disclosures; replies in Hebrew, Arabic and
-Portuguese held to the same quality bar; and bringing the agent into the
-workout itself, so it can log sets and adjust the session live.
+sandboxes at scale and privacy disclosures; continuing each user's Hermes
+session instead of resending the history as text, which keeps the real tool
+calls in context; replies in Hebrew, Arabic and Portuguese held to the same
+quality bar; and bringing the agent into the workout itself, so it can log
+sets and adjust the session live.
 
 ### Built with
 
@@ -280,9 +312,12 @@ and only after the check in the form table above.
 >    checks in on its own as a notification, when there's something worth
 >    saying. If it comes while you sleep, it's waiting in the chat.
 >
-> **Good to know.** A reply usually takes ⟨p50⟩ seconds; if your agent was
-> asleep, the first one takes up to ⟨cold start⟩ seconds while it starts, and
-> when many judges write at once a message may show "waiting" before its turn.
+> **Good to know.** A reply usually takes 5 to 10 seconds, longer when the
+> coach searches the web. ⟨Only if every judge account is in prod's
+> SANDBOX_KEEP_RUNNING:⟩ Your account's agent is already running, so there
+> is nothing to start. When many judges write at once a message may show
+> "Waiting for your coach…" before its turn, and after two minutes "Taking
+> longer than usual" — the reply still arrives, with a notification.
 > New facts from today's chat appear after the nightly run (00:00–03:00 UTC).
 > Each account can send up to 100 messages a day. If the coach says it has
 > reached today's limit, the demo's shared daily budget is spent: it's back at
@@ -377,7 +412,7 @@ the lines about Token Factory and Nemotron:
 |---|---|---|
 | 0:00–0:15 | Notch's workout screen, then the Assistant tab | Notch is a strength coach on the App Store. For this hackathon we gave every lifter their own always-on coach — one that remembers them, acts for them, and keeps what it knows about them private. |
 | 0:15–0:45 | *What the coach remembers*: the knee, the schedule. Then ask: "I've only got 40 minutes on Thursday — what should I cut?" The reply works around the knee | It remembers you across sessions. Every night, NVIDIA Nemotron Ultra on Nebius Token Factory reads the day's chats and workouts and distils short facts. The scoring is in code, not in the model, and every fact is yours to see — and to delete. |
-| 0:45–1:15 | "Make my bench press 4 sets of 6 this week." The reply states the change; the Workout tab shows it. "Undo that." | It acts for you. Nemotron Super drives the agent's tool calls, with thinking off so answers come fast. It can change an exercise's sets, reps, rest or intensity — never the movement — it says exactly what it changed, and anything can be undone for a day. |
+| 0:45–1:15 | "Make my bench press 4 sets of 6 this week." The reply states the change; the Workout tab shows it. "Undo that." | It acts for you. Nemotron Super drives the agent's tool calls, with just a little thinking, so it acts instead of promising and still answers fast. It can change an exercise's sets, reps, rest or intensity — never the movement — it says exactly what it changed, and anything can be undone for a day. |
 | 1:15–1:35 | "Which vegetarian foods have 30 grams of protein?" Tap a source | It looks things up with Tavily and shows where each answer came from — and its rules keep anything personal out of the search. |
 | 1:35–1:55 | The morning notification on the lock screen, opened | And it doesn't wait to be asked: each morning it checks in about today's workout — or stays quiet when there's nothing useful to say. |
 | 1:55–2:30 | The architecture diagram; then the VPS terminal listing one sandbox per user | Under the hood, every user has their own Hermes Agent, in their own NVIDIA OpenShell sandbox, on a Nebius VM. The agent never sees an API key: OpenShell adds the Token Factory key only on requests to Token Factory. When the machine is full, people wait their turn — no one ever shares a sandbox. |
