@@ -114,18 +114,9 @@ argocd --core app sync root
 - **Prod gets what dev has run** (D-37, since 2026-10-21). CI moves dev's
   tags only. Prod's lines carry markers of their own, which CI never bumps:
   `notch-relay-prod` in `notch/overlays/prod/kustomization.yaml` and
-  `notch-hermes-sandbox-prod` in `platform/openshell/values-prod.yaml`. A
-  commit moves them, with the owner's OK and never during a review or
-  judging, to a tag dev already runs — each restarts prod's relay or
-  gateway:
-
-  ```bash
-  node scripts/bump-image-tag.mjs notch-relay-prod sha-<commit>
-  ```
-
-  ```bash
-  node scripts/bump-image-tag.mjs notch-hermes-sandbox-prod sha-<commit>
-  ```
+  `notch-hermes-sandbox-prod` in `platform/openshell/values-prod.yaml`.
+  Commits of their own move them, with the owner's OK and never during a
+  review or judging ("Promoting to prod" below).
 - **Rolling back** is `git revert` of the tag commit ("Deploy <sha> to the
   cluster"), pushed to `main`. Don't `kubectl edit`: self-heal reverts it.
 - **Secrets** change only through `secrets.sh`, which restarts the relay.
@@ -136,6 +127,79 @@ argocd --core app sync root
   the VPS bound to localhost and reach it through SSH:
   `ssh -L 8080:localhost:8080 claude@<vps>`, then on the VPS
   `argocd admin dashboard --port 8080`.
+
+### Promoting to prod (D-37)
+
+Prod moves to the images dev already runs — never during a review or
+judging, and only with the owner's OK — in two commits, one after the other,
+each pushed and checked before the next. The relay goes first, so the
+gateway restart in step 2 meets a relay that waits it out instead of
+spending messages' attempts. The commands are for the `claude` user; in your
+own session, `sudo kubectl`.
+
+1. **The relay.** Point prod's relay at the tag on dev's `notch-relay` line
+   (`notch/overlays/dev/kustomization.yaml`), commit, push:
+
+   ```bash
+   node scripts/bump-image-tag.mjs notch-relay-prod sha-<dev's relay commit>
+   ```
+
+   No image input changes, so nothing is built; Argo CD rolls prod's relay
+   within about three minutes. Wait until it is up without errors: the
+   rollout done, the pod running with no restarts, and its log with the
+   `gateway` and `sandbox_manager` lines and no `poll_error`,
+   `sandbox_error` or `turn_failed`:
+
+   ```bash
+   kubectl -n notch-prod rollout status deploy/notch-relay --timeout=300s
+   ```
+
+   ```bash
+   kubectl -n notch-prod logs deploy/notch-relay -c relay --since=10m | grep -E '"event":"(gateway|sandbox_manager|poll_error|sandbox_error|turn_failed)"'
+   ```
+
+   Then the reviewer's path: a message from a demo account in the
+   TestFlight build gets its answer (in the relay's log, `claimed`, then a
+   batch with `delivered`).
+
+2. **The sandbox image.** Point prod's gateway at the tag on dev's
+   `notch-hermes-sandbox` line (`platform/openshell/values-dev.yaml`),
+   commit, push:
+
+   ```bash
+   node scripts/bump-image-tag.mjs notch-hermes-sandbox-prod sha-<dev's image commit>
+   ```
+
+   Argo CD restarts prod's gateway. The running sandboxes live through it
+   and can't be reached for a few seconds, which the relay from step 1 waits
+   out. Check that the gateway is back and kept its setup:
+
+   ```bash
+   kubectl -n notch-prod rollout status statefulset/openshell --timeout=300s
+   ```
+
+   ```bash
+   deploy/ops/setup-gateway.sh prod <project-ref>.supabase.co --check
+   ```
+
+   Then move the demo and judge sandboxes to the new image ("A new sandbox
+   image for the sandboxes that exist", below, with `ns=notch-prod`). They
+   are in `SANDBOX_KEEP_RUNNING` and never stop as idle, so the image
+   reaches them only at a stop and start: do both right away, one sandbox at
+   a time, so no one's message waits for a cold start:
+
+   ```bash
+   kubectl -n notch-prod exec deploy/notch-relay -c relay -- openshell sandbox stop <sandbox>
+   ```
+
+   ```bash
+   kubectl -n notch-prod exec deploy/notch-relay -c relay -- openshell sandbox start <sandbox>
+   ```
+
+   And the reviewer's path again, from each demo account.
+
+A step that goes wrong is undone by `git revert` of its commit, pushed with
+the same OK.
 
 ## Isolation
 
