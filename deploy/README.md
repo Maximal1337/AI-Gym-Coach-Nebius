@@ -471,14 +471,41 @@ Object Storage.
 | The backup key (`/root/notch-backup-identity.txt`, once) | `ops/install.sh`, first run | No archive can be read |
 | Each environment's `openshell-credential-kek` | `bootstrap/secrets.sh` | A restored gateway can't decrypt its provider credentials |
 | `/etc/notch/dev.env`, `/etc/notch/prod.env`, including `SANDBOX_KEY_SECRET` | You | The relay can't call the restored sandboxes |
-| `/etc/notch/ops.env` | `ops/install.sh`, from `ops/ops.env.example` | Only convenience: it's the bucket key and the ping URL |
+| `/etc/notch/ops.env` | `ops/install.sh`, from `ops/ops.env.example` | Only convenience: the bucket key, the ping URL and the Supabase database's connection string, all to be had again from their dashboards |
 
 Read secrets only in your own SSH session, not in one whose output someone
 else records.
 
 **Setup.** `sudo deploy/ops/install.sh` installs `age`, `jq` and `sqlite3`,
-copies the scripts to `/usr/local/lib/notch-ops`, creates the backup key and
-runs the first backup. Re-run it after pulling changes to `ops/`.
+and PostgreSQL's client and server binaries from the PostgreSQL project's apt
+repository (PGDG) for the database dump below — no PostgreSQL cluster, so
+none runs. It copies the scripts to `/usr/local/lib/notch-ops`, creates the
+backup key and runs the first backup. Re-run it after pulling changes to
+`ops/`.
+
+**The Supabase database** (DOR-133). Free makes no daily backups, so with
+`SUPABASE_DB_URL` in `/etc/notch/ops.env` — the project's Session pooler
+connection string — each night's archive also holds a dump of its `auth`,
+`public` and `supabase_migrations` schemas (`supabase/db.dump`, pg_dump's
+custom format): the accounts, everything the app stores, and which
+migrations ran. The rest of the database is Supabase's own. Before it is
+archived, `ops/db-check.sh` restores the dump into a throwaway PostgreSQL on
+the VPS — never into Supabase; a Unix socket in a private directory, no TCP,
+deleted afterwards — and the accounts (`auth.users`) and facts
+(`public.user_facts`) must come back as many as the source held; the
+manifest records both. A failed dump or check fails the night's run (the
+volumes are archived all the same), which the health check reports.
+`pg_dump` has to be at least the server's major version; `backup.sh` checks
+it every night, and `PG_MAJOR` in `install.sh` moves with Supabase's. A
+restore drill takes an archive apart the same way, with the backup key put
+on the host for the drill only:
+
+```bash
+sudo deploy/ops/db-check.sh --archive /var/backups/notch/<archive> /root/notch-backup-identity.txt
+```
+
+The dump keeps owners and grants, for a new Supabase project; restoring into
+one hasn't been rehearsed.
 
 **Off-host copy** (optional; a few cents a month at $0.0147 per GiB): in the
 VPS's own Nebius account, create a bucket in the VPS's region with a lifecycle

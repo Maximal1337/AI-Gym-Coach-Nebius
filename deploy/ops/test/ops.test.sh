@@ -203,6 +203,7 @@ check "gateway database copied" \
 check "plain files copied" eq "$(cat "$T/out/volumes/notch-prod/workspace-sb1/.hermes/memories/MEMORY.md")" "likes morning workouts"
 check "databases listed in the manifest" \
   eq "$(jq -r '.volumes[] | select(.pvc == "workspace-sb1") | .sqlite | join(",")' "$M")" ".hermes/state.db"
+check "no Supabase dump without SUPABASE_DB_URL" eq "$(jq -c .supabase "$M")" null
 check "claim saved for the restore" test -f "$T/out/meta/notch-prod/workspace-sb1.pvc.json"
 check "volume saved for the restore" test -f "$T/out/meta/notch-prod/workspace-sb1.pv.json"
 
@@ -351,6 +352,64 @@ check "the API down is a problem, not a crash" fails_with "kubernetes: the API d
 rm "$K/api-down"
 
 check "--ping needs HEALTHCHECK_URL" fails_with "HEALTHCHECK_URL" env NOTCH_OPS_CONFIG="$T/empty.env" bash "$OPS/health.sh" --ping
+
+# --------------------------------------------------------- Supabase (DOR-133)
+# A real PostgreSQL stands in for the Supabase project: the three schemas, a
+# policy for one of Supabase's roles, a few accounts and facts. Skipped where
+# no PostgreSQL server is installed.
+echo "== supabase dump"
+pgbin="${NOTCH_PG_BIN:-$( (find /usr/lib/postgresql -mindepth 2 -maxdepth 2 -type d -name bin 2> /dev/null || true) | sort -V | tail -n1)}"
+if [[ -z $pgbin || ! -x $pgbin/initdb ]]; then
+  echo "skip: no PostgreSQL server binaries"
+else
+  export NOTCH_PG_BIN="$pgbin" PATH="$pgbin:$PATH"
+  src="$T/pgsrc"
+  mkdir -p "$src"
+  initdb -D "$src/data" -U postgres -A trust --no-locale > /dev/null
+  pg_ctl -D "$src/data" -l "$src/log" -w -o "-c listen_addresses='' -c unix_socket_directories='$src'" start > /dev/null
+  psql -X -q -v ON_ERROR_STOP=1 -h "$src" -U postgres -d postgres <<'EOF'
+create role anon nologin; create role authenticated nologin; create role service_role nologin;
+create schema auth;
+create schema supabase_migrations;
+create table auth.users (id uuid primary key default gen_random_uuid(), email text);
+create table public.user_facts (id bigint generated always as identity primary key, user_id uuid references auth.users, text text);
+alter table public.user_facts enable row level security;
+create policy own_facts on public.user_facts for select to authenticated using (true);
+create table supabase_migrations.schema_migrations (version text primary key);
+insert into auth.users (email) select 'u' || g || '@example.org' from generate_series(1, 3) g;
+insert into public.user_facts (user_id, text) select id, 'likes squats' from auth.users, generate_series(1, 2);
+insert into supabase_migrations.schema_migrations values ('20261005120000');
+EOF
+  cp "$NOTCH_OPS_CONFIG" "$T/ops-db.env"
+  echo "SUPABASE_DB_URL=postgresql://postgres@/postgres?host=$src" >> "$T/ops-db.env"
+  mkdir -p "$T/k8s-db"
+  echo '{"items": []}' > "$T/k8s-db/pv.json"
+  dbrun() { env FAKE_K8S="$T/k8s-db" NOTCH_OPS_CONFIG="$T/ops-db.env" NOTCH_BACKUP_DIR="$T/backups-db" "$@"; }
+  db_archives() { find "$T/backups-db" -maxdepth 1 -name 'notch-*.tar.gz.age' | sort; }
+
+  check "backup with the database" quiet dbrun bash "$OPS/backup.sh"
+  dba="$(db_archives | tail -n1)"
+  mkdir "$T/out-db"
+  age -d -i "$T/identity" "$dba" | gzip -dc | tar -C "$T/out-db" -xf -
+  check "the dump is in the archive" test -s "$T/out-db/supabase/db.dump"
+  check "the manifest: the source's counts, the schemas, a passed restore check" \
+    eq "$(jq -c '.supabase | [.users, .facts, .schemas, .restore_check]' "$T/out-db/MANIFEST.json")" \
+    '[3,6,["auth","public","supabase_migrations"],"passed"]'
+  check "no connection settings in the archive" test ! -e "$T/out-db/pg"
+  check "the archive's dump restores" quiet bash "$OPS/db-check.sh" --archive "$dba" "$T/identity"
+  check "a count that differs fails the check" fails_with "auth.users differs from the source" \
+    bash "$OPS/db-check.sh" "$T/out-db/supabase/db.dump" 4 6
+  check "the throwaway servers are gone" eq "$(find "$TMPDIR" -maxdepth 1 -name 'notch-dbcheck.*' | wc -l | tr -d ' ')" 0
+
+  pg_ctl -D "$src/data" -m fast stop > /dev/null
+  sleep 1
+  check "a database that doesn't answer fails the run" fails_with "the Supabase dump or its restore check failed" \
+    dbrun bash "$OPS/backup.sh"
+  check "... after archiving the volumes, without a dump" eq "$(db_archives | wc -l | tr -d ' ')" 2
+  newest="$(db_archives | tail -n1)"
+  check "... and the manifest says none" \
+    eq "$(age -d -i "$T/identity" "$newest" | gzip -dc | tar -xOf - MANIFEST.json | jq -c .supabase)" null
+fi
 
 echo
 if (( failures )); then echo "$failures check(s) failed"; exit 1; fi
