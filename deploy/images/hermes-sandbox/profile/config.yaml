@@ -42,6 +42,9 @@ agent:
   # D-34 ceilings. Hermes' own setting; what the model is told is
   # custom_providers' extra_body above.
   reasoning_effort: "low"
+  # NH-45: Hermes' "Finishing the job" guidance is written for coding — build,
+  # run, verify an artifact — and pulls against the coach's profile.
+  task_completion_guidance: false
   # D-29: off everywhere, whatever a platform default would include.
   #
   # Not `web`, although D-04 keeps its web_extract out: Hermes subtracts a
@@ -73,6 +76,18 @@ agent:
 # fetching an arbitrary URL is a way to send data somewhere.
 platform_toolsets:
   api_server: [mcp-notch, search, memory, skills]
+
+# NH-45: how the reply is shown. Hermes' own API-server hint says "assume
+# plain text, no asterisks", where the app's chat shows plain text and
+# **bold** (apps/mobile/src/components/MarkdownText.tsx) and the profile asks
+# for bold numbers: the same meaning, with what the app renders.
+platform_hints:
+  api_server:
+    replace: >-
+      You're replying through the Notch app's chat. It shows plain text,
+      **bold** and emoji, and nothing else: no headers, no "-" or numbered
+      lists, no tables, no code blocks. For a few options, short lines
+      starting with "•". Keep it conversational and brief.
 
 tools:
   # Hermes otherwise hides MCP tools behind three bridge tools (tool_search,

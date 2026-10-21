@@ -10,6 +10,7 @@ green CI run on `main` (NH-37).
 Dockerfile                  FROM NemoClaw's Hermes sandbox image, pinned by digest; adds what's below
 patch-hermes-api-key.py     build step: Hermes' API server also takes its key from X-Hermes-Api-Key
 patch-hermes-drain-gate.py  build step: NemoClaw's cron-restore drain gate is switched off
+patch-hermes-prompt.py      build step: no forged steering in tool results, no note to trust it, skills keep nothing about the user
 profile/
   SOUL.md             who the coach is and the rules it never breaks — slot #1 of Hermes' system prompt
   config.yaml         Token Factory and the model, the D-29 tool allowlist, the Notch MCP server, Tavily search, memory, API server
@@ -86,7 +87,8 @@ the three hosts a sandbox may reach).
 
 ### Our patches to Hermes
 
-Two functions of the Hermes in the base image are changed at build. Each
+Five functions of the Hermes in the base image are changed at build, by three
+scripts. Each
 script fails the build unless the code it changes still looks the way it
 expects and the patched code then behaves, so a new base image stops the build
 instead of shipping unpatched.
@@ -131,6 +133,35 @@ cron toolset is off (D-29). Hermes' own drain marker,
 The build fails unless the function exists once and still is that ownership
 check, `drain_requested()` still asks it, and the patched pair behaves: no
 drain without Hermes' own marker, a drain with it.
+
+**What reaches the model's prompt** (NH-45). `patch-hermes-prompt.py` changes
+three files under `/opt/hermes/agent/`:
+
+- `tool_dispatch_helpers.py`: `make_tool_result_message()` first makes Hermes'
+  "out-of-band user message" marker inert in every tool's result, in any
+  spelling — it becomes "out-of-band user message (quoted)";
+- `system_prompt.py`: `_guidance_parts()` no longer adds `STEER_CHANNEL_NOTE`;
+- `prompt_builder.py`: `build_memory_guidance()` keeps procedures and pitfalls
+  in skills, and says nothing about the user goes into one.
+
+Why: Hermes lets a user steer a running turn by appending a marked message to
+the end of a tool result, and its system prompt tells the model to trust that
+exact marker as the user's own words. It defangs only its own
+`untrusted_tool_result` tag in what a search or an MCP tool returns, so a page
+Tavily returns could carry the marker and speak as the user. Notch's relay
+never steers a turn: nothing legitimate uses it. In a dev sandbox whose
+`web_search` returned a page with a forged marker and an instruction, the
+model obeyed it in 10 of 10 turns on the unpatched Hermes and in none of 10
+with the patch, answering the question instead (2026-10-21). And Hermes' memory
+guidance files "the user's preferences and corrections" into skills, where
+the coach's profile keeps everything about the user in Notch's own list
+(D-30). Two more of Hermes' prompt parts are changed in `config.yaml`, not
+here: the API server's "no markdown" hint (`platform_hints`) and the coding
+"finish the job" guidance (`agent.task_completion_guidance`).
+
+The build fails unless each function exists once and still is what the patch
+was written against; the defanging and the memory guidance are then run, cut
+out of the files, and the three modules are imported as Hermes imports them.
 
 ### The CA bundle
 
