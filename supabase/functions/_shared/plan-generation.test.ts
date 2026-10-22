@@ -1,6 +1,6 @@
 // Tests for plan generation on Token Factory (DOR-135). Run: deno test --no-config supabase/functions/
 import { assert, assertEquals, assertRejects, assertThrows } from "jsr:@std/assert@1";
-import { generatePlan, type GeneratePlanInput, lintPlan, planJsonSchema, PlanGenerationError, validatePlans } from "./plan-generation.ts";
+import { generatePlan, type GeneratePlanInput, lintPlan, oneWarmupPerPlan, planJsonSchema, PlanGenerationError, validatePlans } from "./plan-generation.ts";
 
 const INTAKE: GeneratePlanInput = {
   primaryGoal: "hypertrophy", experienceLevel: "intermediate", daysPerWeek: 4,
@@ -85,6 +85,32 @@ Deno.test("planJsonSchema: every field required, nothing extra, the plan count f
   const ex = s.properties.plans.items.properties.exercises.items;
   assertEquals(ex.additionalProperties, false);
   assertEquals(ex.required.length, 8);
+});
+
+Deno.test("oneWarmupPerPlan: only the first free-weight exercise of each plan keeps a warm-up", () => {
+  const ex = (orderIndex: number, equipmentType: string | null, warmup: string | null) =>
+    ({ ...exercise(orderIndex, `e${orderIndex}`), equipmentType, warmup });
+  const warmups = (plans: ReturnType<typeof validatePlans>) => plans.map((p) => p.exercises.map((e) => e.warmup));
+  // Nemotron's slip: a warm-up on every exercise.
+  assertEquals(warmups(oneWarmupPerPlan(validatePlans({ plans: [{ name: "A", exercises: [
+    ex(1, "barbell", "2 light sets"), ex(2, "dumbbell", "1 light set"), ex(3, "machine", "1 set"),
+  ] }] }))), [["2 light sets", null, null]]);
+  // A machine first: the warm-up belongs to the first free weight, and the model's text moves there.
+  assertEquals(warmups(oneWarmupPerPlan(validatePlans({ plans: [{ name: "A", exercises: [
+    ex(1, "machine", "1 light set"), ex(2, "barbell", null), ex(3, "barbell", null),
+  ] }] }))), [[null, "1 light set", null]]);
+  // Order by orderIndex, not by position in the array; each plan on its own.
+  assertEquals(warmups(oneWarmupPerPlan(validatePlans({ plans: [
+    { name: "A", exercises: [ex(2, "barbell", "x"), ex(1, "dumbbell", "y")] },
+    { name: "B", exercises: [ex(1, "machine", null), ex(2, "cable", null)] },
+    { name: "C", exercises: [ex(1, "machine", "z"), ex(2, "bodyweight", null)] },
+  ] }))), [[null, "y"], [null, null], ["z", null]]);
+});
+
+Deno.test("generatePlan: the warm-up rule applies to what the model returns", async () => {
+  const all = { plans: PLANS.plans.map((p) => ({ ...p, exercises: p.exercises.map((e) => ({ ...e, equipmentType: "barbell", warmup: "2 light sets" })) })) };
+  const r = await generatePlan(INTAKE, [], { apiKey: "k", model: "m", fetch: replying(JSON.stringify(all)).f });
+  assertEquals(r.plans.map((p) => p.exercises.map((e) => e.warmup)), [["2 light sets", null], ["2 light sets", null]]);
 });
 
 Deno.test("lintPlan: a pattern counts once any plan has a matching exercise", () => {

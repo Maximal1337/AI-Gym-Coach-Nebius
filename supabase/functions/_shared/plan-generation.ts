@@ -604,6 +604,24 @@ export function validatePlans(value: unknown): GeneratedPlan[] {
   });
 }
 
+/**
+ * The prompt's warm-up rule, made certain in code: only the first heavy
+ * compound of each plan, its cold start, carries a warm-up — on 2026-10-22
+ * Nemotron put one on every exercise in 2 of 24 plans. "Heavy compound" is
+ * the first free-weight exercise (barbell or dumbbell) in order, or the
+ * first exercise when there is none. It keeps its own warm-up, or else the
+ * first one the model wrote in that plan; every other exercise has none. A
+ * plan the model gave no warm-up keeps none: nothing is invented.
+ */
+export function oneWarmupPerPlan(plans: GeneratedPlan[]): GeneratedPlan[] {
+  return plans.map((plan) => {
+    const ordered = [...plan.exercises].sort((a, b) => a.orderIndex - b.orderIndex);
+    const first = ordered.find((e) => e.equipmentType === "barbell" || e.equipmentType === "dumbbell") ?? ordered[0];
+    const text = first?.warmup ?? ordered.find((e) => e.warmup)?.warmup ?? null;
+    return { ...plan, exercises: plan.exercises.map((e) => ({ ...e, warmup: e === first ? text : null })) };
+  });
+}
+
 function extractJson(text: string): unknown {
   return JSON.parse(text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, ""));
 }
@@ -657,7 +675,7 @@ export async function generatePlan(input: GeneratePlanInput, commonExercises: Co
   const usage = reply.usage ?? { tokensInput: 0, tokensOutput: 0 };
   let plans: GeneratedPlan[];
   try {
-    plans = validatePlans(extractJson(reply.content));
+    plans = oneWarmupPerPlan(validatePlans(extractJson(reply.content)));
   } catch (e) {
     throw new PlanGenerationError(`the model's plan didn't validate: ${e instanceof Error ? e.message : String(e)}`, true, usage);
   }
