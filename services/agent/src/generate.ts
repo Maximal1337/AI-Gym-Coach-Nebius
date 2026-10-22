@@ -1,9 +1,10 @@
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { z } from "zod";
-import { extractJson } from "./util.js";
-import { equipmentTypeSchema } from "./schema.js";
-import { parsedPlanSchema, type ParsedPlan } from "./parse.js";
-import { costCents, type LlmUsage } from "./llm.js";
+import { extractJson } from "./util.ts";
+import { equipmentTypeSchema } from "./schema.ts";
+import { parsedPlanSchema, type ParsedPlan } from "./parse.ts";
+import { costCents, type LlmUsage } from "./llm.ts";
+import { llmApiKey } from "./config.ts";
 
 /**
  * AI-generated training plans (System Design §21): a user with no plan yet
@@ -456,10 +457,10 @@ function buildHumanPrompt(input: GeneratePlanInput): string {
 }
 
 function generateModel(): ChatOpenRouter | null {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   return new ChatOpenRouter({
     model: "google/gemini-3.1-flash-lite",
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     maxTokens: 3072, // a 2-3 plan program, comparable to parse.ts's 4096 cap for parsing up to 10
     temperature: 0.3, // low but non-zero: follow the decision rules closely, allow some exercise-selection variety
     siteName: "Notch",

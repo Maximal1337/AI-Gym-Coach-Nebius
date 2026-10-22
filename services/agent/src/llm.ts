@@ -1,5 +1,5 @@
 import { ChatOpenRouter } from "@langchain/openrouter";
-import { llmConfig } from "./config.js";
+import { llmApiKey, llmConfig } from "./config.ts";
 
 export interface LlmUsage {
   tokensInput: number;
@@ -28,11 +28,11 @@ export async function composeWithLlm(
   systemPrompt: string,
   turnPrompt: string,
 ): Promise<ComposedReply | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
 
   const model = new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     // GYM-51: hard per-call output ceiling — enforced at the API level.
     maxTokens: llmConfig.maxOutputTokens,
     temperature: llmConfig.temperature,

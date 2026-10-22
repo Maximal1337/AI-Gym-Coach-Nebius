@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { suggestTargets, parseRepRange, incrementForEquipment, assessAgainstLastTime, DEFAULT_WEIGHT_INCREMENT_KG } from "./progression.js";
+import { suggestTargets, parseRepRange, incrementForEquipment, assessAgainstLastTime, DEFAULT_WEIGHT_INCREMENT_KG } from "./progression.ts";
 import type { Exercise, SetLog } from "@gymcoach/shared";
 
 const exercise: Exercise = {

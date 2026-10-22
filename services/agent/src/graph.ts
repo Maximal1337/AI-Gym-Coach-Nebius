@@ -1,10 +1,10 @@
 import { StateGraph, START, END } from "@langchain/langgraph";
 import { z } from "zod";
 import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
-import { suggestTargets, type Targets } from "./progression.js";
-import { buildSystemPrompt, buildTurnPrompt } from "./prompt.js";
-import { composeWithLlm, type LlmUsage } from "./llm.js";
-import { decideWorkingWeight } from "./decideWeight.js";
+import { suggestTargets, type Targets } from "./progression.ts";
+import { buildSystemPrompt, buildTurnPrompt } from "./prompt.ts";
+import { composeWithLlm, type LlmUsage } from "./llm.ts";
+import { decideWorkingWeight } from "./decideWeight.ts";
 
 /**
  * Coaching turn graph (GYM-19):

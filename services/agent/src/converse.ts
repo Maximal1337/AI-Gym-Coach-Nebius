@@ -2,13 +2,13 @@ import { ChatOpenRouter } from "@langchain/openrouter";
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessageLike } from "@langchain/core/messages";
 import type { CoachProfile, Exercise, SetLog } from "@gymcoach/shared";
-import { suggestTargets, type Targets } from "./progression.js";
-import { buildSystemPrompt, buildConversationPrompt, buildConfirmPrompt } from "./prompt.js";
-import { composeWithLlm, costCents, type LlmUsage } from "./llm.js";
-import { llmConfig } from "./config.js";
-import { buildTurnTools, emptyOutcome, type RemainingExerciseCandidate } from "./tools.js";
-import { formatWeightForPrompt } from "./units.js";
-import { decideWorkingWeight } from "./decideWeight.js";
+import { suggestTargets, type Targets } from "./progression.ts";
+import { buildSystemPrompt, buildConversationPrompt, buildConfirmPrompt } from "./prompt.ts";
+import { composeWithLlm, costCents, type LlmUsage } from "./llm.ts";
+import { llmApiKey, llmConfig } from "./config.ts";
+import { buildTurnTools, emptyOutcome, type RemainingExerciseCandidate } from "./tools.ts";
+import { formatWeightForPrompt } from "./units.ts";
+import { decideWorkingWeight } from "./decideWeight.ts";
 
 /**
  * The exercise being introduced by this reply gets its component target from
@@ -714,7 +714,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
     ? suggestTargets(input.nextExercise, input.nextLastLogs)
     : null;
 
-  if (!process.env.OPENROUTER_API_KEY) {
+  if (!llmApiKey()) {
     // No API key (local dev): a safe no-op so the pipeline stays
     // exercisable without spending a token or losing the user's report.
     return {
@@ -772,7 +772,7 @@ export async function runConversationTurn(input: ConversationInput): Promise<Con
 
   const model = new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     maxTokens: llmConfig.maxOutputTokens,
     temperature: llmConfig.temperature,
     siteName: "Notch",

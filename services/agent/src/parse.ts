@@ -1,9 +1,9 @@
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { extractRawText } from "mammoth";
 import { z } from "zod";
-import { llmConfig } from "./config.js";
-import { extractJson } from "./util.js";
-import { equipmentTypeSchema } from "./schema.js";
+import { llmApiKey, llmConfig } from "./config.ts";
+import { extractJson } from "./util.ts";
+import { equipmentTypeSchema } from "./schema.ts";
 
 /**
  * Paste-and-parse (GYM-26 / GYM-48): free text in, structured rows out.
@@ -63,10 +63,10 @@ export const parsedSummarySchema = z.object({
 export type ParsedSummary = z.infer<typeof parsedSummarySchema>;
 
 function parseModel(): ChatOpenRouter | null {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   return new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     maxTokens: 4096, // parsing a full plan legitimately needs more than a chat reply
     temperature: 0,
     siteName: "Notch",
@@ -111,11 +111,11 @@ async function parsePlanFromText(text: string): Promise<string | null> {
  * the same text path as a pasted plan.)
  */
 async function parsePlanPdf(pdfBase64: string, filename: string): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${llmApiKey()}`,
       "Content-Type": "application/json",
       "HTTP-Referer": "https://docs.langchain.com/oss",
       "X-Title": "Notch",
@@ -149,14 +149,14 @@ async function parsePlanPdf(pdfBase64: string, filename: string): Promise<string
  * exercises split across a page break still land in one plan.
  */
 async function parsePlanImages(imagesBase64: string[]): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   const instruction = imagesBase64.length > 1
     ? `Extract the workout plan from these ${imagesBase64.length} photographed pages of a printed sheet — they're pages of the same plan (in page order), so combine them into one coherent plan rather than treating each page separately.`
     : "Extract the workout plan from this photo of a printed page.";
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${llmApiKey()}`,
       "Content-Type": "application/json",
       "HTTP-Referer": "https://docs.langchain.com/oss",
       "X-Title": "Notch",
@@ -186,7 +186,7 @@ async function parsePlanImages(imagesBase64: string[]): Promise<string | null> {
 }
 
 export async function parsePlanText(source: PlanSource): Promise<ParsedPlan | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
 
   let raw: string | null;
   if ("text" in source) {

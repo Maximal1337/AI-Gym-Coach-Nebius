@@ -1,9 +1,9 @@
 import { tool, type StructuredToolInterface } from "@langchain/core/tools";
 import { z } from "zod";
 import type { Exercise, SetLog, UnitSystem } from "@gymcoach/shared";
-import { suggestTargets } from "./progression.js";
-import { formatHistory } from "./prompt.js";
-import { formatWeightForPrompt } from "./units.js";
+import { suggestTargets } from "./progression.ts";
+import { formatHistory } from "./prompt.ts";
+import { formatWeightForPrompt } from "./units.ts";
 import {
   logCompletedSetsArgsSchema,
   stopExerciseEarlyArgsSchema,
@@ -14,7 +14,7 @@ import {
   correctLoggedSetArgsSchema,
   correctNoteArgsSchema,
   correctPreviousExerciseSetArgsSchema,
-} from "./schema.js";
+} from "./schema.ts";
 
 /**
  * §20 (tool-calling revision): each tool is a real, validated action, not

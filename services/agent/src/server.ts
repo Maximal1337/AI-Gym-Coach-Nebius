@@ -19,17 +19,17 @@ Sentry.init({
 import { createServer, type IncomingMessage } from "node:http";
 import { timingSafeEqual } from "node:crypto";
 import { z } from "zod";
-import { agentDisabled } from "./config.js";
-import { runCoachingTurn } from "./graph.js";
-import { runConversationTurn, runConfirmTurn } from "./converse.js";
+import { agentDisabled } from "./config.ts";
+import { runCoachingTurn } from "./graph.ts";
+import { runConversationTurn, runConfirmTurn } from "./converse.ts";
 import {
   turnInputSchema, conversationTurnInputSchema, confirmTurnInputSchema, equipmentTypeSchema,
   parsePlanInputSchema,
-} from "./schema.js";
-import { parsePlanText, parseSummaryText } from "./parse.js";
-import { parsedStudioWorkoutSchema, parseStudioWorkout } from "./parseStudio.js";
-import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.js";
-import { generateStudioInputSchema, generateStudioWorkout } from "./generateStudio.js";
+} from "./schema.ts";
+import { parsePlanText, parseSummaryText } from "./parse.ts";
+import { parsedStudioWorkoutSchema, parseStudioWorkout } from "./parseStudio.ts";
+import { generatePlanInputSchema, generateWorkoutPlan } from "./generate.ts";
+import { generateStudioInputSchema, generateStudioWorkout } from "./generateStudio.ts";
 
 // Safety net for anything that slips past every route's own try/catch below.
 process.on("uncaughtException", (err) => Sentry.captureException(err));

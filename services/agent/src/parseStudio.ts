@@ -1,8 +1,8 @@
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { z } from "zod";
-import { llmConfig } from "./config.js";
-import { extractJson } from "./util.js";
-import { textFromDocx, type PlanSource } from "./parse.js";
+import { llmApiKey, llmConfig } from "./config.ts";
+import { extractJson } from "./util.ts";
+import { textFromDocx, type PlanSource } from "./parse.ts";
 
 /**
  * Studio-board parsing (whiteboard/paste/upload → blocks, scaling tiers,
@@ -179,10 +179,10 @@ export function normalizeFormats(workout: ParsedStudioWorkout): ParsedStudioWork
 }
 
 function parseModel(): ChatOpenRouter | null {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   return new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     maxTokens: 4096,
     temperature: 0,
     siteName: "Notch",
@@ -245,11 +245,11 @@ async function parseStudioPdf(
   correctionNote?: string | null,
   previousResult?: ParsedStudioWorkout | null,
 ): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${llmApiKey()}`,
       "Content-Type": "application/json",
       "HTTP-Referer": "https://docs.langchain.com/oss",
       "X-Title": "Notch",
@@ -282,14 +282,14 @@ async function parseStudioImages(
   correctionNote?: string | null,
   previousResult?: ParsedStudioWorkout | null,
 ): Promise<string | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   const instruction = imagesBase64.length > 1
     ? `Extract the studio workout board from these ${imagesBase64.length} photos — they're photos of the same board (e.g. split across a wide whiteboard), so combine them into one coherent workout rather than treating each photo separately.`
     : "Extract the studio workout board from this photo of a whiteboard.";
   const res = await fetch("https://openrouter.ai/api/v1/chat/completions", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`,
+      Authorization: `Bearer ${llmApiKey()}`,
       "Content-Type": "application/json",
       "HTTP-Referer": "https://docs.langchain.com/oss",
       "X-Title": "Notch",
@@ -328,7 +328,7 @@ export async function parseStudioWorkout(
   correctionNote?: string | null,
   previousResult?: ParsedStudioWorkout | null,
 ): Promise<ParsedStudioWorkout | null> {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
 
   let raw: string | null;
   if ("text" in source) {

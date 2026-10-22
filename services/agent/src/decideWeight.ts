@@ -2,11 +2,11 @@ import { ChatOpenRouter } from "@langchain/openrouter";
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 import type { Exercise, SetLog, UnitSystem } from "@gymcoach/shared";
-import { llmConfig } from "./config.js";
-import { costCents, type LlmUsage } from "./llm.js";
-import type { Targets } from "./progression.js";
-import { formatHistory } from "./prompt.js";
-import { displayWeightToKg, formatWeightForPrompt } from "./units.js";
+import { llmApiKey, llmConfig } from "./config.ts";
+import { costCents, type LlmUsage } from "./llm.ts";
+import type { Targets } from "./progression.ts";
+import { formatHistory } from "./prompt.ts";
+import { displayWeightToKg, formatWeightForPrompt } from "./units.ts";
 
 /**
  * The working weight for an exercise is the one number that context can move
@@ -55,7 +55,7 @@ export async function decideWorkingWeight(params: {
   if (defaultTargets.reason === "baseline" || defaultKg == null || defaultKg <= 0) {
     return { overrideWeightKg: null, usage: NO_USAGE };
   }
-  if (!process.env.OPENROUTER_API_KEY) return { overrideWeightKg: null, usage: NO_USAGE };
+  if (!llmApiKey()) return { overrideWeightKg: null, usage: NO_USAGE };
 
   const unitLabel = units === "metric" ? "kg" : "lb";
 
@@ -98,7 +98,7 @@ export async function decideWorkingWeight(params: {
 
   const model = new ChatOpenRouter({
     model: llmConfig.model,
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     maxTokens: llmConfig.maxOutputTokens,
     temperature: 0, // a deterministic decision, not creative writing
     siteName: "Notch",

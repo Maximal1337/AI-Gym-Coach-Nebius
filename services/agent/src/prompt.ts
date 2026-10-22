@@ -1,6 +1,6 @@
 import type { CoachProfile, Exercise, SetLog, UnitSystem } from "@gymcoach/shared";
-import { assessAgainstLastTime, type PerformanceVerdict, type Targets } from "./progression.js";
-import { formatWeightForPrompt } from "./units.js";
+import { assessAgainstLastTime, type PerformanceVerdict, type Targets } from "./progression.ts";
+import { formatWeightForPrompt } from "./units.ts";
 
 /**
  * Prompt assembly (GYM-20).

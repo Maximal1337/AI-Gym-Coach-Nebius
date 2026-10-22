@@ -2,8 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { textFromDocx } from "./parse.js";
-import { parsePlanInputSchema } from "./schema.js";
+import { textFromDocx } from "./parse.ts";
+import { parsePlanInputSchema } from "./schema.ts";
 
 const fixtureDocxBase64 = readFileSync(
   fileURLToPath(new URL("./fixtures/test-plan.docx", import.meta.url)),

@@ -28,3 +28,18 @@ export const llmConfig = {
 export function agentDisabled(): boolean {
   return process.env.AGENT_DISABLED === "1";
 }
+
+let apiKeyOverride: string | undefined;
+
+/**
+ * The model provider's key: OPENROUTER_API_KEY, unless the host hands one
+ * over with setLlmApiKey — a Supabase Edge Function can't set its own
+ * environment, and there the key is Token Factory's (DOR-135).
+ */
+export function llmApiKey(): string | undefined {
+  return apiKeyOverride ?? process.env.OPENROUTER_API_KEY;
+}
+
+export function setLlmApiKey(key: string | undefined): void {
+  apiKeyOverride = key || undefined;
+}

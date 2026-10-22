@@ -1,11 +1,12 @@
 import { ChatOpenRouter } from "@langchain/openrouter";
 import { z } from "zod";
-import { extractJson } from "./util.js";
-import { appLanguageSchema, type AppLanguage } from "./generate.js";
-import { costCents, type LlmUsage } from "./llm.js";
+import { extractJson } from "./util.ts";
+import { appLanguageSchema, type AppLanguage } from "./generate.ts";
+import { costCents, type LlmUsage } from "./llm.ts";
 import {
   normalizeFormats, normalizeMetrics, parsedStudioWorkoutSchema, type ParsedStudioWorkout,
-} from "./parseStudio.js";
+} from "./parseStudio.ts";
+import { llmApiKey } from "./config.ts";
 
 /**
  * AI-generated studio workouts — the class-workout sibling of generate.ts's
@@ -459,10 +460,10 @@ Target language for every name and text field: Italian.`,
 };
 
 function generateModel(): ChatOpenRouter | null {
-  if (!process.env.OPENROUTER_API_KEY) return null;
+  if (!llmApiKey()) return null;
   return new ChatOpenRouter({
     model: "google/gemini-3.1-flash-lite",
-    apiKey: process.env.OPENROUTER_API_KEY,
+    apiKey: llmApiKey(),
     maxTokens: 2048, // a 1-4 block class workout, comfortably smaller than a multi-plan gym program
     temperature: 0.4, // a little more creative than parse's 0 — workout design benefits from variety
     siteName: "Notch",
