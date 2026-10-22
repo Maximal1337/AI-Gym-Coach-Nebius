@@ -211,6 +211,12 @@ export function buildTurnPrompt(
     targets.reason === "baseline"
       ? "Write the coaching message for this exercise: state the number of work sets and, if there is a warm-up above, the warm-up too; ask for a starting weight as instructed above, plus intensity and rest. End by asking the user to report back after the set."
       : "Write the coaching message for this exercise, following the last-time instruction above exactly (state last time's numbers, never today's target numbers): state the number of work sets and, if there is a warm-up above, the warm-up too, plus intensity and rest. End by asking the user to report back after the set.",
+    // The only name in the context is the coach's own: without this, Nemotron
+    // opened 7 to 9 English intros in 10 with "Hey <coach's name>!" on
+    // 2026-10-22; with it, none (it says "<name> here" instead). The same
+    // line in the system prompt didn't help.
+    "",
+    "You don't know the user's name: don't greet or address them by any name (the coach's name is yours, not theirs).",
   );
   return lines.join("\n");
 }
