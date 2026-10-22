@@ -60,6 +60,8 @@ In this order, re-checking the forecast after each step:
    ```
 
    On AI Cloud, remove the `notch-dev` application from the Argo CD app-of-apps in Git; Argo CD prunes it and frees its memory.
+
+   A secrets change gives every function in the project a new version in `supabase functions list`, with `UPDATED_AT` unchanged and no code deployed (seen on the test project on 2026-10-21 and 10-22). A version jump on its own is not a deploy; a deploy also moves `UPDATED_AT`.
 2. **Lower the ceilings.** For example:
 
    ```bash
