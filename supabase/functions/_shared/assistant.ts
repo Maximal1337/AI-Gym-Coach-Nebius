@@ -98,10 +98,11 @@ export function dailyCaps(get: EnvGetter = denoEnv) {
  * Hard Token Factory ceilings (D-34, NH-38): the worst case is bounded by
  * construction, so the credits can't run out and nobody pays out of pocket.
  *
- * Buckets follow the credit split (D-24): the agent's `prod` and `dev` keys on
- * member A's account, the nightly `memory` job on member B's. Spend is summed
- * per UTC day in public.assistant_spend (migration 20260928130000); the memory
- * job runs once a day, so its daily ceiling is its per-run ceiling.
+ * Since 2026-10-22 all four buckets are on member A's Token Factory balance
+ * (D-24): the agent's `prod` and `dev` keys, the nightly `memory` job and My
+ * Coach's `coach` (DOR-135). Spend is summed per UTC day in
+ * public.assistant_spend (migration 20260928130000); the memory job runs once
+ * a day, so its daily ceiling is its per-run ceiling.
  *
  * Where it's enforced:
  *  - assistant-send refuses a new message with LIMIT_REACHED_ERROR once the
@@ -123,13 +124,41 @@ export function spendBucketFor(environment: "dev" | "prod"): SpendBucket {
   return environment;
 }
 
-/** Daily ceilings in cents per bucket, from secrets; 0 turns a bucket off entirely. */
-export function spendCeilingsCents(get: EnvGetter = denoEnv): Record<SpendBucket, number> {
+/**
+ * D-34's ceilings by UTC day, in cents (accepted 2026-10-22): every bucket at
+ * its ceiling every day to 12-15 comes to $68.45, within the $89.47 balance,
+ * which has a card behind it. Each step changes only the buckets it names;
+ * after judging the buckets go back to their pre-judging ceilings.
+ */
+export const CEILING_SCHEDULE: ReadonlyArray<{ from: string; cents: Partial<Record<SpendBucket, number>> }> = [
+  { from: "2026-10-22", cents: { prod: 35, dev: 30, memory: 10, coach: 15 } },
+  { from: "2026-10-27", cents: { dev: 5 } },
+  { from: "2026-11-15", cents: { dev: 0 } }, // dev's environment is gone
+  { from: "2026-12-01", cents: { prod: 200, memory: 20, coach: 60 } }, // judging
+  { from: "2026-12-16", cents: { prod: 35, memory: 10, coach: 15 } },
+];
+
+/** The schedule's ceilings on a UTC day ("YYYY-MM-DD"); before its first step, the first step's. */
+export function scheduledCeilingsCents(day: string): Record<SpendBucket, number> {
+  const ceilings = { ...CEILING_SCHEDULE[0].cents } as Record<SpendBucket, number>;
+  for (const step of CEILING_SCHEDULE) {
+    if (day >= step.from) Object.assign(ceilings, step.cents);
+  }
+  return ceilings;
+}
+
+/**
+ * Today's daily ceilings in cents per bucket: the schedule's, unless a secret
+ * sets one (for as long as it stays set — e.g. the day the demo video is
+ * recorded); 0 turns a bucket off entirely.
+ */
+export function spendCeilingsCents(get: EnvGetter = denoEnv, now: Date = new Date()): Record<SpendBucket, number> {
+  const scheduled = scheduledCeilingsCents(now.toISOString().slice(0, 10));
   return {
-    prod: envNumber("ASSISTANT_SPEND_CEILING_CENTS_PROD", 100, get),
-    dev: envNumber("ASSISTANT_SPEND_CEILING_CENTS_DEV", 50, get),
-    memory: envNumber("ASSISTANT_SPEND_CEILING_CENTS_MEMORY", 50, get),
-    coach: envNumber("ASSISTANT_SPEND_CEILING_CENTS_COACH", 50, get),
+    prod: envNumber("ASSISTANT_SPEND_CEILING_CENTS_PROD", scheduled.prod, get),
+    dev: envNumber("ASSISTANT_SPEND_CEILING_CENTS_DEV", scheduled.dev, get),
+    memory: envNumber("ASSISTANT_SPEND_CEILING_CENTS_MEMORY", scheduled.memory, get),
+    coach: envNumber("ASSISTANT_SPEND_CEILING_CENTS_COACH", scheduled.coach, get),
   };
 }
 

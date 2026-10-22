@@ -53,6 +53,8 @@ user-influenceable content before the non-negotiable rules.
 - There is no way to run the actual model in this sandbox — changes here
   ship on trust in the wording plus the next real report, not a
   reproduction. Say so explicitly rather than claiming verified behavior.
-- Deploy via the `ship-change` skill's `services/agent/*` row
-  (`fly deploy --config services/agent/fly.toml --dockerfile
-  services/agent/Dockerfile`, run from repo root) once the user approves.
+- Deploy via the `ship-change` skill's `services/agent/*` row once the user
+  approves. In this repository (the hackathon copy) that means redeploying
+  `session-start` and `coach-turn`, which run the agent's code on Token
+  Factory — never `fly deploy`: the live `gymcoach-agent` is deployed only
+  from the original repository (ship-change §0).

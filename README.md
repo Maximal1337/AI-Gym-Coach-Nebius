@@ -288,12 +288,13 @@ Secrets (`supabase/functions/.env`, from `.env.example`):
 | Variable | What |
 |---|---|
 | `ASSISTANT_RELAY_SECRET_PROD`, `ASSISTANT_RELAY_SECRET_DEV` | HMAC secrets the relay signs with, one per environment (≥ 32 characters) |
-| `ASSISTANT_SPEND_CEILING_CENTS_PROD` / `_DEV` / `_MEMORY` | Daily Token Factory ceilings (defaults 100 / 50 / 50) |
+| `ASSISTANT_SPEND_CEILING_CENTS_PROD` / `_DEV` / `_MEMORY` / `_COACH` | Override a daily Token Factory ceiling; without them the ceilings follow D-34's schedule by date (`supabase/functions/_shared/assistant.ts`) |
+| `COACH_TOKEN_FACTORY_API_KEY`, `COACH_MODEL`, `COACH_PLAN_MODEL` | My Coach on Token Factory: the in-workout coach and plan generation, Nemotron Super unless a model is set |
 | `ASSISTANT_DAILY_MESSAGES_PER_USER`, `ASSISTANT_DAILY_MESSAGES_GLOBAL` | Daily message caps (100 / 1000) |
 | `ASSISTANT_ALLOWED_ORIGINS` | Browser origins for the assistant endpoints; empty for the app |
 | `MEMORY_TOKEN_FACTORY_API_KEY`, `MEMORY_MODEL` | The nightly job's Token Factory key and Nemotron model id |
 | `MEMORY_CRON_SECRET` | Shared with the cron job through Vault (≥ 32 characters) |
-| `AGENT_URL`, `AGENT_SHARED_SECRET` | The in-workout coach service |
+| `AGENT_URL`, `AGENT_SHARED_SECRET` | The agent service, for what isn't on Token Factory yet (plan import, the studio session, history import); not set on the hackathon's project |
 | `REVENUECAT_WEBHOOK_SECRET`, `SUBSCRIPTION_PAUSED`, `USAGE_MONTHLY_BUDGET_CENTS` | Subscriptions and the per-user cost breaker |
 | `DEV_TEST_LOGIN_EMAILS` | Accounts that sign in without a code (QA, review, demo); random addresses only |
 | `SENTRY_DSN`, `SENTRY_ENVIRONMENT` | Error reporting, optional |
@@ -312,8 +313,10 @@ pnpm --filter @gymcoach/mobile start
 
 ### In-workout coach service and website
 
-`services/agent` on Fly.io: `OPENROUTER_API_KEY`, `AGENT_SHARED_SECRET`, and
-optionally `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `AGENT_DISABLED`. The website
+The hackathon app runs `services/agent`'s coach inside `session-start` and
+`coach-turn`, on Token Factory; this repository doesn't deploy it to Fly. The
+live app's service on Fly.io takes `OPENROUTER_API_KEY`, `AGENT_SHARED_SECRET`,
+and optionally `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `AGENT_DISABLED`. The website
 (`apps/web`, Vercel): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ### The cluster

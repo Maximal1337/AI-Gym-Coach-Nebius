@@ -1,4 +1,10 @@
-app = "gymcoach-agent"
+# This repository is the hackathon copy of AI-Gym-Coach. The live app's agent
+# service, gymcoach-agent, is deployed only from the original repository; the
+# hackathon app runs this code inside its own Edge Functions instead (DOR-135).
+# The app named here doesn't exist, on purpose: a `fly deploy` from this
+# repository fails rather than replacing the live service. Don't put
+# gymcoach-agent back.
+app = "notch-nebius-no-fly-deploy"
 primary_region = "fra"
 
 [build]

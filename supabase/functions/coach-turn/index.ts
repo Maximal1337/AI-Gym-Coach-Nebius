@@ -9,6 +9,7 @@ import {
   subscriptionAccess,
   withSentry,
 } from "../_shared/mod.ts";
+import { coachAgent } from "../_coach/agent.ts";
 
 /** A workout session older than this can no longer drive coaching turns. */
 const SESSION_MAX_AGE_MS = 6 * 3600_000;
@@ -26,6 +27,11 @@ const SESSION_MAX_AGE_MS = 6 * 3600_000;
  * keep chatting with the coach for free indefinitely. The session's own
  * 6h max-age still applies underneath this, so a parked "in_progress"
  * session can't become an unmetered LLM faucet either way.
+ *
+ * In the hackathon app both kinds of turn are services/agent's code run in
+ * this function on Token Factory (DOR-135, ../_shared/coach.ts), under My
+ * Coach's daily ceiling: past it a free-text turn answers 503, while sets
+ * confirmed with the buttons are still saved and answered without the model.
  */
 Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -127,6 +133,7 @@ Deno.serve(withSentry(async (req) => {
       exercise,
       confirmedSets,
       clientMessageId,
+      agent: coachAgent(db),
     });
     return json(turn.status, turn.body);
   }
@@ -139,6 +146,7 @@ Deno.serve(withSentry(async (req) => {
     userMessage: userMessage!,
     recentHistory: cleanHistory,
     clientMessageId,
+    agent: coachAgent(db),
   });
   return json(turn.status, turn.body);
 }));

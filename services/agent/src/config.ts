@@ -1,3 +1,5 @@
+import process from "node:process";
+
 /**
  * Central LLM + cost-safety configuration.
  * One choke point: nothing outside this service ever talks to the model,
@@ -29,7 +31,7 @@ export function agentDisabled(): boolean {
   return process.env.AGENT_DISABLED === "1";
 }
 
-let apiKeyOverride: string | undefined;
+let apiKeyOverride: string | null | undefined;
 
 /**
  * The model provider's key: OPENROUTER_API_KEY, unless the host hands one
@@ -37,9 +39,15 @@ let apiKeyOverride: string | undefined;
  * environment, and there the key is Token Factory's (DOR-135).
  */
 export function llmApiKey(): string | undefined {
-  return apiKeyOverride ?? process.env.OPENROUTER_API_KEY;
+  if (apiKeyOverride === null) return undefined;
+  return apiKeyOverride || process.env.OPENROUTER_API_KEY;
 }
 
-export function setLlmApiKey(key: string | undefined): void {
-  apiKeyOverride = key || undefined;
+/**
+ * A key to use; null for none at all, which gives the deterministic replies
+ * (the hackathon app at My Coach's daily ceiling); undefined to go back to
+ * OPENROUTER_API_KEY.
+ */
+export function setLlmApiKey(key: string | null | undefined): void {
+  apiKeyOverride = key;
 }

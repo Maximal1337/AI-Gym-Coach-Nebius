@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "@gymcoach/shared": "../../../packages/shared/src/types.ts",
+    "@langchain/core/": "npm:/@langchain/core@1.2.3/",
+    "@langchain/langgraph": "npm:@langchain/langgraph@1.4.8",
+    "@langchain/openrouter": "../_coach/openrouter.ts",
+    "zod": "npm:zod@3.25.76"
+  }
+}

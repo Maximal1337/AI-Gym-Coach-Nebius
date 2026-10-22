@@ -28,8 +28,16 @@ const targets = [
     .map((d) => `${d.name}/index.ts`),
 ].sort();
 
+// A function with its own deno.json (session-start and coach-turn: the import
+// map that runs services/agent's code in them, DOR-135) is checked with it,
+// the way it's deployed; everything else without any config.
+function configFor(target) {
+  const own = join(functionsDir, target, "..", "deno.json");
+  return !target.startsWith("_shared/") && existsSync(own) ? ["--config", own] : ["--no-config"];
+}
+
 function check(target) {
-  const res = spawnSync("deno", ["check", "--no-config", join(functionsDir, target)], {
+  const res = spawnSync("deno", ["check", ...configFor(target), join(functionsDir, target)], {
     cwd: root,
     encoding: "utf8",
     env: { ...process.env, DENO_NO_PACKAGE_JSON: "1", NO_COLOR: "1" },

@@ -9,6 +9,7 @@ import {
   subscriptionAccess,
   withSentry,
 } from "../_shared/mod.ts";
+import { coachAgent } from "../_coach/agent.ts";
 
 /**
  * GYM-16: POST /session/start  { planId }
@@ -16,6 +17,12 @@ import {
  * Entitlement (trial/subscription) and budget are checked HERE and only
  * here — a session already running is never cut off mid-set (System
  * Design §7).
+ *
+ * In the hackathon app the coach's intro is services/agent's code run in
+ * this function on Token Factory (DOR-135, ../_shared/coach.ts): at My
+ * Coach's daily ceiling a workout doesn't start.
+ * Secrets: COACH_TOKEN_FACTORY_API_KEY, COACH_MODEL (optional),
+ * ASSISTANT_SPEND_CEILING_CENTS_COACH (optional).
  *
  * Idempotent against retries: an open session on the same plan is reused,
  * so a client that got a 503 mid-start doesn't strand orphan sessions.
@@ -103,7 +110,7 @@ Deno.serve(withSentry(async (req) => {
     sessionId = session.id;
   }
 
-  const turn = await runExerciseTurn(db, user.id, plan.id, firstExercise, sessionId);
+  const turn = await runExerciseTurn(db, user.id, plan.id, firstExercise, sessionId, coachAgent(db));
   if (turn.status === 200) {
     await db.from("workout_sessions").update({ intro_response: turn.body }).eq("id", sessionId);
   }

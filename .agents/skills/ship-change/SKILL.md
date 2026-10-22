@@ -11,6 +11,28 @@ and `supabase/` (Postgres migrations + Deno edge functions). A single
 feature often touches two or three of these at once — each has its own
 deploy command and its own way of silently failing if you skip a step.
 
+## 0. This repository never deploys to the live app
+
+This is the hackathon copy of AI-Gym-Coach (D-16, DOR-135). The live app's
+services are deployed only from the original repository:
+
+- **Supabase:** this repository's project is the hackathon's test project,
+  never the live one. Before ANY write to Supabase — `db push`,
+  `functions deploy`, `secrets set`/`unset`, `config push`, a `db query`
+  that writes — check which project the CLI is linked to
+  (`supabase projects list` marks the linked one; or
+  `cat supabase/.temp/project-ref`), and stop if it isn't the test project.
+- **Fly:** `services/agent` is not deployed from here. Its `fly.toml` names an
+  app that doesn't exist, on purpose, so a `fly deploy` fails instead of
+  replacing the live `gymcoach-agent`. The hackathon app runs the agent's code
+  inside its own `session-start` and `coach-turn` functions (on Token Factory),
+  so a change under `services/agent` ships by deploying those two.
+- **EAS:** `apps/mobile/app.json` is the hackathon app's own EAS project and
+  bundle id, with no OTA updates; the live app's App Store record isn't in
+  `eas.json`. The "never build/submit without asking" rule below still holds.
+
+The Fly notes further down are the original repository's procedure.
+
 ## 1. Verify before deploying
 
 Full procedure (mobile bundle-compile trick, `deno check`, agent
@@ -42,7 +64,7 @@ file). he/ar are RTL — keep the translations, not the English string.
 |-----------------------------------|--------------------------------------------------------------------------|
 | `supabase/migrations/*.sql`       | `supabase db push`                                                       |
 | `supabase/functions/<name>/*`     | `supabase functions deploy <name>` (space-separate multiple names to deploy several in one call) |
-| `services/agent/*`                | `fly deploy -c services/agent/fly.toml --dockerfile services/agent/Dockerfile` |
+| `services/agent/*`                | Here: `supabase functions deploy session-start coach-turn --use-api` (§0). The original repository: `fly deploy -c services/agent/fly.toml --dockerfile services/agent/Dockerfile` |
 | `apps/mobile/*` only               | No deploy step — ships with the app itself.                              |
 
 - **`supabase/functions/_shared/mod.ts` is bundled INTO every function that

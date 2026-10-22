@@ -1,5 +1,6 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as Sentry from "npm:@sentry/deno@^10";
+import type { AgentCall } from "./coach.ts";
 
 /**
  * Shared plumbing for all Edge Functions.
@@ -668,9 +669,11 @@ export async function runConversationExerciseTurn(
     recentHistory: Array<{ from: "coach" | "me"; text: string }>;
     /** Set by the client on send — the duplicate-send guard (see insertMessage/findReplayReply). */
     clientMessageId?: string | null;
+    /** The agent service by default; the hackathon app's coach runs it in process (_coach/agent.ts). */
+    agent?: AgentCall;
   },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { userId, sessionId, planId, exercise, userMessage, recentHistory, clientMessageId } = params;
+  const { userId, sessionId, planId, exercise, userMessage, recentHistory, clientMessageId, agent = callAgent } = params;
   const exerciseId = exercise.id as string;
 
   if (clientMessageId) {
@@ -729,7 +732,7 @@ export async function runConversationExerciseTurn(
       : Promise.resolve([]),
   ]);
 
-  const agentRes = await callAgent(
+  const agentRes = await agent(
     {
       profile: profileToAgent(profileRow),
       exercise: exerciseToAgent(exercise),
@@ -983,9 +986,11 @@ export async function confirmExerciseSets(
     confirmedSets: Array<{ weightKg: number; reps: number }>;
     /** Set by the client on send — the duplicate-send guard (see insertMessage/findReplayReply). */
     clientMessageId?: string | null;
+    /** The agent service by default; the hackathon app's coach runs it in process (_coach/agent.ts). */
+    agent?: AgentCall;
   },
 ): Promise<{ status: number; body: Record<string, unknown> }> {
-  const { userId, sessionId, planId, exercise, confirmedSets, clientMessageId } = params;
+  const { userId, sessionId, planId, exercise, confirmedSets, clientMessageId, agent = callAgent } = params;
   const exerciseId = exercise.id as string;
 
   // Kept as a plain kg fallback for text — the client reformats this into
@@ -1045,7 +1050,7 @@ export async function confirmExerciseSets(
     nextRow ? notesForExercise(db, userId, planId, nextRow.id) : Promise.resolve([]),
   ]);
 
-  const agentRes = await callAgent(
+  const agentRes = await agent(
     {
       profile: profileToAgent(profileRow),
       exercise: exerciseToAgent(exercise),
@@ -1101,6 +1106,8 @@ export async function runExerciseTurn(
   planId: string,
   exercise: Record<string, unknown>,
   sessionId: string,
+  /** The agent service by default; the hackathon app's coach runs it in process (_coach/agent.ts). */
+  agent: AgentCall = callAgent,
 ): Promise<{ status: number; body: Record<string, unknown> }> {
   // Plan context (GYM-20): the coach should know the whole workout, not
   // just the current exercise. All four reads are independent of each
@@ -1118,7 +1125,7 @@ export async function runExerciseTurn(
     ]);
   if (!profileRow) return { status: 409, body: { error: "no_coach_profile" } };
 
-  const agentRes = await callAgent({
+  const agentRes = await agent({
     userId,
     planId,
     planName: plan?.name ?? "",

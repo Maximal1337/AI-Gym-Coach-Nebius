@@ -4,8 +4,10 @@ NH-38 and D-34 in [`nebius-hackathon-plan.md`](./nebius-hackathon-plan.md). The 
 
 | Account | AI Cloud | Token Factory |
 |---|---|---|
-| Member A — @Maximal1337 | $100: the VPS until 2026-11-14 | $150: the agent's `prod` and `dev` keys |
-| Member B — @dorhaimbob-web | $100: the VPS from 2026-11-15 | $150: the nightly memory job's key |
+| Member A — @Maximal1337 | $100: the VPS until 2026-11-14 | Every bucket since 2026-10-22: the agent's `prod` and `dev`, the nightly `memory` job and My Coach's `coach`, on a $89.47 balance with a card behind it |
+| Member B — @dorhaimbob-web | $100: the VPS from 2026-11-15 | — |
+
+The daily ceilings follow D-34's schedule by date in code (`supabase/functions/_shared/assistant.ts`, worst case $68.45 to 12-15); an `ASSISTANT_SPEND_CEILING_CENTS_*` secret overrides its bucket for as long as it stays set, so unset it when the override is done.
 
 ## 1. Read the balances
 
@@ -33,8 +35,7 @@ from last7
 order by bucket;
 ```
 
-- **Member A:** `prod` + `dev` "until Dec 15" must stay under 90% of member A's remaining Token Factory credit.
-- **Member B:** `memory` must stay under 90% of member B's.
+- All buckets together "until Dec 15" must stay under 90% of member A's remaining Token Factory balance.
 
 Day-by-day detail:
 

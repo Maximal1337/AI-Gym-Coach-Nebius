@@ -69,8 +69,20 @@ Deno.test("usageOrFallback: malformed or missing usage is charged the fallback",
 
 // ------------------------------------------------------------ ceilings
 
-Deno.test("spendCeilingsCents: D-34 defaults", () => {
-  assertEquals(spendCeilingsCents(noEnv), { prod: 100, dev: 50, memory: 50, coach: 50 });
+const at = (day: string) => new Date(`${day}T12:00:00Z`);
+
+Deno.test("spendCeilingsCents: D-34's schedule by date when no secret is set", () => {
+  assertEquals(spendCeilingsCents(noEnv, at("2026-10-22")), { prod: 35, dev: 30, memory: 10, coach: 15 });
+  assertEquals(spendCeilingsCents(noEnv, at("2026-10-26")).dev, 30);
+  assertEquals(spendCeilingsCents(noEnv, at("2026-10-27")), { prod: 35, dev: 5, memory: 10, coach: 15 });
+  assertEquals(spendCeilingsCents(noEnv, at("2026-11-15")).dev, 0);
+  assertEquals(spendCeilingsCents(noEnv, at("2026-12-01")), { prod: 200, dev: 0, memory: 20, coach: 60 });
+  assertEquals(spendCeilingsCents(noEnv, at("2026-12-15")), { prod: 200, dev: 0, memory: 20, coach: 60 });
+  assertEquals(spendCeilingsCents(noEnv, at("2026-12-16")), { prod: 35, dev: 0, memory: 10, coach: 15 });
+  // Before the schedule starts, its first step's.
+  assertEquals(spendCeilingsCents(noEnv, at("2026-10-01")), { prod: 35, dev: 30, memory: 10, coach: 15 });
+  // The day is UTC's, like assistant_spend's.
+  assertEquals(spendCeilingsCents(noEnv, new Date("2026-10-26T23:30:00-02:00")).dev, 5);
 });
 
 Deno.test("spendCeilingsCents: secrets override; 0 switches a bucket off; garbage falls back", () => {
@@ -80,23 +92,21 @@ Deno.test("spendCeilingsCents: secrets override; 0 switches a bucket off; garbag
       ASSISTANT_SPEND_CEILING_CENTS_DEV: "0",
       ASSISTANT_SPEND_CEILING_CENTS_MEMORY: "abc",
       ASSISTANT_SPEND_CEILING_CENTS_COACH: "30",
-    })),
-    { prod: 80, dev: 0, memory: 50, coach: 30 },
+    }), at("2026-10-22")),
+    { prod: 80, dev: 0, memory: 10, coach: 30 },
   );
-  assertEquals(spendCeilingsCents(env({ ASSISTANT_SPEND_CEILING_CENTS_PROD: "-5" })).prod, 100);
-  assertEquals(spendCeilingsCents(env({ ASSISTANT_SPEND_CEILING_CENTS_PROD: " " })).prod, 100);
+  assertEquals(spendCeilingsCents(env({ ASSISTANT_SPEND_CEILING_CENTS_PROD: "-5" }), at("2026-12-01")).prod, 200);
+  assertEquals(spendCeilingsCents(env({ ASSISTANT_SPEND_CEILING_CENTS_PROD: " " }), at("2026-10-22")).prod, 35);
 });
 
-Deno.test("budget invariant: the default ceilings fit the credits for the whole run (D-34, §7)", () => {
-  const days = 78; // 2026-09-29 → 2026-12-15 inclusive
-  const tokenFactoryCreditsCents = 150 * 100; // per member
-  const c = spendCeilingsCents(noEnv);
-  // Member A's keys: the agent, prod + dev, and from 2026-10-22 My Coach's (DOR-135).
-  const coachDays = 55; // 2026-10-22 → 2026-12-15 inclusive
-  const memberA = (c.prod + c.dev) * days + c.coach * coachDays;
-  assert(memberA <= tokenFactoryCreditsCents, `member A's worst case ${memberA}¢`);
-  // Member B's key: the nightly memory job.
-  assert(c.memory * days <= tokenFactoryCreditsCents, `memory worst case ${c.memory * days}¢`);
+Deno.test("budget invariant: every bucket at its ceiling every day to 12-15 fits $70 (D-34)", () => {
+  let worstCents = 0;
+  for (let d = at("2026-10-22"); d <= at("2026-12-15"); d = new Date(d.getTime() + 86_400_000)) {
+    const c = spendCeilingsCents(noEnv, d);
+    worstCents += c.prod + c.dev + c.memory + c.coach;
+  }
+  assertEquals(worstCents, 6845); // $68.45, the accepted table
+  assert(worstCents <= 7000, `worst case ${worstCents}¢`);
 });
 
 Deno.test("dailyCaps: message caps keep their defaults", () => {
