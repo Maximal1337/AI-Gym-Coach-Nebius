@@ -11,6 +11,7 @@ import {
 } from "../_shared/mod.ts";
 import { checkSpend, costCents, LIMIT_REACHED_ERROR, recordSpend, usageOrFallback } from "../_shared/assistant.ts";
 import { type CommonExercise, type GeneratePlanInput, generatePlan, PlanGenerationError } from "../_shared/plan-generation.ts";
+import { coachFlagRefusal } from "../_shared/coach.ts";
 
 /**
  * Measured on 2026-10-22 (DOR-135), 6 plans each in Hebrew and English: both
@@ -59,6 +60,10 @@ Deno.serve(withSentry(async (req) => {
   if (!(await allowRate(db, user.id, "plan-generate", 5, 300))) {
     return json(429, { error: "rate_limited" });
   }
+
+  // Only accounts with the assistant reach the model (_shared/coach.ts).
+  const refusal = await coachFlagRefusal(db, user.id);
+  if (refusal) return json(refusal.status, refusal.body);
 
   const access = await subscriptionAccess(db, user.id);
   if (!access.ok) {

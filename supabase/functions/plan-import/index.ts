@@ -1,4 +1,5 @@
 import { admin, allowRate, callAgent, corsHeaders, getUser, json, subscriptionAccess, withSentry } from "../_shared/mod.ts";
+import { coachFlagRefusal } from "../_shared/coach.ts";
 
 /**
  * GYM-26: paste-and-parse plan onboarding. Also covers adding/editing
@@ -51,7 +52,11 @@ Deno.serve(withSentry(async (req) => {
     // A real LLM call (unlike commit/seed-starting-weights/archive below,
     // which are pure DB writes) — gated the same as every other AI entry
     // point, whether this is first-time onboarding (new accounts are
-    // always within their trial) or adding a workout type later.
+    // always within their trial) or adding a workout type later. In the
+    // hackathon app only accounts with the assistant parse (_shared/coach.ts);
+    // commit, starting weights and archive stay open.
+    const refusal = await coachFlagRefusal(db, user.id);
+    if (refusal) return json(refusal.status, refusal.body);
     const access = await subscriptionAccess(db, user.id);
     if (!access.ok) {
       return json(402, { error: "subscription_required", trialEndsAt: access.trialEndsAt });

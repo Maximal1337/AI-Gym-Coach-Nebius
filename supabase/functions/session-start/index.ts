@@ -10,6 +10,7 @@ import {
   withSentry,
 } from "../_shared/mod.ts";
 import { coachAgent } from "../_coach/agent.ts";
+import { coachFlagRefusal } from "../_shared/coach.ts";
 
 /**
  * GYM-16: POST /session/start  { planId }
@@ -20,7 +21,8 @@ import { coachAgent } from "../_coach/agent.ts";
  *
  * In the hackathon app the coach's intro is services/agent's code run in
  * this function on Token Factory (DOR-135, ../_shared/coach.ts): at My
- * Coach's daily ceiling a workout doesn't start.
+ * Coach's daily ceiling a workout doesn't start, and only accounts with the
+ * assistant (assistant_chat) start one.
  * Secrets: COACH_TOKEN_FACTORY_API_KEY, COACH_MODEL (optional),
  * ASSISTANT_SPEND_CEILING_CENTS_COACH (optional).
  *
@@ -38,6 +40,10 @@ Deno.serve(withSentry(async (req) => {
   if (!(await allowRate(db, user.id, "session-start", 5, 60))) {
     return json(429, { error: "rate_limited" });
   }
+
+  // Only accounts with the assistant reach the model (_shared/coach.ts).
+  const refusal = await coachFlagRefusal(db, user.id);
+  if (refusal) return json(refusal.status, refusal.body);
 
   const access = await subscriptionAccess(db, user.id);
   if (!access.ok) {

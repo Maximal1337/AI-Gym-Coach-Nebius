@@ -2,7 +2,16 @@
 import { assertAlmostEquals, assertEquals } from "jsr:@std/assert@1";
 import type { SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { costCents, FALLBACK_TURN_USAGE, LIMIT_REACHED_ERROR, type SpendBucket } from "./assistant.ts";
-import { coachAgentCall, CoachInputError, coachModel, type CoachPath, type CoachReply, DEFAULT_COACH_MODEL } from "./coach.ts";
+import {
+  coachAgentCall,
+  coachFlagRefusal,
+  CoachInputError,
+  coachModel,
+  type CoachPath,
+  type CoachReply,
+  DEFAULT_COACH_MODEL,
+  setsLoggedReply,
+} from "./coach.ts";
 
 const MODEL = "nvidia/nemotron-3-super-120b-a12b";
 const CEILINGS: Record<SpendBucket, number> = { prod: 35, dev: 30, memory: 10, coach: 15 };
@@ -64,16 +73,60 @@ Deno.test("at the ceiling: a workout doesn't start and free text isn't read, wit
   }
 });
 
-Deno.test("at the ceiling: confirmed sets still get the agent's deterministic reply, without a key and free", async () => {
+Deno.test("at the ceiling: confirmed sets are answered without a key, free, in the user's language", async () => {
   const { db, recorded } = fakeDb(20);
-  const { run, calls } = runner({ message: "Logged 82.5 kg x 8/8/7. Let's keep going!", usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 }, degraded: true } as CoachReply);
-  const res = await call(db, run)({}, "/confirm-turn");
+  const { run, calls } = runner({ message: "Logged 82.5kg x 8/8/7. Let's keep going!", nextSuggestedWeightKg: 60, usage: { tokensInput: 0, tokensOutput: 0, costCents: 0 }, degraded: true } as CoachReply);
+  const payload = {
+    profile: { language: "he", units: "metric" },
+    confirmedSets: [{ weightKg: 82.5, reps: 8 }, { weightKg: 82.5, reps: 8 }, { weightKg: 82.5, reps: 7 }],
+  };
+  const res = await call(db, run)(payload, "/confirm-turn");
   assertEquals(res.status, 200);
   assertEquals(calls, [{ path: "/confirm-turn", apiKey: null }]);
   const body = await res.json();
+  assertEquals(body.message, "רשמתי: 82.5kg × 8/8/7. ממשיכים!");
+  assertEquals(body.nextSuggestedWeightKg, 60);
   assertEquals(body.degraded, true);
   assertEquals(body.usage, { tokensInput: 0, tokensOutput: 0, costCents: 0 });
   assertEquals(recorded.length, 0);
+});
+
+Deno.test("setsLoggedReply: the sets in the user's units, in their language, English otherwise", () => {
+  const sets = (...s: Array<[number, number]>) => s.map(([weightKg, reps]) => ({ weightKg, reps }));
+  assertEquals(
+    setsLoggedReply({ profile: { language: "en", units: "metric" }, confirmedSets: sets([82.5, 8], [82.5, 7]) }),
+    "Logged 82.5kg × 8/7. Let's keep going!",
+  );
+  assertEquals(
+    setsLoggedReply({ profile: { language: "fr", units: "imperial" }, confirmedSets: sets([100, 5]) }),
+    "C'est noté : 220.5lb × 5. On continue !",
+  );
+  assertEquals(
+    setsLoggedReply({ profile: { language: "he-IL" }, confirmedSets: sets([80, 8], [82.5, 6]) }),
+    "רשמתי: 80kg × 8, 82.5kg × 6. ממשיכים!",
+  );
+  assertEquals(setsLoggedReply({ profile: { language: "xx" }, confirmedSets: sets([20, 12]) }), "Logged 20kg × 12. Let's keep going!");
+  assertEquals(setsLoggedReply({ profile: { language: "he" }, confirmedSets: [] }), null);
+  assertEquals(setsLoggedReply(null), null);
+});
+
+Deno.test("coachFlagRefusal: the chat's flag, 403 assistant_disabled without it, closed when the check fails", async () => {
+  const flagDb = (result: { data: unknown; error: { message: string } | null }) => {
+    const calls: Array<Record<string, unknown>> = [];
+    const db = {
+      rpc: (fn: string, args: Record<string, unknown>) => {
+        calls.push({ fn, ...args });
+        return Promise.resolve(result);
+      },
+    } as unknown as Pick<SupabaseClient, "rpc">;
+    return { db, calls };
+  };
+  const on = flagDb({ data: true, error: null });
+  assertEquals(await coachFlagRefusal(on.db, "user-1"), null);
+  assertEquals(on.calls, [{ fn: "feature_enabled", p_user_id: "user-1", p_flag: "assistant_chat" }]);
+  const refused = { status: 403, body: { error: "assistant_disabled" } };
+  assertEquals(await coachFlagRefusal(flagDb({ data: false, error: null }).db, "user-1"), refused);
+  assertEquals(await coachFlagRefusal(flagDb({ data: null, error: { message: "boom" } }).db, "user-1"), refused);
 });
 
 Deno.test("an unreadable spend total counts as the ceiling (fails closed)", async () => {

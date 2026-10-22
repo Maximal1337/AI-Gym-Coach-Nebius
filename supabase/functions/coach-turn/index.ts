@@ -10,6 +10,7 @@ import {
   withSentry,
 } from "../_shared/mod.ts";
 import { coachAgent } from "../_coach/agent.ts";
+import { coachFlagRefusal } from "../_shared/coach.ts";
 
 /** A workout session older than this can no longer drive coaching turns. */
 const SESSION_MAX_AGE_MS = 6 * 3600_000;
@@ -89,6 +90,13 @@ Deno.serve(withSentry(async (req) => {
     }
   } catch {
     return json(400, { error: "invalid_input" });
+  }
+
+  // A free-text turn is read by the model, so only accounts with the
+  // assistant get one (_shared/coach.ts); confirming sets stays open.
+  if (!confirmedSets) {
+    const refusal = await coachFlagRefusal(db, user.id);
+    if (refusal) return json(refusal.status, refusal.body);
   }
 
   const cleanHistory = recentHistory
