@@ -12,7 +12,13 @@ import {
 import { checkSpend, costCents, LIMIT_REACHED_ERROR, recordSpend, usageOrFallback } from "../_shared/assistant.ts";
 import { type CommonExercise, type GeneratePlanInput, generatePlan, PlanGenerationError } from "../_shared/plan-generation.ts";
 
-/** Nemotron Super until DOR-135's run against Lightning decides; COACH_PLAN_MODEL overrides it. */
+/**
+ * Measured on 2026-10-22 (DOR-135), 6 plans each in Hebrew and English: both
+ * Super and Lightning held the schema every time, in the right language.
+ * Super took 4.7 s (Hebrew) and 5.3 s (English) at the median, Lightning 10.0 s
+ * and 3.8 s for a quarter of the price (0.14 against 0.035 cents a plan) —
+ * Super, so Hebrew isn't the slow one. COACH_PLAN_MODEL overrides it.
+ */
 const DEFAULT_PLAN_MODEL = "nvidia/nemotron-3-super-120b-a12b";
 
 const GOALS = ["strength", "hypertrophy", "general_fitness", "fat_loss"];
