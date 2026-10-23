@@ -110,6 +110,9 @@ test("a check-in has no user text: an instruction with the skip word, and a plac
   const j = job({ job: { id: 2, kind: "checkin", environment: "prod", user_id: "u1", attempts: 1 }, message: null });
   const m = buildMessages(j, NOW);
   assert.match(m[0].content, new RegExp(`reply with exactly ${CHECKIN_SKIP}`));
+  // 2026-10-23: a check-in called a workout "in progress" on a day with no session at all.
+  assert.match(m[0].content, /in progress only if a session started today has the status in_progress/);
+  assert.match(m[0].content, /If no session started today, don't say a workout is underway or done/);
   assert.equal(m.at(-1)!.content, "(daily check-in)");
 });
 

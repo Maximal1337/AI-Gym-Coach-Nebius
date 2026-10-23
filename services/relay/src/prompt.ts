@@ -92,7 +92,10 @@ export function contextBlock(job: JobContext, now: Date): string {
       "",
       "This is the proactive daily check-in: the user didn't write anything. Look at today's plan and recent " +
         "workouts with your tools and send one short, useful message — today's workout and one relevant thing you " +
-        `remember. If there is nothing useful to say, reply with exactly ${CHECKIN_SKIP}.`,
+        "remember. Give a workout's status only as get_workout_history shows it: in progress only if a session " +
+        "started today has the status in_progress, done only if one today is completed. If no session started " +
+        "today, don't say a workout is underway or done — suggest one. " +
+        `If there is nothing useful to say, reply with exactly ${CHECKIN_SKIP}.`,
     );
   }
   return lines.join("\n");
