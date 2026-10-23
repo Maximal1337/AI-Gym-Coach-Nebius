@@ -11,6 +11,7 @@ import {
 } from "../_shared/mod.ts";
 import { coachAgent } from "../_coach/agent.ts";
 import { coachFlagRefusal } from "../_shared/coach.ts";
+import { abandonOtherSessions } from "./sessions.ts";
 
 /**
  * GYM-16: POST /session/start  { planId }
@@ -27,7 +28,9 @@ import { coachFlagRefusal } from "../_shared/coach.ts";
  * ASSISTANT_SPEND_CEILING_CENTS_COACH (optional).
  *
  * Idempotent against retries: an open session on the same plan is reused,
- * so a client that got a 503 mid-start doesn't strand orphan sessions.
+ * so a client that got a 503 mid-start doesn't strand orphan sessions. Once
+ * a workout has started, the user's other open sessions are abandoned
+ * (./sessions.ts) — the app never resumes them.
  */
 Deno.serve(withSentry(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -102,23 +105,28 @@ Deno.serve(withSentry(async (req) => {
   // second LLM call for the same logical action — replay the cached
   // response instead of recomputing it whenever one's already on file.
   if (existing?.intro_response) {
+    await abandonOtherSessions(db, user.id, existing.id);
     return json(200, { sessionId: existing.id, ...(existing.intro_response as Record<string, unknown>) });
   }
 
-  let sessionId = existing?.id as string | undefined;
-  if (!sessionId) {
+  let sessionId: string;
+  if (existing?.id) {
+    sessionId = existing.id as string;
+  } else {
     const { data: session, error: sessionError } = await db
       .from("workout_sessions")
       .insert({ user_id: user.id, plan_id: plan.id, source: "live" })
       .select("id")
       .single();
     if (sessionError || !session) return json(500, { error: "session_create_failed" });
-    sessionId = session.id;
+    sessionId = session.id as string;
   }
 
   const turn = await runExerciseTurn(db, user.id, plan.id, firstExercise, sessionId, coachAgent(db));
   if (turn.status === 200) {
     await db.from("workout_sessions").update({ intro_response: turn.body }).eq("id", sessionId);
+    // Only a start that worked closes the others: a failed one leaves everything as it was.
+    await abandonOtherSessions(db, user.id, sessionId);
   }
   return json(turn.status, { sessionId, ...turn.body });
 }));

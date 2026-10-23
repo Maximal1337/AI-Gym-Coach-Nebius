@@ -10,6 +10,6 @@
   "plan-import/index.ts": 0,
   "revenuecat-webhook/index.ts": 0,
   "session-complete/index.ts": 0,
-  "session-start/index.ts": 1,
+  "session-start/index.ts": 0,
   "studio-session/index.ts": 31
 }
