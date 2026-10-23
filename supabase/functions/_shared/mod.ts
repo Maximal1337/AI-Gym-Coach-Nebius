@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import * as Sentry from "npm:@sentry/deno@^10";
 import type { AgentCall } from "./coach.ts";
+import { pushAnswerForLog } from "./push.ts";
 
 /**
  * Shared plumbing for all Edge Functions.
@@ -288,11 +289,13 @@ export async function sendPushForTurn(
   try {
     const { data: tokens } = await db.from("push_tokens").select("token").eq("user_id", userId);
     if (!tokens || tokens.length === 0) return;
-    await fetch("https://exp.host/--/api/v2/push/send", {
+    const res = await fetch("https://exp.host/--/api/v2/push/send", {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify(tokens.map((t) => ({ to: t.token, title, body, data }))),
     });
+    // Expo's verdict per token (DeviceNotRegistered, missing APNs credentials, …), without the tokens.
+    console.log("push sent", { userId, ...pushAnswerForLog(res.status, await res.json().catch(() => null)) });
   } catch (e) {
     console.error("push send failed", { userId, error: (e as Error).message });
   }
