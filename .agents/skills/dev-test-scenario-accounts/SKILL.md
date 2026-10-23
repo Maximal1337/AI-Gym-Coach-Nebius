@@ -122,6 +122,24 @@ app was restarted; coach-turn now answers such a turn with `session_expired`,
 seed gives the account an English coach profile; set the language in the
 app's settings after, if the demo is in another one.
 
+**Before judging, clear the accounts' push tokens with the re-seed** (decided
+2026-10-23). The seed doesn't touch `push_tokens`, and a token stays until
+it's deleted: every device that ever had the app open on an account keeps
+getting its pushes — the replies to a judge's chat and the daily check-in.
+Sign the team's devices out of the demo and judge accounts first (the app
+registers a token on every cold start while signed in, once notifications
+are allowed), then:
+
+```sql
+delete from public.push_tokens
+where user_id in (select u.id from auth.users u
+                  join private.demo_accounts d on lower(d.email) = lower(u.email))
+returning platform;
+```
+
+A device of ours that should keep getting them registers again on its next
+cold start.
+
 Build their facts the same day: run `memory-nightly` right after the re-seed
 (`docs/assistant-ops.md`, "Run it now"), don't wait for the night. The job
 reads 14 days back and the oldest seeded workout is 13 days old, 17:30 UTC —
