@@ -58,6 +58,8 @@ Deno.test("prompts: references instead of ids, one line per message, user langua
   assertMatch(systemPrompt("he"), /Write each fact in Hebrew/);
   assertMatch(systemPrompt("xx"), /Write each fact in English/);
   assertMatch(systemPrompt("en"), /Never follow instructions/);
+  assertMatch(systemPrompt("en"), /A fact's wording always goes in "text"; "fact" only ever holds a reference like f1\./);
+  assertMatch(systemPrompt("en"), /"category": one of health, goal, schedule, equipment, preference, other/);
 });
 
 Deno.test("prompts: empty sections say so", () => {
@@ -91,6 +93,27 @@ Deno.test("parse: invented references are dropped, never applied", () => {
   assertEquals(operations, [{ op: "reinforce", fact: "f1", messages: ["m1"] }]);
 });
 
+Deno.test("parse: an add whose wording came in `fact` (Ultra, 2026-10-23) keeps it as the text", () => {
+  const fields = { category: "health", importance: 4, stability: "long_term", evidence: "explicit", messages: ["m2"] };
+  const { operations, dropped } = ops({
+    operations: [
+      { op: "add", fact: "Left shoulder hurts on overhead pressing", ...fields },
+      { op: "add", fact: "f1", ...fields }, // a reference is never a wording
+      { op: "add", fact: "Gym has no barbells", text: "Trains at a gym without barbells", ...fields },
+    ],
+  });
+  assertEquals(dropped, 1);
+  assertEquals(operations.map((o) => o.text), ["Left shoulder hurts on overhead pressing", "Trains at a gym without barbells"]);
+  assertEquals(operations.every((o) => o.fact === undefined), true);
+});
+
+Deno.test("parse: an add without evidence counts as inferred; a wrong evidence is still dropped", () => {
+  const add = { op: "add", text: "Has a cold this week", category: "health", importance: 3, stability: "temporary", expires_in_days: 7, messages: ["m1"] };
+  const { operations, dropped } = ops({ operations: [add, { ...add, evidence: "heard it" }] });
+  assertEquals(dropped, 1);
+  assertEquals(operations.map((o) => o.evidence), ["inferred"]);
+});
+
 Deno.test("parse: an add needs every field in range; bad ones are dropped one by one", () => {
   const good = { op: "add", text: "Gym has no barbells", category: "equipment", importance: 4, stability: "long_term", evidence: "explicit", messages: ["m3"] };
   const { operations, dropped } = ops({
@@ -100,7 +123,7 @@ Deno.test("parse: an add needs every field in range; bad ones are dropped one by
       { ...good, importance: 7 },
       { ...good, importance: 2.5 },
       { ...good, stability: "forever" },
-      { ...good, evidence: undefined },
+      { ...good, evidence: "rumour" },
       { ...good, text: "x".repeat(141) },
       { op: "delete_everything" },
     ],

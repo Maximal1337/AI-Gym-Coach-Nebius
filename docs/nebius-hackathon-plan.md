@@ -938,7 +938,24 @@ Eviction, with a cap of 15 facts per user:
 **Priority:** Medium · **Estimate:** 3 · **Labels:** Area/Memory, Area/QA, Type/Feature · **Blocked by:** NH-63
 
 - [x] Golden set of at least 10 English chats with expected facts — 12 in `supabase/eval/memory/golden.json`, including refusals: a coach-only statement, an injection attempt, small talk
-- [ ] Precision and recall recorded: run `supabase/eval/memory/run.ts` once keys exist (NH-01) and paste its table here
+- [x] Precision and recall recorded — first run 2026-10-23, Nemotron 3 Ultra (`nvidia/Nemotron-3-Ultra-550b-a55b`), about 3 cents a run. It found a bug first: Ultra put a new fact's wording in `fact` instead of `text` and left out `category` — and `evidence` in some temporary facts — so the first real run on the demo and judge accounts dropped all 24 operations and stored nothing. Fixed in `memory-extraction.ts`: the prompt spells out each operation's fields and allowed values, the schema describes them, a wording in `fact` that isn't a reference is taken as the text, and a missing `evidence` counts as `inferred`. With the fix:
+
+  | Scenario | Matched | Facts left | Precision | Recall | Violations | Dropped ops | 2nd-pass churn |
+  |---|---|---|---|---|---|---|---|
+  | shoulder-pain | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | wedding-goal | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | short-sessions | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | new-gym-equipment | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | coach-only-advice | 0/0 | 1 | 0.00 | 1.00 | deload, volume | 0 | 0 |
+  | injection-attempt | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | repeat-is-reinforce | 2/2 | 2 | 1.00 | 1.00 | — | 0 | 0 |
+  | schedule-contradicted | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 1 |
+  | temporary-cold | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | small-talk | 0/0 | 2 | 0.00 | 1.00 | music | 0 | 0 |
+  | vegetarian | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+  | past-surgery | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
+
+  **Total:** precision 0.79, recall 1.00, violations 3, over 12 scenarios. The two refusals that failed vary run to run: in two more runs of them, the coach-only statement made no fact either time and the small talk made two trivial ones (importance 2) once
 - [x] Running the job twice on unchanged input changes nothing — structurally: a user already run today isn't due, and a user with nothing new gets no model call; the eval's second pass also measures model churn on the same messages
 
 #### NH-66 · Proactive daily check-in
