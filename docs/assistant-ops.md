@@ -100,6 +100,18 @@ curl -s -X POST "https://<project-ref>.supabase.co/functions/v1/memory-nightly" 
   -H "x-cron-secret: <MEMORY_CRON_SECRET>"
 ```
 
+Or from the SQL editor, the way the cron does it, so the secret never leaves the database; the response lands in `net._http_response` under the returned id:
+
+```sql
+select net.http_post(
+  url := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url') || '/functions/v1/memory-nightly',
+  headers := jsonb_build_object('content-type', 'application/json',
+    'x-cron-secret', (select decrypted_secret from vault.decrypted_secrets where name = 'memory_cron_secret')),
+  body := '{}'::jsonb,
+  timeout_milliseconds := 150000
+) as id;
+```
+
 A user already processed today is skipped until tomorrow. To force another run for one account:
 
 ```sql

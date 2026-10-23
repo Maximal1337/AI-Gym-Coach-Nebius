@@ -924,7 +924,7 @@ Eviction, with a cap of 15 facts per user:
 - [x] Idempotent (re-running a batch changes nothing); retries with backoff; per-user token cap; run summary logged — one run per user per day, a failure counts as that run (no retry storm) and keeps the watermark; Token Factory retries 429/5xx but never a timeout, whose model already ran, and each retried attempt that may have spent is charged; at most 200 messages and 8,000 output tokens per user
 - [x] Runs on member B's Token Factory key (D-24) with Ultra and thinking on, within the $0.5-per-run ceiling (D-34): `checkSpend('memory')` before each user, `recordSpend` after each call
 - [x] Stays on Supabase Cron per D-23; every call logs a `memory_run` summary with its duration
-- [ ] First real run on Token Factory (needs keys); record the measured duration here so "it outgrew the Edge Function limit" stays a checkable trigger
+- [x] First real run on Token Factory (needs keys); record the measured duration here so "it outgrew the Edge Function limit" stays a checkable trigger — 2026-10-23 on the test project, Ultra with thinking: 4 users (the App Review and three judge accounts, their seeded history) in 25.0 s, about 6 s a user, so one call fits about 12 users before its 75 s cut-off and a night's 18 calls about 200
 - [x] `private.seed_demo_account` also clears the account's assistant messages, jobs, actions, facts and memory state, so a re-seed before judging starts clean — the original seed is wrapped, not copied; the first run then builds facts from the seeded history — run it the day of the seed: the oldest seeded workout, the one with the shoulder, leaves the 14-day window by the second night (runbook in the `dev-test-scenario-accounts` skill)
 
 #### NH-64 · Facts injection into the agent
@@ -956,6 +956,8 @@ Eviction, with a cap of 15 facts per user:
   | past-surgery | 1/1 | 1 | 1.00 | 1.00 | — | 0 | 0 |
 
   **Total:** precision 0.79, recall 1.00, violations 3, over 12 scenarios. The two refusals that failed vary run to run: in two more runs of them, the coach-only statement made no fact either time and the small talk made two trivial ones (importance 2) once
+
+  **Known limitation:** precision 0.79 — Ultra sometimes keeps a fact where it should keep none, from a statement only the coach made or from small talk; left as is on 2026-10-23. On the first real run after the fix (the App Review and three judge accounts' seeded history, 25 facts) no fact came from a coach's line and none from small talk ("Hi!" made none); one account kept a low-value one, a bench-press PR (`other`, importance 2). NH-73 looks over the shared accounts' facts after each re-seed
 - [x] Running the job twice on unchanged input changes nothing — structurally: a user already run today isn't due, and a user with nothing new gets no model call; the eval's second pass also measures model churn on the same messages
 
 #### NH-66 · Proactive daily check-in
@@ -1018,6 +1020,7 @@ Runbook and the TestFlight texts in [`submission.md`](./submission.md#the-testfl
 - [ ] The demo and judge accounts' sandboxes exist before anyone outside the team uses them: someone on the team sends each account's first message before it is handed out (App Review Information, Devpost), so the reviewer or a judge never waits for a sandbox to be created — about 45 s, or about 3 minutes when OpenShell 0.1.2's supervisor misses its first connection (one start in seven). They are in prod's `SANDBOX_KEEP_RUNNING`, so they stay warm after that. The same first message again after every move of prod to a new sandbox image (the runbook's "Promoting to prod") — decided on 2026-10-21
 - [ ] Three judge accounts (decided 2026-10-23): two in prod's `SANDBOX_KEEP_RUNNING` — with the reviewer's demo account, 3 of prod's 4 running places — and a spare one outside it for simultaneous tests, which holds the fourth place only while it's in use. The judges' instructions say the accounts are shared and reset before judging, and to wait up to a minute or take another account if a reply is slow (`docs/submission.md`, "Testing instructions")
 - [ ] Demo and judge accounts are re-seeded with the app closed on every device signed in to them, and the app restarted after (since 2026-10-23: a re-seed deletes the workout an open app still holds; procedure in the `dev-test-scenario-accounts` skill, "Demo and judge accounts")
+- [ ] After that re-seed, the memory job runs the same day and the accounts' facts are looked over before they're handed out: a fact taken from a coach's line or from small talk is deleted (NH-65's known limitation; the first look, 2026-10-23, found one low-value fact on one account)
 - [ ] Every issue found is filed in Linear
 
 ### M8 — Cancelled
