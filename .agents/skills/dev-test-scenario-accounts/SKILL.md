@@ -112,6 +112,16 @@ account so the two weeks line up with the judging window and anything a
 tester changed is reset:
 `select email, private.seed_demo_account(email) from private.demo_accounts order by email;`
 
+**Re-seed with the app closed on every device signed in to that account,
+and restart the app after.** The seed deletes the account's workouts, and
+the app keeps a running workout's id only in memory: an app left open on a
+workout keeps sending its turns to a session that no longer exists
+(2026-10-23, the reviewer's demo account — "Coach isn't available" until the
+app was restarted; coach-turn now answers such a turn with `session_expired`,
+"start a new workout", but Finish workout still can't close it). Also: the
+seed gives the account an English coach profile; set the language in the
+app's settings after, if the demo is in another one.
+
 Build their facts the same day: run `memory-nightly` right after the re-seed
 (`docs/assistant-ops.md`, "Run it now"), don't wait for the night. The job
 reads 14 days back and the oldest seeded workout is 13 days old, 17:30 UTC —

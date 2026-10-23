@@ -11,9 +11,7 @@ import {
 } from "../_shared/mod.ts";
 import { coachAgent } from "../_coach/agent.ts";
 import { coachFlagRefusal } from "../_shared/coach.ts";
-
-/** A workout session older than this can no longer drive coaching turns. */
-const SESSION_MAX_AGE_MS = 6 * 3600_000;
+import { openSessionFor } from "./session.ts";
 
 /**
  * Mid-workout coaching turn (GYM-16/61/67): the user sends free text
@@ -107,23 +105,9 @@ Deno.serve(withSentry(async (req) => {
     )
     .slice(-12);
 
-  const { data: session } = await db
-    .from("workout_sessions")
-    .select("id, plan_id, status, started_at")
-    .eq("id", sessionId)
-    .eq("user_id", user.id)
-    .eq("status", "in_progress")
-    .maybeSingle();
-  if (!session) return json(404, { error: "session_not_found" });
-
-  if (Date.now() - new Date(session.started_at).getTime() > SESSION_MAX_AGE_MS) {
-    await db
-      .from("workout_sessions")
-      .update({ status: "abandoned" })
-      .eq("id", session.id)
-      .eq("user_id", user.id);
-    return json(410, { error: "session_expired" });
-  }
+  const open = await openSessionFor(db, user.id, sessionId);
+  if (!("session" in open)) return json(open.status, open.body);
+  const { session } = open;
 
   const { data: exercise } = await db
     .from("exercises")
