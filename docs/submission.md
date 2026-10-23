@@ -423,30 +423,76 @@ trademarks. From the plan: show memory across sessions, the assistant acting
 (a tool-driven change and a check-in), a Tavily answer with sources and
 per-user isolation, and say what's ours versus upstream.
 
-**Recording:** iPhone screen recording on the **team demo account** — never a
-judge account, and no judge address on screen. Capture the morning check-in
-the day before. A terminal shot is from the VPS with nothing secret visible (no
-env files, no Secrets, no tokens in URLs). Either no music, or music we made.
-Name NVIDIA, Nebius, OpenShell, Hermes and Tavily in speech and captions; no
-other companies' logos.
+**Recording** (planned for 2026-10-24): screen recording on the **team demo
+account** (label `App Review` in `private.demo_accounts`) — never a judge
+account. Its address never appears in the video: it signs anyone in at once,
+so type it with the recording paused, or blur it in editing. A terminal shot
+is from the VPS with nothing secret visible (no env files, no Secrets, no
+tokens in URLs). Either no music, or music we made. Name NVIDIA, Nebius,
+OpenShell, Hermes and Tavily in speech and captions; no other companies'
+logos.
 
-About 275 words of voiceover — two minutes of speech at a calm pace, which
-leaves time on screen for the replies to arrive. Cut the waits in editing, not
-the lines about Token Factory and Nemotron:
+The seeded history the shots rely on (`private.seed_demo_account`, then the
+memory run): the left shoulder that dislikes overhead pressing (pinned), 45
+minutes on Thursdays, the brother's wedding in June, dumbbells for incline
+pressing, a new gym with a belt squat, and two plans, Upper Body and Lower
+Body.
+
+About 300 words of voiceover — a little over two minutes at a calm pace,
+which leaves time on screen for the replies to arrive. Cut the waits in
+editing, not the lines about Token Factory and Nemotron; if it runs long, the
+tool-driven change goes first:
 
 | Time | Shot | Voiceover |
 |---|---|---|
-| 0:00–0:15 | Notch's workout screen, then the Assistant tab | Notch is a strength coach on the App Store. For this hackathon we gave every lifter their own always-on coach — one that remembers them, acts for them, and keeps what it knows about them private. |
-| 0:15–0:45 | *What the coach remembers*: the knee, the schedule. Then ask: "I've only got 40 minutes on Thursday — what should I cut?" The reply works around the knee | It remembers you across sessions. Every night, NVIDIA Nemotron Ultra on Nebius Token Factory reads the day's chats and workouts and distils short facts. The scoring is in code, not in the model, and every fact is yours to see — and to delete. |
-| 0:45–1:15 | "Make my bench press 4 sets of 6 this week." The reply states the change; the Workout tab shows it. "Undo that." | It acts for you. Nemotron Super drives the agent's tool calls, with just a little thinking, so it acts instead of promising and still answers fast. It can change an exercise's sets, reps, rest or intensity — never the movement — it says exactly what it changed, and anything can be undone for a day. |
-| 1:15–1:35 | "Which vegetarian foods have 30 grams of protein?" Tap a source | It looks things up with Tavily and shows where each answer came from — and its rules keep anything personal out of the search. |
-| 1:35–1:55 | The morning notification on the lock screen, opened | And it doesn't wait to be asked: each morning it checks in about today's workout — or stays quiet when there's nothing useful to say. |
-| 1:55–2:30 | The architecture diagram; then the VPS terminal listing one sandbox per user | Under the hood, every user has their own Hermes Agent, in their own NVIDIA OpenShell sandbox, on a Nebius VM. The agent never sees an API key: OpenShell adds the Token Factory key only on requests to Token Factory. When the machine is full, people wait their turn — no one ever shares a sandbox. |
-| 2:30–2:50 | The repository README, "What we built, and what we build on" | OpenShell, Hermes Agent and NemoClaw are the runtime. The relay, the sandbox manager, the tools, the memory pipeline and the app are ours — and every Token Factory call has a daily spending ceiling. |
-| 2:50–2:58 | The Assistant tab | Notch: a coach that knows you, and works for you. |
+| 0:00–0:12 | Sign-in: email sign-in, the demo address (hidden), straight into the app | Notch is a strength coach on the App Store. For this hackathon we gave every lifter their own always-on coach — one that remembers them, acts for them, and keeps what it knows about them private. |
+| 0:12–0:40 | Assistant tab: "What do you know about me?" The reply names the shoulder, Thursdays, the wedding. Then the header button: *What the coach remembers* | It remembers you across sessions. Every night, NVIDIA Nemotron Ultra on Nebius Token Factory reads the day's chats and workouts and distils short facts. The scoring is in code, not in the model, and every fact is yours to see — and to delete. |
+| 0:40–0:55 | "Make my bench press 4 sets of 6 this week." The reply states the change; the plan shows it. "Undo that." | It acts for you. Nemotron Super drives the agent's tool calls: it changes sets, reps, rest or intensity — never the movement — says exactly what it changed, and anything can be undone. |
+| 0:55–1:15 | "Which vegetarian foods have 30 grams of protein per serving?" Tap a source | It looks things up with Tavily and shows where each answer came from — and its rules keep anything personal out of the search. |
+| 1:15–1:50 | My Coach: generate a plan, the plan appears. Start the Upper Body workout: the coach's intro; log a set ("82.5 for 8, 8, 7"); ask "My shoulder feels off today — what should I swap?" | The coach inside the workout runs on Nemotron Super on Token Factory too: it writes the plan, opens each workout, and answers mid-set — knowing the shoulder it has to work around. |
+| 1:50–2:08 | The lock screen: the daily check-in arrives as a notification; open it into the chat | And it doesn't wait to be asked: each morning it checks in about today's workout, using what it remembers — or stays quiet when there's nothing useful to say. |
+| 2:08–2:40 | The architecture diagram; then the VPS terminal listing one sandbox per user | Under the hood, every user has their own Hermes Agent, in their own NVIDIA OpenShell sandbox, on a Nebius VM. The agent never sees an API key: OpenShell adds the Token Factory key only on requests to Token Factory. When the machine is full, people wait their turn — no one ever shares a sandbox. |
+| 2:40–2:52 | The repository README, "What we built, and what we build on" | OpenShell, Hermes Agent and NemoClaw are the runtime. The relay, the sandbox manager, the tools, the memory pipeline and the app are ours — and every Token Factory call has a daily spending ceiling. |
+| 2:52–2:58 | The Assistant tab | Notch: a coach that knows you, and works for you. |
 
-After recording: check the length (under 3:00 with the title card), captions
-on, visibility **public**, and the link in Devpost and the README.
+**Before recording** (the morning of the day, in this order):
+
+1. **The device.** The one signed in to the demo account (the iPad since
+   2026-10-23), notifications for Notch Coach allowed, Focus and Do Not
+   Disturb off, the coach's language English. No other device stays signed
+   in to the account.
+2. **Re-seed the demo account** with the app closed on that device, then
+   start the app again (the `dev-test-scenario-accounts` skill, "Demo and
+   judge accounts"): it resets the history to the day and clears the chat,
+   the facts and the test sessions left from 2026-10-23. Its push token
+   stays, so the check-in still reaches the device.
+3. **Build its facts the same hour:** run `memory-nightly` (`docs/assistant-ops.md`,
+   "Run it now", about 1 cent for one account) and check them: six or so,
+   the shoulder pinned, the wedding long_term. Look them over for one taken
+   from a coach's line or small talk (NH-65's known limitation) and delete it.
+4. **The first message.** The account's sandbox is in prod's
+   `SANDBOX_KEEP_RUNNING`, so it's already running; check it's `Ready`
+   (`kubectl -n notch-prod get sandboxes`) instead of sending a warm-up
+   message, which would show in the chat. Nothing in the video is the
+   account's first message after a new sandbox image.
+5. **The daily ceilings for the day** (D-34: "the day the demo video is
+   recorded, coach goes up for that day"). My Coach's `coach` bucket is 15
+   cents a day, which a few retakes of plan generation can spend: Max sets
+   `ASSISTANT_SPEND_CEILING_CENTS_COACH=60` on the test project for the day
+   and unsets it the next morning (a secret change gives every function a
+   new version, `docs/budget-runbook.md`). Prod's 35 cents is about 60
+   assistant replies; raise `ASSISTANT_SPEND_CEILING_CENTS_PROD` the same way
+   only if the retakes run past that. The day's spend is checked after.
+6. **The check-in shot.** Queue one check-in by hand while the recording runs
+   with the app in the background: one insert into `assistant_jobs`, kind
+   `checkin` (`docs/assistant-ops.md`, "Daily check-in"; on a day that
+   already had one, a dedup key with a suffix such as `checkin:<date>:2`) —
+   it arrives in about 10 seconds. The 06:00 UTC one
+   works too, if the device is ready then.
+7. **After recording:** the length (under 3:00 with the title card), captions
+   on, visibility **public**, and the link in Devpost and the README. The
+   plan generated on camera stays on the account until the re-seed before
+   judging.
 
 ## Keeping the demo alive through judging (NH-95)
 
