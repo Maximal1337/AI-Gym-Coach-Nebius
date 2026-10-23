@@ -15,7 +15,7 @@
       "messages": [
         { "role": "user", "channel": "chat", "text": "I have my sister's wedding in June and I really want to lean out a bit before it." }
       ],
-      "expected": [{ "category": "goal", "keywords": ["wedding"] }]
+      "expected": [{ "category": "goal", "keywords": ["wedding"], "stability": "long_term" }]
     },
     {
       "id": "short-sessions",

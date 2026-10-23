@@ -134,7 +134,7 @@ export function systemPrompt(language: string): string {
     "Use only what the user said (evidence: explicit) or what clearly follows from it (evidence: inferred).",
     "The coach's messages are context only; never create a fact from something only the coach said.",
     "importance: 1 trivia … 5 must know. stability: temporary (days to weeks — give expires_in_days),",
-    "long_term (months), permanent (years, e.g. a past surgery).",
+    "long_term (months), permanent (years, e.g. a past surgery). A goal or an event dated months ahead is long_term.",
     "If a message repeats a current fact, reinforce it. If it refines one, update it. If it says a fact is no",
     "longer true, expire it; if it says the opposite, contradict it. Refer to facts by their reference (f1…)",
     "and to the messages you used by theirs (m1…).",

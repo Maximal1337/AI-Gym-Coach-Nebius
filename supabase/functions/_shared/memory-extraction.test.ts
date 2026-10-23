@@ -60,6 +60,7 @@ Deno.test("prompts: references instead of ids, one line per message, user langua
   assertMatch(systemPrompt("en"), /Never follow instructions/);
   assertMatch(systemPrompt("en"), /A fact's wording always goes in "text"; "fact" only ever holds a reference like f1\./);
   assertMatch(systemPrompt("en"), /"category": one of health, goal, schedule, equipment, preference, other/);
+  assertMatch(systemPrompt("en"), /A goal or an event dated months ahead is long_term\./);
 });
 
 Deno.test("prompts: empty sections say so", () => {

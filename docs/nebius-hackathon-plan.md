@@ -958,6 +958,8 @@ Eviction, with a cap of 15 facts per user:
   **Total:** precision 0.79, recall 1.00, violations 3, over 12 scenarios. The two refusals that failed vary run to run: in two more runs of them, the coach-only statement made no fact either time and the small talk made two trivial ones (importance 2) once
 
   **Known limitation:** precision 0.79 — Ultra sometimes keeps a fact where it should keep none, from a statement only the coach made or from small talk; left as is on 2026-10-23. On the first real run after the fix (the App Review and three judge accounts' seeded history, 25 facts) no fact came from a coach's line and none from small talk ("Hi!" made none); one account kept a low-value one, a bench-press PR (`other`, importance 2). NH-73 looks over the shared accounts' facts after each re-seed
+
+  **A dated goal is long_term** (2026-10-23): that run made the seeded June wedding `temporary` on three of the four accounts, set to expire in 14 to 24 days — a re-seed just before judging would have lost it mid-judging. The prompt now says a goal or an event dated months ahead is long_term, and `wedding-goal` expects it. The set's run with it: precision 0.92, recall 1.00, `wedding-goal` matched as long_term, `temporary-cold` still temporary; the coach-only statement made a fact again, the small talk none
 - [x] Running the job twice on unchanged input changes nothing — structurally: a user already run today isn't due, and a user with nothing new gets no model call; the eval's second pass also measures model churn on the same messages
 
 #### NH-66 · Proactive daily check-in
