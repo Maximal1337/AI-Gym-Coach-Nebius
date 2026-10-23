@@ -302,8 +302,11 @@ github-actions
 
 ## Testing instructions
 
-Paste with the addresses filled in, one per judge (`private.demo_accounts`),
-and only after the check in the form table above.
+Paste with the three judge accounts' addresses filled in (`private.demo_accounts`),
+and only after the check in the form table above. Two of them are in prod's
+`SANDBOX_KEEP_RUNNING` (with the reviewer's, 3 of prod's 4 running places);
+the spare one isn't, and holds the fourth place only while it's in use
+(decided 2026-10-23).
 
 > **Get the app.** On an iPhone, open ⟨TestFlight public link⟩, install
 > TestFlight if asked, then install Notch Coach.
@@ -312,13 +315,14 @@ and only after the check in the form table above.
 > address — you're in at once, no code or password. (Sign in with Apple gives
 > a fresh account without the Coach.)
 >
-> - Judge 1: ⟨judge address⟩
-> - Judge 2: ⟨judge address⟩
-> - … one per judge
+> - Judge account 1: ⟨address⟩
+> - Judge account 2: ⟨address⟩
+> - Spare account: ⟨address⟩
 >
-> Each judge has their own account with two weeks of training history, and
-> each account has its own agent, isolated from the others like any real
-> user's. Allow notifications to get the daily check-in.
+> The accounts are shared by the judges and reset before judging starts.
+> Each comes with two weeks of training history and has its own agent,
+> isolated from the others like any real user's. Allow notifications to get
+> the daily check-in.
 >
 > **Try the Assistant tab:**
 >
@@ -335,16 +339,16 @@ and only after the check in the form table above.
 >    saying. If it comes while you sleep, it's waiting in the chat.
 >
 > **Good to know.** A reply usually takes 5 to 10 seconds, longer when the
-> coach searches the web. ⟨Only if every judge account is in prod's
-> SANDBOX_KEEP_RUNNING:⟩ Your account's agent is already running, so there
-> is nothing to start. When many judges write at once a message may show
+> coach searches the web. The two judge accounts' agents are always running;
+> the spare account's starts with its first message. If a reply takes long,
+> wait up to a minute, or use another account. When many judges write at once a message may show
 > "Waiting for your coach…" before its turn, and after two minutes "Taking
 > longer than usual" — the reply still arrives, with a notification.
 > New facts from today's chat appear after the nightly run (00:00–03:00 UTC).
 > Each account can send up to 100 messages a day. If the coach says it has
 > reached today's limit, the demo's shared daily budget is spent: it's back at
-> 00:00 UTC. The Workout tab is Notch's
-> existing in-workout coach; the hackathon work is the Assistant tab.
+> 00:00 UTC. My Coach — plans and the in-workout coach — runs on Nemotron
+> too; the hackathon's main work is the Assistant tab.
 >
 > Questions: ⟨team contact⟩.
 

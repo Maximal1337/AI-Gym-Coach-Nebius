@@ -31,6 +31,12 @@ services are deployed only from the original repository:
   bundle id, with no OTA updates; the live app's App Store record isn't in
   `eas.json`. The "never build/submit without asking" rule below still holds.
 
+- **Deploy only what's pushed** (since 2026-10-23): a function goes to the
+  test project only from `main` as pushed — push first, then deploy from a
+  clean checkout at `origin/main` (`git status` clean, `HEAD` equal to
+  `origin/main`), so what runs is always what the repository shows. Every
+  deploy and every push still waits for the owner's OK.
+
 The Fly notes further down are the original repository's procedure.
 
 ## 1. Verify before deploying
