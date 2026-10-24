@@ -423,14 +423,14 @@ trademarks. From the plan: show memory across sessions, the assistant acting
 (a tool-driven change and a check-in), a Tavily answer with sources and
 per-user isolation, and say what's ours versus upstream.
 
-**Recording** (planned for 2026-10-24): screen recording on the **team demo
-account** (label `App Review` in `private.demo_accounts`) — never a judge
-account. Its address never appears in the video: it signs anyone in at once,
-so type it with the recording paused, or blur it in editing. A terminal shot
-is from the VPS with nothing secret visible (no env files, no Secrets, no
-tokens in URLs). Either no music, or music we made. Name NVIDIA, Nebius,
-OpenShell, Hermes and Tavily in speech and captions; no other companies'
-logos.
+**Recording** (2026-10-24): screen recording on the recording device,
+signed in to the **team demo account** (label `App Review` in
+`private.demo_accounts`) — never a judge account. Its address never appears
+in the video: it signs anyone in at once, so type it with the recording
+paused, or blur it in editing. A terminal shot is from the VPS with nothing
+secret visible (no env files, no Secrets, no tokens in URLs). Either no
+music, or music we made. Name NVIDIA, Nebius, OpenShell, Hermes and Tavily
+in speech and captions; no other companies' logos.
 
 The seeded history the shots rely on (`private.seed_demo_account`, then the
 memory run): the left shoulder that dislikes overhead pressing (pinned), 45
@@ -457,42 +457,39 @@ tool-driven change goes first:
 
 **Before recording** (the morning of the day, in this order):
 
-1. **The device.** The one signed in to the demo account (the iPad since
-   2026-10-23), notifications for Notch Coach allowed, Focus and Do Not
-   Disturb off, the coach's language English. No other device stays signed
-   in to the account.
-2. **Re-seed the demo account** with the app closed on that device, then
-   start the app again (the `dev-test-scenario-accounts` skill, "Demo and
-   judge accounts"): it resets the history to the day and clears the chat,
-   the facts and the test sessions left from 2026-10-23. Its push token
-   stays, so the check-in still reaches the device.
-3. **Build its facts the same hour:** run `memory-nightly` (`docs/assistant-ops.md`,
-   "Run it now", about 1 cent for one account) and check them: six or so,
-   the shoulder pinned, the wedding long_term. Look them over for one taken
-   from a coach's line or small talk (NH-65's known limitation) and delete it.
-4. **The first message.** The account's sandbox is in prod's
-   `SANDBOX_KEEP_RUNNING`, so it's already running; check it's `Ready`
-   (`kubectl -n notch-prod get sandboxes`) instead of sending a warm-up
-   message, which would show in the chat. Nothing in the video is the
-   account's first message after a new sandbox image.
-5. **The daily ceilings for the day** (D-34: "the day the demo video is
-   recorded, coach goes up for that day"). My Coach's `coach` bucket is 15
-   cents a day, which a few retakes of plan generation can spend: Max sets
-   `ASSISTANT_SPEND_CEILING_CENTS_COACH=60` on the test project for the day
-   and unsets it the next morning (a secret change gives every function a
-   new version, `docs/budget-runbook.md`). Prod's 35 cents is about 60
-   assistant replies; raise `ASSISTANT_SPEND_CEILING_CENTS_PROD` the same way
-   only if the retakes run past that. The day's spend is checked after.
-6. **The check-in shot.** Queue one check-in by hand while the recording runs
-   with the app in the background: one insert into `assistant_jobs`, kind
-   `checkin` (`docs/assistant-ops.md`, "Daily check-in"; on a day that
-   already had one, a dedup key with a suffix such as `checkin:<date>:2`) —
-   it arrives in about 10 seconds. The 06:00 UTC one
-   works too, if the device is ready then.
-7. **After recording:** the length (under 3:00 with the title card), captions
-   on, visibility **public**, and the link in Devpost and the README. The
-   plan generated on camera stays on the account until the re-seed before
-   judging.
+1. **The app is closed** on every other device signed in to the demo account.
+2. **My Coach's ceiling for the day** (D-34: "the day the demo video is
+   recorded, coach goes up for that day"): `ASSISTANT_SPEND_CEILING_CENTS_COACH=60`
+   on the test project, unset the next morning (a secret change gives every
+   function a new version, `docs/budget-runbook.md`). Prod's 35 cents is
+   about 60 assistant replies; raise `ASSISTANT_SPEND_CEILING_CENTS_PROD` the
+   same way only if the retakes run past that.
+3. **Re-seed the demo account** (the `dev-test-scenario-accounts` skill,
+   "Demo and judge accounts"): the history moves to the day, and the chat,
+   the facts and any test sessions are cleared.
+4. **Build its facts the same hour:** `memory-nightly` (`docs/assistant-ops.md`,
+   "Run it now", about 1 cent for one account). Check them: six or so, the
+   shoulder pinned, the wedding long_term; delete one taken from a coach's
+   line or small talk (NH-65's known limitation).
+5. **Check the sandbox** instead of sending a warm-up message, which would
+   show in the chat: the account is in prod's `SANDBOX_KEEP_RUNNING`, so its
+   sandbox is already running — `Ready` in `kubectl -n notch-prod get sandboxes`.
+6. **The recording device:** notifications for Notch Coach allowed, Focus and
+   Do Not Disturb off. Sign in to the demo account off camera, pick English
+   if the language screen shows (the choice is per device; the seed's coach
+   is English), then close the app fully and open it again: that cold start
+   registers the device's push token. Check the token is in `push_tokens`.
+   A token stays until it's deleted — signing out doesn't remove it — so
+   every device signed in before gets the check-in too.
+7. **The check-in shot:** with the recording running and the app in the
+   background, queue one check-in by hand (one insert into `assistant_jobs`,
+   kind `checkin`, `docs/assistant-ops.md`, "Daily check-in"; the re-seed
+   clears the day's 06:00 UTC one, so the day's dedup key is free). It
+   arrives in about 10 seconds.
+8. **After recording:** the length (under 3:00 with the title card), captions
+   on, visibility **public**, the link in Devpost and the README, and the
+   day's spend checked. The plan generated on camera stays on the account
+   until the re-seed before judging.
 
 ## Keeping the demo alive through judging (NH-95)
 
