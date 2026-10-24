@@ -171,13 +171,16 @@ live cluster with two test accounts (NH-26 on 2026-10-19, NH-45 on 10-20 and
   exactly the twelve tools we allow; six prompts after keys, the tool token,
   a shell, a file, a fetched page and another user's data got nothing. Asked
   something only user B's facts answer, B's agent knew and A's didn't.
-- **No forged instructions from a tool result.** Hermes tells the model to
-  trust an "out-of-band user message" marker inside a tool result as the
-  user's own words, and a page Tavily returns could carry one. Our third patch
-  to Hermes defangs the marker in every tool result and drops the note that
-  says to trust it. With `web_search` stubbed to return a page with a forged
-  marker and an instruction, the model obeyed it in **10 of 10** turns before
-  the patch and in **0 of 10** after — on the image as CI builds it, too.
+- **No forged instructions from a tool result.** An open Hermes issue,
+  [#81828](https://github.com/NousResearch/hermes-agent/issues/81828): Hermes tells the model to trust an "out-of-band user
+  message" marker inside a tool result as the user's own words, so a page
+  Tavily returns could speak for the user. Measured on our stack, with
+  `web_search` stubbed to return a page with a forged marker and an
+  instruction: the model obeyed it in **10 of 10** turns. Our third patch to
+  Hermes, applied when the image is built, defangs the marker in every tool
+  result and drops the note that says to trust it: **0 of 10** — on the image
+  as CI builds it, too. The fix is submitted to Hermes as
+  [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
 - **No way in.** From outside, the VPS answers SSH only; the relay pulls its
   work from Supabase over HMAC-signed requests; NetworkPolicies keep dev and
   prod apart; a tool takes the user from the per-user token, never from the
@@ -232,7 +235,7 @@ user's preferences into skills, where nothing about the user belongs
 | Upstream | License | How it's used |
 |---|---|---|
 | [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) | Apache-2.0 | Gateway Helm chart 0.1.2 and the `openshell` CLI (shipped in the relay image with its LICENSE and THIRD-PARTY-NOTICES) |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox, as NemoClaw's image ships it (v0.21.3), with our three patches: to its API server's key check, to the cron-restore drain gate NemoClaw adds, and to what tool results and its own guidance put in the prompt |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) (Nous Research) | MIT | The agent in every sandbox, as NemoClaw's image ships it (v0.21.3), with our three patches: to its API server's key check, to the cron-restore drain gate NemoClaw adds, and to what tool results and its own guidance put in the prompt — the last one submitted upstream as [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928) |
 | [NVIDIA NemoClaw](https://github.com/NVIDIA/NemoClaw) | Apache-2.0 | Its published Hermes sandbox image (v0.0.130, pinned by digest) is the base of ours; we add the coach's profile and start Hermes with our own script, not with its start script or its `hermes` wrapper |
 | [Agent Sandbox](https://github.com/kubernetes-sigs/agent-sandbox) | Apache-2.0 | The Sandbox CRD and controller OpenShell runs on, v1.0.4 |
 | [k3s](https://github.com/k3s-io/k3s), [Argo CD](https://github.com/argoproj/argo-cd) | Apache-2.0 | The cluster and its GitOps sync |

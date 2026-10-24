@@ -240,11 +240,14 @@ The **Coach assistant** is a new tab in the Notch app:
   sandboxes out of reach for up to 13 s, which used up a message's retries
   until the relay learned to wait instead. Each one found on the real
   cluster, and each with a test now.
-- **A web page that talks like the user.** Hermes trusts an "out-of-band user
-  message" marker inside a tool result as the user's own words, and a page
-  Tavily returns could carry one. With a forged one in a stubbed search
-  result, the model obeyed it in 10 of 10 turns. A build-time patch defangs
-  the marker in every tool result: 0 of 10.
+- **A web page that talks like the user.** An open Hermes issue,
+  [#81828](https://github.com/NousResearch/hermes-agent/issues/81828): Hermes trusts an "out-of-band user message" marker
+  inside a tool result as the user's own words, and a page Tavily returns
+  could carry one. We measured it on our stack — with a forged marker in a
+  stubbed search result, the model obeyed it in 10 of 10 turns — and closed
+  it with a patch applied when our image is built, which defangs the marker
+  in every tool result: 0 of 10. The fix is submitted to Hermes as
+  [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
 
 ### Accomplishments that we're proud of
 
@@ -258,9 +261,9 @@ The **Coach assistant** is a new tab in the Notch app:
 - Numbers from the live system: 900 turns over a 15-hour soak with none
   failed or empty (p95 7.9 s); a ten-turn conversation at p95 5 to 10 s and
   about $0.05; the tools called in 40 of 40 turns that needed one; six
-  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare; a forged
-  instruction in a web result obeyed in 10 of 10 turns before our patch and
-  0 of 10 after.
+  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare; the open
+  Hermes marker issue measured at 10 of 10 on our stack and closed at 0 of
+  10 by our build-time patch, with the fix sent upstream.
 - Memory measured, not assumed: on 12 chats with expected facts, recall 1.00
   and precision 0.79 to 0.92 for about 3 cents a run; the nightly job about
   6 s a user.
@@ -275,7 +278,7 @@ The **Coach assistant** is a new tab in the Notch app:
   decided the setting.
 - Read what the framework adds to the prompt. Hermes' own guidance was about
   half of the system prompt, and some of it pulled against our coach — one
-  part of it was the forged-marker door above.
+  part of it was the open marker issue above.
 - On a small VM, a sandbox per user is affordable if sandboxes stop when
   idle: Hermes levels off at about 300 MiB, so six fit in 8 GiB.
 - Keeping the model out of anything that must be exact — progression numbers,
@@ -442,9 +445,10 @@ Written from what we actually hit.
   single switch would be friendlier.
 - Its guidance tells the model to trust an "out-of-band user message" marker
   inside a tool result as the user's own words, so a web page could speak for
-  the user: with a forged marker in a search result, the model obeyed it in 10
-  of 10 turns. We patch it out at build time (0 of 10); a fix upstream would
-  protect everyone.
+  the user — the open issue [#81828](https://github.com/NousResearch/hermes-agent/issues/81828). On our stack a forged marker
+  in a search result was obeyed in 10 of 10 turns; our build-time patch takes
+  it to 0 of 10, and we've sent the fix upstream as
+  [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
 - Its built-in Token Factory provider doesn't send `reasoning_effort`, so we
   set it in a provider entry of our own.
 
