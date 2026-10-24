@@ -12,18 +12,18 @@ you undo it — and checks in every day on its own. Every user gets their
 own agent: **Hermes Agent running in their own NVIDIA OpenShell sandbox**,
 thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 
-- **Demo build:** public TestFlight link ⟨added once Beta App Review approves the build⟩
-- **Demo video:** ⟨link added at submission⟩
+- **Demo build:** ⟨public TestFlight link⟩
+- **Demo video:** ⟨YouTube link⟩
 - **Judge accounts:** in the Devpost testing instructions (never in this public repository)
 
-> **Status on 2026-10-21.** Live on one Nebius VPS since 2026-10-20: a dev
+> **Status on 2026-10-24.** Live on one Nebius VPS since 2026-10-20: a dev
 > and a prod environment, each with its own OpenShell gateway, relay and
-> per-user sandboxes. The hackathon build ("Notch Coach", TestFlight only) is
-> in Beta App Review. The spike's go/no-go passed on 2026-10-19; its numbers
-> are [below](#measured-on-the-live-system).
-> ⟨The nightly memory job's first run and its evaluation set on Token
-> Factory: 2026-10-22.⟩ [The plan](docs/nebius-hackathon-plan.md) tracks every
-> item; [the board](docs/deploy-status.md) has the details.
+> per-user sandboxes; prod runs the images dev ran first. The hackathon build
+> ("Notch Coach", TestFlight only) passed Beta App Review on 2026-10-23 and is
+> on a public TestFlight link. The nightly memory job and the daily check-in
+> run on schedule, and My Coach — plans and the in-workout coach — runs on
+> Nemotron too. [The plan](docs/nebius-hackathon-plan.md) tracks every item;
+> [the board](docs/deploy-status.md) has the details.
 
 ## What the Coach assistant does
 
@@ -38,25 +38,31 @@ thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 
 ## How Nemotron and Token Factory are used
 
-Both model calls go to **Nebius Token Factory** (`https://api.tokenfactory.nebius.com/v1`,
-OpenAI-compatible), and both use **NVIDIA Nemotron**:
+Every model call in the hackathon build goes to **Nebius Token Factory**
+(`https://api.tokenfactory.nebius.com/v1`, OpenAI-compatible), and every one
+uses **NVIDIA Nemotron**:
 
 | Where | Model | Why this one | How it's called |
 |---|---|---|---|
 | Every Coach assistant reply and daily check-in | Nemotron **Super** (`TOKEN_FACTORY_MODEL`) | Interactive: a person is waiting, and the turn calls tools, so it needs reliable tool calling at low latency and cost | By Hermes, inside the user's sandbox, through a provider entry for Token Factory in its config. The key never enters the sandbox: OpenShell's proxy adds it to the request, and only for Token Factory's host. A little thinking — every request carries `reasoning_effort: "low"`, set in that provider entry because Hermes' built-in Token Factory provider doesn't send it. With thinking off, a turn that came after an earlier exchange called the tool it needed in only 6 of 16 — it promised, or claimed an action it never took; with `low`, 16 of 16. More would risk the opposite: a reasoning model can spend its whole budget thinking and answer with nothing |
 | The nightly memory job | Nemotron **Ultra** (`MEMORY_MODEL`) | A batch job nobody waits for: quality over latency, and thinking on | From a Supabase Edge Function (`memory-nightly`) with a JSON-schema response; every operation it proposes is validated, and the facts' scores are computed in code, not by the model |
+| My Coach: plan generation and the in-workout coach | Nemotron **Super** (`COACH_MODEL`, `COACH_PLAN_MODEL`) | A lifter is mid-set: replies in 1 to 2.5 s. For plans, Super and Nemotron Lightning were both valid every time in Hebrew and English; Super was faster in Hebrew (4.7 s against 10.0 s at the median), for 0.14 cents a plan | The in-workout coach's existing LangGraph code runs inside the `session-start` and `coach-turn` Edge Functions, its model client pointed at Token Factory: thinking off for a plain reply, `low` for the turn that calls a tool. `plan-generate` holds Nemotron to the plan's JSON schema, and the warm-up on each plan's first heavy compound is set in code |
 
 Spend is bounded by construction: `_shared/assistant.ts` prices every call
 from the usage Token Factory reports (a conservative fallback when it
-doesn't), and at a daily ceiling — $1 for prod ($2 while judging runs,
-2026-12-01 to 12-15), $0.30 for dev, $0.50 for the nightly memory job — the
-assistant says the day's limit is reached and nothing more is sent. Hermes' own background model calls (post-turn reviews, session
-titles), whose tokens no one could count, are switched off.
+doesn't), and at a daily ceiling the assistant says the day's limit is
+reached and nothing more is sent. The ceilings follow a schedule in code:
+prod $0.35 a day ($2 while judging runs, 2026-12-01 to 12-15), dev $0.30
+and then less until it closes on 11-15, the memory job $0.10 ($0.20 while
+judging), My Coach $0.15 ($0.60 while judging) — a worst case of $68.45 to
+12-15, every bucket at its ceiling every day. Hermes' own background model
+calls (post-turn reviews, session titles), whose tokens no one could count,
+are switched off.
 
-Two things stay on Google Gemini through OpenRouter, as before the hackathon:
-parsing a training plan from a PDF or photo (Nemotron is text-only) and the
-in-workout coach real users have today, which we didn't change during the
-hackathon.
+The live App Store app is unchanged: its in-workout coach stays on Google
+Gemini through OpenRouter. Importing a plan from pasted text, a file or a
+photo still needs that service, so it isn't available in the hackathon
+build.
 
 ## Architecture
 
@@ -132,6 +138,10 @@ flowchart LR
   per user, scored in code and shown to the user. Hermes' own memory keeps
   coaching know-how only; its user-profile store is off, so a fact the user
   deletes can't live on inside the agent.
+- **My Coach** in the hackathon build — plan generation and the in-workout
+  coach — runs in Edge Functions (`plan-generate`, `session-start`,
+  `coach-turn`) on Nemotron Super, behind the same `assistant_chat` flag and
+  with its own daily ceiling.
 - **The cluster** is one k3s node that Argo CD keeps in sync with
   [`deploy/`](deploy/README.md) on `main`. CI builds the images after green
   tests and commits their tags; Argo CD pulls them. A prod sync window freezes
@@ -175,8 +185,8 @@ live cluster with two test accounts (NH-26 on 2026-10-19, NH-45 on 10-20 and
 
 ## Measured on the live system
 
-The spike (NH-21 to NH-27) ran on the same VPS, with the Hermes image as CI
-builds it and Nemotron Super on Token Factory:
+The spike (NH-21 to NH-27) and the runs after it, on the same VPS, with the
+Hermes image as CI builds it and Nemotron on Token Factory:
 
 | What | Result | When |
 |---|---|---|
@@ -187,6 +197,10 @@ builds it and Nemotron Super on Token Factory:
 | Capacity, 2 vCPU / 8 GiB | Six sandboxes running, three with turns at once: p95 6.8 to 8.1 s, 4.2 GiB still free | 2026-10-18 |
 | A gateway restart under running sandboxes | The sandboxes live through it; a message that arrives meanwhile waits, keeps its attempts, and is answered 15 to 20 s later | 2026-10-21 |
 | The relay's long polling | About 3,500 Edge Function calls a day for both relays, against 86,000 polling every 2 s | 2026-10-16 |
+| The nightly memory job, first real run (Ultra) | 4 users from their seeded history in 25 s, about 6 s a user — one call fits about 12 users before its 75 s cut-off; 25 facts kept, none dropped | 2026-10-23 |
+| The memory evaluation set: 12 chats with expected facts (Ultra) | Recall 1.00 in both runs; precision 0.79 and 0.92 — a miss is a fact kept from a coach-only statement or from small talk, which varies run to run; about 3 cents a run | 2026-10-23 |
+| My Coach on Nemotron Super | A plan in 4.7 s (Hebrew) and 5.3 s (English) at the median, 0.14 cents; a workout's start 0.8 to 1.5 s, the turn that logs sets 2.0 to 2.3 s with every set logged right; 0.4 cents a free-text turn | 2026-10-22 |
+| The daily check-in | Queued at 06:00 UTC for the four demo and judge accounts, all delivered within 17 to 50 s (the spare account's sandbox started for it) | 2026-10-24 |
 
 ## What we built, and what we build on
 
@@ -271,12 +285,22 @@ pnpm test
 supabase link --project-ref <project-ref>
 supabase db push
 supabase secrets set --env-file supabase/functions/.env
-supabase functions deploy assistant-send assistant-outbox assistant-deliver notch-tools memory-nightly
+supabase functions deploy
 ```
 
-`notch-tools`, `assistant-outbox`, `assistant-deliver` and `memory-nightly`
-are called without a user JWT (the sandbox's token, the relay's signature, the
-cron secret), so `verify_jwt` is off for them in `supabase/config.toml`. Then
+Without a name, `functions deploy` deploys every function in
+`supabase/functions`: the assistant's (`assistant-send`, `assistant-outbox`,
+`assistant-deliver`, `notch-tools`, `memory-nightly`) and the app's own
+(`plan-generate`, `plan-import`, `session-start`, `coach-turn`,
+`session-complete`, `accept-terms`, `account-delete`, `dev-test-login`,
+`history-import`, `studio-session`, `revenuecat-webhook`). My Coach's three
+model functions need `COACH_TOKEN_FACTORY_API_KEY`; `plan-import`'s parsing,
+`history-import` and `studio-session` need the agent service (`AGENT_URL`)
+and answer 503 without it. `notch-tools`, `assistant-outbox`,
+`assistant-deliver`, `memory-nightly` and `revenuecat-webhook` are called
+without a user JWT (the sandbox's token, the relay's signature, the cron
+secret, the webhook's secret), so `verify_jwt` is off for them in
+`supabase/config.toml`. Then
 apply `supabase/cron/assistant.sql` in the SQL editor for the nightly memory
 job and the daily check-in. Turn the assistant on per account with the
 `assistant_chat`, `assistant_memory` and `assistant_checkin` flags;
@@ -353,7 +377,7 @@ relay creates. The Hermes image and its profile are described in
 ## Tests
 
 CI runs on every push: typecheck of every workspace, the unit tests (relay,
-mobile, in-workout coach), 195 Deno tests for the Edge Functions and shared
+mobile, in-workout coach), 231 Deno tests for the Edge Functions and shared
 modules, locale checks, `deno check` against a baseline, the image-tag tests
 and a secret scan. Every migration is applied to a real Postgres 17 (PGlite)
 and checked there (`supabase/db-tests`): who can read and write what, the job
@@ -379,9 +403,15 @@ is new since 2026-08-26, and every migration in that period is additive:
 - **The proactive daily check-in.**
 - **Nemotron on Nebius Token Factory** for every assistant reply and for memory,
   with hard daily spend ceilings.
+- **My Coach on Nemotron** in the hackathon build: plan generation and the
+  in-workout coach moved from the agent service on Gemini to Token Factory,
+  behind the assistant's flag; the live app keeps its coach.
+- **A separate TestFlight app** ("Notch Coach") on its own Supabase project,
+  so the live app and its users are untouched.
 - **Tavily web search** with sources in the chat.
 - **Deployment**: a single-node k3s cluster on a Nebius VPS managed by Argo CD,
-  images built by CI, network isolation between environments.
+  images built by CI, network isolation between environments, nightly
+  encrypted backups and a health check.
 - **Safety net**: per-account feature flags and a kill switch, so real users
   keep today's app; seeded demo and judge accounts; CI with tests, locale and
   type checks, and a secret scan; an MIT license.

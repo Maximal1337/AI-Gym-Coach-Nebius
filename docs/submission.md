@@ -6,9 +6,8 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
 - **Nothing secret goes in this file** — the repository is public. Demo and
   judge addresses go only into App Review Information and Devpost's private
   testing instructions.
-- **⟨…⟩ marks what's filled in before submitting:** links (NH-72, NH-91),
-  numbers measured on the VPS (NH-25, NH-27), and what the spike and the
-  deployment actually taught us. Replace every one, or cut the sentence.
+- **⟨…⟩ marks the links filled in before submitting:** the public
+  TestFlight link, the video and the repository. Everything else is final.
 - **Dates:** submit on **2026-10-26**; the hard deadline is 2026-10-30, 10:00 PT.
 
 ## What the rules require (checked 2026-10-21)
@@ -16,27 +15,26 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
 - [x] **A license in the repository** — `LICENSE`, MIT; GitHub shows it in
       the About panel.
 - [x] **A README with instructions to run it** — the root `README.md`,
-      "Setup": requirements, the workspace, Supabase, the app, the
-      in-workout coach service and the cluster.
-      ⟨Fix before submitting: its Supabase step deploys only the
-      assistant's functions, and the app's own — `plan-generate`,
-      `session-start`, `coach-turn`, `session-complete`, `plan-import`,
-      `history-import`, `studio-session`, `accept-terms`, `account-delete` —
-      with what they need, are missing (DOR-135).⟩
+      "Setup": requirements, the workspace, Supabase (every function, and
+      what each needs), the app, the in-workout coach service and the
+      cluster.
 - [x] **A written explanation of the significant changes**, since Notch
       existed before the hackathon — the README's "What changed during the
       submission period (after 2026-08-26)", and the Devpost field drafted
       below ("What changed after 2026-08-26").
-- [ ] **Feedback on Nebius and NVIDIA's tools** — drafted below
-      ("Feedback"), with ⟨…⟩ still to fill from the live runs; it goes into
-      Devpost's feedback field (NH-93).
+- [x] **Feedback on Nebius and NVIDIA's tools** — below ("Feedback"); it
+      goes into Devpost's feedback field (NH-93).
 - [ ] **A video under 3 minutes, public on YouTube** — the script and shot
-      list below; not recorded yet (NH-91, the partner, 10-24).
+      list below; recording on 2026-10-24 (NH-91).
+- [ ] **The repository in the entry is the code that runs.** Prod deploys
+      from this repository (D-38). If the entry links the mirror repository
+      instead, it is fast-forwarded to this repository's `main` right before
+      submitting, and checked: the same commit at the head of both.
 
 ## The TestFlight build (NH-72)
 
-Submitted to Beta App Review on **2026-10-20**, once prod answers (review
-usually takes a day; leave two). EAS build and submit need the team's go-ahead
+Submitted to Beta App Review on **2026-10-20**; approved on **2026-10-23**,
+and the public link is on. EAS build and submit need the team's go-ahead
 first (`apps/mobile/AGENTS.md`).
 
 **Before building**
@@ -71,8 +69,8 @@ eas submit --platform ios --id <build id> --non-interactive
 
 **In App Store Connect → TestFlight**
 
-- [ ] An external group, "Hackathon judges", with this build.
-- [ ] Test information: the beta description and "What to Test" below, a
+- [x] An external group, "Hackathon judges", with this build.
+- [x] Test information: the beta description and "What to Test" below, a
       feedback email, and the App Review account for Beta App Review — a demo
       account with the assistant flags (decided 2026-10-19), in prod's
       `SANDBOX_KEEP_RUNNING` while the review lasts. In App Review
@@ -80,8 +78,9 @@ eas submit --platform ios --id <build id> --non-interactive
       email; password: none; notes: "Sign in with the demo email: choose
       email sign-in and enter the address — you're signed in at once, with no
       code or password. The Coach is available on demo accounts only."
-- [ ] Submit for Beta App Review; once approved, turn on the **public link**
-      and put it in the README and Devpost.
+- [x] Submit for Beta App Review; once approved, turn on the **public link**
+      and put it in the README and Devpost — approved 2026-10-23, link on;
+      it goes into both at submission.
 - [ ] **Never** "Submit for Review" on the App Store tab: the App Store version
       real users have stays as it is (D-16).
 - [ ] Builds expire 90 days after upload: one uploaded on 2026-10-16 lasts to
@@ -113,16 +112,18 @@ eas submit --platform ios --id <build id> --non-interactive
 | Elevator pitch | [Below](#elevator-pitch) |
 | About the project | [Below](#about-the-project) |
 | Built with | [Below](#built-with) |
-| "Try it out" links | The public TestFlight link ⟨NH-72⟩ and `https://github.com/Maximal1337/AI-Gym-Coach-Nebius` |
-| Video | The YouTube link ⟨NH-91⟩ — public, under 3 minutes |
+| "Try it out" links | ⟨public TestFlight link⟩ and ⟨repository link⟩ |
+| Video | ⟨YouTube link⟩ — public, under 3 minutes |
 | Track | **Personal AI** |
 | City | **Tel Aviv** (City Winner) |
 | Changes to a pre-existing project | [Below](#what-changed-after-2026-08-26) |
 | Testing instructions | [Below](#testing-instructions) — with the judge addresses filled in. **First confirm the field is visible to judges and organizers only**; if it isn't, give the organizers the addresses privately and write "sent to the organizers" instead |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | [Below](#feedback) |
 
-Before pressing submit: the README's status note replaced by what's live, its
-links filled in, the license visible in GitHub's **About** panel (NH-92).
+Before pressing submit: the README's two links filled in, its status note
+still true, the license visible in GitHub's **About** panel (NH-92), and —
+if the entry links the mirror repository — the mirror fast-forwarded to this
+repository's `main`, the same commit at the head of both.
 
 ## Elevator pitch
 
@@ -156,6 +157,9 @@ The **Coach assistant** is a new tab in the Notch app:
   the coach's rules keep personal details out of the queries.
 - **It checks in on its own.** A daily message (06:00 UTC) about today's
   workout and one thing it remembers — or nothing, when there's nothing useful to say.
+- **Its workout coach runs on Nemotron too.** In this build, My Coach — the
+  plan it writes for you and the coach inside each workout — runs on
+  Nemotron Super through Token Factory, in the user's language.
 - **It's private by construction.** Every user has their own agent in their own
   sandbox; its memory, skills and sessions belong to that user alone. The agent
   never holds an API key and reaches training data only through tools that
@@ -167,14 +171,16 @@ The **Coach assistant** is a new tab in the Notch app:
   **NVIDIA OpenShell** sandbox, created on their first message, stopped after
   10 idle minutes and deleted with their account. When the sandboxes that fit
   on our VM are all busy, a message waits its turn — users never share one.
-- **Nemotron on Nebius Token Factory** for both model calls. **Nemotron Super**
+- **Nemotron on Nebius Token Factory** for every model call. **Nemotron Super**
   answers every message and check-in and drives Hermes' tool calls with a
   little thinking (`reasoning_effort: "low"`): with none, it promised actions
   it never took; with more, a reasoning model can spend its whole budget
   thinking and answer with nothing. **Nemotron Ultra** runs the nightly memory
   job with thinking on and a JSON schema; every operation it proposes is
-  validated, and the facts' scores are computed in code. Daily spend ceilings
-  in our code bound what either can cost.
+  validated, and the facts' scores are computed in code. My Coach's plans
+  and in-workout coach run on Super as well: the existing LangGraph coach now
+  runs inside our Edge Functions with its model client pointed at Token
+  Factory. Daily spend ceilings in our code bound what each can cost.
 - **Keys the agent never sees.** OpenShell's proxy adds the Token Factory key,
   the Tavily key and the user's own tool token to outgoing requests — each only
   for its own host. The sandbox's network policy lets Hermes reach exactly
@@ -217,8 +223,15 @@ The **Coach assistant** is a new tab in the Notch app:
   ruled out letting the agent keep its own profile of the user, and made our
   facts — visible and deletable — the only memory about the person.
 - **Secrets in a public repository.** Keys live in the gateway, not in the
-  agent or in Git; an old sign-in allowlist in the history was moved into a
-  secret and its addresses retired ⟨once NH-06 is rolled out⟩.
+  agent or in Git, and the instant sign-in allowlist lives in a secret, with
+  random addresses.
+- **A model that fills the schema its own way.** On the memory job's first
+  real run, Nemotron Ultra put each new fact's wording in the field meant
+  for a reference to an existing fact and left the category out, so our
+  validator dropped all 24 operations and stored nothing — safe, but empty.
+  The prompt now spells out every operation's fields, and the parser takes a
+  wording from the wrong field when it clearly is one; the next run kept 25
+  facts and dropped none.
 - **OpenShell on Kubernetes, the less traveled path.** Its gateway strips
   `Authorization` on the way to a sandbox, so Hermes needed a patch to take
   its key from another header; a gate NemoClaw adds to Hermes waits forever
@@ -245,7 +258,14 @@ The **Coach assistant** is a new tab in the Notch app:
 - Numbers from the live system: 900 turns over a 15-hour soak with none
   failed or empty (p95 7.9 s); a ten-turn conversation at p95 5 to 10 s and
   about $0.05; the tools called in 40 of 40 turns that needed one; six
-  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare.
+  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare; a forged
+  instruction in a web result obeyed in 10 of 10 turns before our patch and
+  0 of 10 after.
+- Memory measured, not assumed: on 12 chats with expected facts, recall 1.00
+  and precision 0.79 to 0.92 for about 3 cents a run; the nightly job about
+  6 s a user.
+- A workout coach on Nemotron that keeps up with a lifter: a new plan in
+  about 5 s for 0.14 cents, a reply mid-workout in 1 to 2.5 s.
 
 ### What we learned
 
@@ -260,6 +280,9 @@ The **Coach assistant** is a new tab in the Notch app:
   idle: Hermes levels off at about 300 MiB, so six fit in 8 GiB.
 - Keeping the model out of anything that must be exact — progression numbers,
   fact scores, which user a tool acts for — made the agent far easier to trust.
+- A validator that drops bad output needs a counter next to it. The memory
+  job's summary counts dropped operations, and that number — 24 of 24 — is
+  what showed the first real run had stored nothing.
 
 ### What's next
 
@@ -273,9 +296,9 @@ sets and adjust the session live.
 ### Built with
 
 nvidia-nemotron · nebius-token-factory · nebius-ai-cloud · nvidia-openshell ·
-hermes-agent · nvidia-nemoclaw · tavily · model-context-protocol · supabase · postgresql · deno ·
-typescript · node.js · react-native · expo · kubernetes · k3s · argo-cd ·
-github-actions
+hermes-agent · nvidia-nemoclaw · tavily · model-context-protocol · langgraph ·
+supabase · postgresql · deno · typescript · node.js · react-native · expo ·
+kubernetes · k3s · argo-cd · github-actions
 
 ## What changed after 2026-08-26
 
@@ -294,6 +317,10 @@ github-actions
 > - The proactive daily check-in.
 > - Nemotron on Nebius Token Factory for every assistant reply and for memory,
 >   with hard daily spend ceilings; Tavily search with sources.
+> - My Coach on Nemotron in the hackathon build: plan generation and the
+>   in-workout coach moved from Gemini to Token Factory.
+> - A separate TestFlight app on its own Supabase project, so the App Store
+>   app and its users are untouched.
 > - The deployment: a k3s cluster on a Nebius VM managed by Argo CD, images
 >   built by CI, isolation between environments, backups and monitoring.
 >
@@ -322,7 +349,8 @@ the spare one isn't, and holds the fourth place only while it's in use
 > The accounts are shared by the judges and reset before judging starts.
 > Each comes with two weeks of training history and has its own agent,
 > isolated from the others like any real user's. Allow notifications to get
-> the daily check-in.
+> the daily check-in; if you allow them later in Settings, close and reopen
+> the app once.
 >
 > **Try the Assistant tab:**
 >
@@ -354,24 +382,32 @@ the spare one isn't, and holds the fourth place only while it's in use
 
 ## Feedback
 
-Written from what we actually hit. Everything marked ⟨…⟩ waits for the live
-runs; cut what turns out not to be true.
+Written from what we actually hit.
 
 **Nebius Token Factory**
 
 - The OpenAI-compatible API made the integration a base-URL change: Hermes'
-  provider, our Edge Function client and the smoke test all speak it as-is.
-- ⟨Nemotron tool calling with `reasoning_effort: "none"`, and JSON-schema
-  output — from NH-28's report.⟩
-- ⟨Latency and reliability over the demo period (NH-25, NH-95).⟩
+  provider, our Edge Function client, the in-workout coach's LangChain client
+  and the smoke test all speak it as-is.
+- Steady under load: 900 turns over a 15-hour soak with none failed or empty,
+  p50 4.9 s and p95 7.9 s, the same at the end as at the start.
+- `reasoning_effort` matters more than its name suggests. With `"none"`,
+  Nemotron Super called the tool a turn needed in only 6 of 16 turns that came
+  after an earlier exchange; with `"low"`, 16 of 16, for about the same cost.
+  A line in the docs on how it affects tool calling would save the next team
+  that measurement.
+- With `response_format: json_schema` (we didn't set `strict`), Nemotron Ultra
+  returned schema-shaped JSON but put a value under the wrong key and left
+  required fields out. Whether `strict` is supported, and enforced, deserves a
+  sentence in the docs.
 - We built daily spend ceilings into our own code. A hard spend cap per API
   key, enforced by Token Factory, would make that unnecessary for teams on
-  credits ⟨unless it exists and we missed it — then: more visible docs⟩.
+  credits.
 
 **Nebius AI Cloud**
 
-- ⟨Provisioning the VM, and the move between two accounts on 2026-11-15
-  (NH-30, NH-96).⟩
+- One 2-vCPU, 8 GiB VM ran the whole deployment — k3s, Argo CD, two OpenShell
+  gateways, two relays and up to six agent sandboxes — inside our credits.
 - The rules count Serverless Jobs, Endpoints and DevPods as AI Cloud use, but
   not a plain VM — worth saying on the credits page, since agent sandboxes need
   a long-running cluster.
@@ -382,23 +418,35 @@ runs; cut what turns out not to be true.
 **NVIDIA OpenShell**
 
 - Credential placeholders resolved by the proxy, per endpoint, are exactly what
-  a multi-user assistant needs: the agent never holds a key it could leak.
+  a multi-user assistant needs: the agent never holds a key it could leak, and
+  a placeholder sent to another host got a 403 and went nowhere.
 - On Kubernetes, user API authentication is OIDC or a trusted proxy only;
   a lighter option for a single-node deployment would help.
 - The Helm chart generates its credential key with `lookup`, which doesn't work
   under GitOps tools that render without cluster access (Argo CD), so we
   create the key before the chart.
-- ⟨What the spike found: sandbox provisioning, cold start, isolation tests
-  (NH-21, NH-25, NH-26).⟩
+- What the real cluster taught us on 0.1.2: about one sandbox start in seven
+  waits 2 min 16 s more for the supervisor's first connection; a gateway
+  restart leaves running sandboxes out of reach for up to 13 s; and the
+  gateway strips `Authorization` on the way into a sandbox, so a server inside
+  needs its key in another header.
 
 **Hermes Agent**
 
 - `SOUL.md` and `config.yaml` made the coach's rules and its tool allowlist
   declarative, and easy to pin with tests.
+- Stable in a long-running sandbox: memory levelled off at about 300 MiB over
+  the 15-hour soak, no leak.
 - Background model calls (post-turn reviews, session titles) are on by
   default; for a deployment that has to count every token, off-by-default or a
   single switch would be friendlier.
-- ⟨Behaviour in a long-running sandbox: memory growth, restarts (NH-25).⟩
+- Its guidance tells the model to trust an "out-of-band user message" marker
+  inside a tool result as the user's own words, so a web page could speak for
+  the user: with a forged marker in a search result, the model obeyed it in 10
+  of 10 turns. We patch it out at build time (0 of 10); a fix upstream would
+  protect everyone.
+- Its built-in Token Factory provider doesn't send `reasoning_effort`, so we
+  set it in a provider entry of our own.
 
 **NVIDIA NemoClaw and Nemotron**
 
@@ -409,11 +457,15 @@ runs; cut what turns out not to be true.
   the gateway while a raw secret sits in the environment. It matches variable
   names, so our model id under `TOKEN_FACTORY_MODEL` counted as a secret too,
   and we learned the one place the API server key may live (a 0640 `.env` in
-  `HERMES_HOME`) from the validator's source. ⟨If NemoClaw's Hermes guide
-  still doesn't cover it:⟩ a section on the boundary would save the next team
-  that read.
-- ⟨Nemotron's replies in the user's language, tool-call accuracy, cost per
-  conversation (NH-25).⟩
+  `HERMES_HOME`) from the validator's source. A section on the boundary in the
+  Hermes guide would save the next team that read.
+- Nemotron Super with a little thinking was the right agent model for us: 40
+  of 40 tool calls, about $0.05 for a ten-turn conversation, and the
+  in-workout coach answering in Hebrew and English in 1 to 2.5 s. Nemotron
+  Ultra's memory extraction found every expected fact in our evaluation set.
+- One thing to know: a reasoning model can spend its whole token budget
+  thinking and return empty content, which an agent loop reads as "nothing to
+  say".
 
 ## The demo video (NH-91)
 
