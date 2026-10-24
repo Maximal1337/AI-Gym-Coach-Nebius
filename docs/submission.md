@@ -163,7 +163,8 @@ The **Coach assistant** is a new tab in the Notch app:
 - **It's private by construction.** Every user has their own agent in their own
   sandbox; its memory, skills and sessions belong to that user alone. The agent
   never holds an API key and reaches training data only through tools that
-  check every read and write.
+  check every read and write — and it's hardened against web pages that try
+  to speak for the user.
 
 ### How we built it
 
@@ -240,17 +241,27 @@ The **Coach assistant** is a new tab in the Notch app:
   sandboxes out of reach for up to 13 s, which used up a message's retries
   until the relay learned to wait instead. Each one found on the real
   cluster, and each with a test now.
-- **A web page that talks like the user.** An open Hermes issue,
-  [#81828](https://github.com/NousResearch/hermes-agent/issues/81828): Hermes trusts an "out-of-band user message" marker
-  inside a tool result as the user's own words, and a page Tavily returns
-  could carry one. We measured it on our stack — with a forged marker in a
-  stubbed search result, the model obeyed it in 10 of 10 turns — and closed
-  it with a patch applied when our image is built, which defangs the marker
-  in every tool result: 0 of 10. The fix is submitted to Hermes as
+- **Any web page could speak as the user.** Hermes tells the model that text
+  after an `[OUT-OF-BAND USER MESSAGE]` marker is the user talking mid-turn,
+  but never strips that marker from tool results. So a page Tavily returns, a
+  file or an MCP response can impersonate the user; in a stock install with
+  shell tools, that's a web page giving instructions with the user's
+  authority. We found it while auditing the prompt Hermes sends (open
+  upstream as [#81828](https://github.com/NousResearch/hermes-agent/issues/81828)), proved it — 10 of 10 turns obeyed a forged
+  marker — and closed it with a patch that relabels the marker in every tool
+  result: 0 of 10, live in production, and submitted upstream as
   [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
 
 ### Accomplishments that we're proud of
 
+- **Closed a prompt-injection hole in Hermes Agent — and sent the fix
+  upstream.** Auditing what Hermes adds to the system prompt, we
+  independently found that any tool result — a web page, a file, an MCP
+  response — can carry the marker Hermes trusts as the user's own voice
+  (tracked upstream as [#81828](https://github.com/NousResearch/hermes-agent/issues/81828), still open in every release). On
+  our stack, a forged marker in a search result took over the reply in 10 of
+  10 turns. Our build-time patch takes it to 0 of 10 in production, and we
+  contributed the fix, with 16 tests, as [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
 - Real per-user isolation that holds under load: waiting, never sharing — and
   checked from inside a sandbox: no keys, no other user's data, no way out
   but the three hosts the policy names.
@@ -261,9 +272,7 @@ The **Coach assistant** is a new tab in the Notch app:
 - Numbers from the live system: 900 turns over a 15-hour soak with none
   failed or empty (p95 7.9 s); a ten-turn conversation at p95 5 to 10 s and
   about $0.05; the tools called in 40 of 40 turns that needed one; six
-  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare; the open
-  Hermes marker issue measured at 10 of 10 on our stack and closed at 0 of
-  10 by our build-time patch, with the fix sent upstream.
+  sandboxes running on a 2-vCPU, 8 GiB VM with 4 GiB to spare.
 - Memory measured, not assumed: on 12 chats with expected facts, recall 1.00
   and precision 0.79 to 0.92 for about 3 cents a run; the nightly job about
   6 s a user.

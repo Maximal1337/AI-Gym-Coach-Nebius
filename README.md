@@ -149,6 +149,16 @@ flowchart LR
 
 ## Security
 
+**A prompt-injection hole in Hermes, closed here and fixed upstream.** Hermes
+trusts an `[OUT-OF-BAND USER MESSAGE]` marker as the user's own voice, and
+any tool result — a web page, a file, an MCP response — can carry one. We
+independently found it while auditing the prompt Hermes sends; it is tracked
+upstream as the open issue [#81828](https://github.com/NousResearch/hermes-agent/issues/81828). On our stack a forged marker in
+a search result took over the reply in 10 of 10 turns; our build-time patch
+([`patch-hermes-prompt.py`](deploy/images/hermes-sandbox/patch-hermes-prompt.py))
+takes it to 0 of 10, and the fix is submitted to Hermes as
+[PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
+
 What we guard against: one user's agent reaching another user's data, anyone's
 keys leaving the gateway, and a web page steering the agent. Checked on the
 live cluster with two test accounts (NH-26 on 2026-10-19, NH-45 on 10-20 and
@@ -171,16 +181,12 @@ live cluster with two test accounts (NH-26 on 2026-10-19, NH-45 on 10-20 and
   exactly the twelve tools we allow; six prompts after keys, the tool token,
   a shell, a file, a fetched page and another user's data got nothing. Asked
   something only user B's facts answer, B's agent knew and A's didn't.
-- **No forged instructions from a tool result.** An open Hermes issue,
-  [#81828](https://github.com/NousResearch/hermes-agent/issues/81828): Hermes tells the model to trust an "out-of-band user
-  message" marker inside a tool result as the user's own words, so a page
-  Tavily returns could speak for the user. Measured on our stack, with
+- **No forged instructions from a tool result.** The marker above: with
   `web_search` stubbed to return a page with a forged marker and an
-  instruction: the model obeyed it in **10 of 10** turns. Our third patch to
-  Hermes, applied when the image is built, defangs the marker in every tool
-  result and drops the note that says to trust it: **0 of 10** — on the image
-  as CI builds it, too. The fix is submitted to Hermes as
-  [PR #143928](https://github.com/NousResearch/hermes-agent/pull/143928).
+  instruction, the model obeyed it in **10 of 10** turns before our third
+  patch to Hermes and in **0 of 10** after — on the image as CI builds it,
+  too. The patch relabels the marker in every tool result and drops the note
+  that says to trust it.
 - **No way in.** From outside, the VPS answers SSH only; the relay pulls its
   work from Supabase over HMAC-signed requests; NetworkPolicies keep dev and
   prod apart; a tool takes the user from the per-user token, never from the
