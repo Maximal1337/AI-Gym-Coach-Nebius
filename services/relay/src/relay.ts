@@ -125,6 +125,7 @@ async function runInSandbox(job: JobContext, lease: Lease, deps: RelayDeps): Pro
   const base = { job_id: job.id, lease_token: job.lease_token };
   const endpoint = lease.endpoint;
   let result: ChatResult;
+  const started = deps.now().getTime();
   try {
     result = await deps.chat(endpoint, buildMessages(job, deps.now()), { sessionKey: job.job.user_id });
   } catch (e) {
@@ -146,6 +147,15 @@ async function runInSandbox(job: JobContext, lease: Lease, deps: RelayDeps): Pro
   }
 
   // From here on the model has run: every way out charges the turn (D-34).
+  // The turn's own line: the model, how long the sandbox took, the tokens —
+  // never the user or the sandbox.
+  deps.log("turn", {
+    job: job.id,
+    kind: job.job.kind,
+    model: deps.model,
+    ms: deps.now().getTime() - started,
+    ...(result.usage ? { tokensInput: result.usage.tokensInput, tokensOutput: result.usage.tokensOutput } : {}),
+  });
   const charge = { model: deps.model, ...(result.usage ? { usage: result.usage } : {}) };
   const skip = job.job.kind === "checkin" && isCheckinSkip(result.text);
   const text = skip ? "" : replyText(result.text);

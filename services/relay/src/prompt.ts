@@ -62,6 +62,8 @@ export function contextBlock(job: JobContext, now: Date): string {
   const lines = [
     `You are replying in the Notch app's coach chat. Reply exclusively in ${language}: every sentence, never switching ` +
       `to another language partway through, not even for a word. Weights are in ${units}.`,
+    "The app shows **bold** and plain text only: never italics or single asterisks. Write sets × reps without a " +
+      `unit (4×6-8, 3×12-15), and put ${units} only on an actual load (82.5 ${units}).`,
     `Today is ${now.toISOString().slice(0, 10)} (UTC).`,
   ];
   const user = job.user;
@@ -126,16 +128,31 @@ export const REPLY_MAX_CHARS = 8000;
  */
 const CITATION_MARKER = /[ \t]*【[^】\n]{0,600}】/g;
 
+/** ***bold italics***, shown as bold. */
+const BOLD_ITALIC = /\*\*\*([^*\n]+?)\*\*\*/g;
+/**
+ * *Italics*, which the app would show with their asterisks (2026-10-24,
+ * "*Warm-up:* empty bar…"): an opening `*` after no letter, digit or `*` and
+ * before no space, a closing one the other way round, on one line. A `* `
+ * bullet, `**bold**` and a product like 4*6 don't match.
+ */
+const ITALIC = /(?<![\p{L}\p{N}*])\*(?![\s*])([^*\n]+?)(?<![\s*])\*(?![\p{L}\p{N}*])/gu;
+
+/** The text with single-asterisk italics made plain; **bold** stays. */
+export function withoutItalics(text: string): string {
+  return text.replace(BOLD_ITALIC, "**$1**").replace(ITALIC, "$1");
+}
+
 /**
  * The reply as the app shows it. The chat renders plain text and **bold**
  * only, so a markdown link would show as raw brackets: it becomes its title,
  * and the link itself becomes a tappable source under the message
- * (extractSources, run on the original text). Citation markers are dropped.
- * A reply too long to store is cut short rather than refused, which would
- * throw the paid turn away.
+ * (extractSources, run on the original text). Italics lose their asterisks,
+ * and citation markers are dropped. A reply too long to store is cut short
+ * rather than refused, which would throw the paid turn away.
  */
 export function replyText(text: string): string {
-  const clean = storableText(text).replace(CITATION_MARKER, "");
+  const clean = withoutItalics(storableText(text).replace(CITATION_MARKER, ""));
   const plain = clean.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
   return clip(plain || clean.trim(), REPLY_MAX_CHARS);
 }

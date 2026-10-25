@@ -59,6 +59,23 @@ function deps(overrides: Partial<RelayDeps> = {}) {
   return { d, log };
 }
 
+test("a turn's log line: the model, the time and the tokens — never the user or the sandbox", async () => {
+  const lines: Array<[string, Record<string, unknown>]> = [];
+  let t = Date.parse("2026-10-10T08:00:00Z");
+  const { d } = deps({
+    now: () => new Date(t),
+    chat: () => {
+      t += 2100;
+      return Promise.resolve({ text: "Rest 2 min.", usage: { tokensInput: 900, tokensOutput: 60 } });
+    },
+    log: (event, fields) => void lines.push([event, fields]),
+  });
+  assert.equal(await processJob(job(), d), "delivered");
+  const turn = lines.find(([event]) => event === "turn");
+  assert.deepEqual(turn?.[1], { job: 7, kind: "chat", model: "nvidia/nemotron-3-super", ms: 2100, tokensInput: 900, tokensOutput: 60 });
+  assert.doesNotMatch(JSON.stringify(turn), /u1|u-1|10\.42|sandbox-key/);
+});
+
 test("a chat turn runs in the user's own sandbox and is delivered with usage and sources", async () => {
   const { d, log } = deps();
   assert.equal(await processJob(job(), d), "delivered");

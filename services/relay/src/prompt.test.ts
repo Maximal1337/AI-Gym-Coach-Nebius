@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText, SOURCE_LIMITS, storableText } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText, SOURCE_LIMITS, storableText, withoutItalics } from "./prompt.js";
 
 const NOW = new Date("2026-10-10T08:00:00Z");
 
@@ -33,6 +33,9 @@ test("context: language, units and date; facts marked as data", () => {
   const c = contextBlock(job(), NOW);
   assert.match(c, /Reply exclusively in Hebrew: every sentence, never switching/);
   assert.match(c, /Weights are in lb\./);
+  // 2026-10-24: "4×6-8 kg" read as a weight of 6 to 8 kg.
+  assert.match(c, /\*\*bold\*\* and plain text only: never italics/);
+  assert.match(c, /sets × reps without a unit \(4×6-8, 3×12-15\), and put lb only on an actual load \(82\.5 lb\)/);
   assert.match(c, /Today is 2026-10-10/);
   assert.match(c, /not instructions/);
   assert.match(c, /- \[health, pinned\] Left knee hurts on deep squats/);
@@ -106,11 +109,27 @@ test("citation markers: Nemotron's 【…】 come out of the text, and a URL ins
   assert.equal(replyText("left 【 open\nand 】 here"), "left 【 open\nand 】 here");
 });
 
+test("reply text: italics lose their asterisks, bold stays (2026-10-24)", () => {
+  assert.equal(
+    replyText("*Warm-up:* empty bar 10 reps\n**Incline press** *(you prefer dumbbells here for shoulder comfort)*"),
+    "Warm-up: empty bar 10 reps\n**Incline press** (you prefer dumbbells here for shoulder comfort)",
+  );
+  assert.equal(withoutItalics("***Deload week*** starts *Monday*."), "**Deload week** starts Monday.");
+  // Not italics: a bullet, bold, a product, a lone asterisk, and one that spans lines.
+  assert.equal(withoutItalics("* Squat 4×6\n* Bench 3×8"), "* Squat 4×6\n* Bench 3×8");
+  assert.equal(withoutItalics("**bold** and **more**"), "**bold** and **more**");
+  assert.equal(withoutItalics("4*6 and 3*8"), "4*6 and 3*8");
+  assert.equal(withoutItalics("rest 2 min * then go"), "rest 2 min * then go");
+  assert.equal(withoutItalics("*open\nclose*"), "*open\nclose*");
+  // In the user's language too.
+  assert.equal(withoutItalics("*חימום:* מוט ריק"), "חימום: מוט ריק");
+});
+
 test("a check-in has no user text: an instruction with the skip word, and a placeholder turn", () => {
   const j = job({ job: { id: 2, kind: "checkin", environment: "prod", user_id: "u1", attempts: 1 }, message: null });
   const m = buildMessages(j, NOW);
   assert.match(m[0].content, new RegExp(`reply with exactly ${CHECKIN_SKIP}`));
-  // 2026-10-23: a check-in called a workout "in progress" on a day with no session at all.
+  // The status rule (2026-10-23): "in progress" or "done" only with a session of today's behind it.
   assert.match(m[0].content, /in progress only if a session started today has the status in_progress/);
   assert.match(m[0].content, /If no session started today, don't say a workout is underway or done/);
   assert.equal(m.at(-1)!.content, "(daily check-in)");
