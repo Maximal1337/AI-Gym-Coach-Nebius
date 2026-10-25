@@ -1,12 +1,16 @@
 import {
   admin, allowRate, budgetRemaining, callAgent, corsHeaders, getUser, json, recordUsage, subscriptionAccess, withSentry,
 } from "../_shared/mod.ts";
+import { coachFlagRefusal } from "../_shared/coach.ts";
 
 /**
  * Studio workout sessions — a second, independent training kind alongside
  * plan-import's gym plans (see supabase/migrations/20260809120000_studio_workouts.sql).
  * The Studio tab is the only entry point, so there's no gym/studio
  * classification here — everything through this function is studio-shaped.
+ * In the hackathon app the three paths that reach a model — "open" with a
+ * source or `generate`, and "reparse" — answer 403 assistant_disabled for an
+ * account without assistant_chat (_shared/coach.ts); the rest needs no model.
  *
  *  { action: "open", source: {text|pdfBase64+filename|docxBase64+filename|imagesBase64} }
  *    -> parses via the agent's /parse-studio, then persists immediately
@@ -528,6 +532,9 @@ async function runStudioGeneration(
   | { tree: Tree; sourcePayload: { generate: Record<string, unknown> } }
   | { error: string; status: number }
 > {
+  // In the hackathon app only accounts with the assistant reach a model (_shared/coach.ts).
+  const refusal = await coachFlagRefusal(db, userId);
+  if (refusal) return { error: refusal.body.error, status: refusal.status };
   if (!(await allowRate(db, userId, "studio-generate", 5, 300))) {
     return { error: "rate_limited", status: 429 };
   }
@@ -653,6 +660,8 @@ Deno.serve(withSentry(async (req) => {
         }
         agentPayload = { text: source.text };
       }
+      const refusal = await coachFlagRefusal(db, user.id);
+      if (refusal) return json(refusal.status, refusal.body);
       const res = await callAgent(agentPayload, "/parse-studio");
       if (!res.ok) {
         return json(res.status === 422 ? 422 : 503, {
@@ -789,6 +798,8 @@ Deno.serve(withSentry(async (req) => {
       if ("error" in gen) return json(gen.status, { error: gen.error });
       newTree = gen.tree;
     } else {
+      const refusal = await coachFlagRefusal(db, user.id);
+      if (refusal) return json(refusal.status, refusal.body);
       const access = await subscriptionAccess(db, user.id);
       if (!access.ok) return json(402, { error: "subscription_required" });
 
