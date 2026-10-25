@@ -144,15 +144,29 @@ export function withoutItalics(text: string): string {
 }
 
 /**
+ * A unit after sets × a rep range — "4 × 5‑7 kg" reads as a weight of 5 to 7
+ * kg (2026-10-25, copied from an older reply in the chat's history). Only a
+ * range: "2 × 22.5 kg" (a pair of dumbbells) and "3 × 10 kg" can be loads, and
+ * stay. Any hyphen or dash between the reps, the non-breaking one included.
+ */
+const UNIT_ON_REP_RANGE = /(\d+\s*[×xX]\s*\d+\s*[-‐-―−]\s*\d+)\s*(?:kgs?|lbs?)\b/g;
+
+/** The text without a weight unit on a rep range. */
+export function withoutUnitOnReps(text: string): string {
+  return text.replace(UNIT_ON_REP_RANGE, "$1");
+}
+
+/**
  * The reply as the app shows it. The chat renders plain text and **bold**
  * only, so a markdown link would show as raw brackets: it becomes its title,
  * and the link itself becomes a tappable source under the message
  * (extractSources, run on the original text). Italics lose their asterisks,
- * and citation markers are dropped. A reply too long to store is cut short
- * rather than refused, which would throw the paid turn away.
+ * a rep range loses a weight unit, and citation markers are dropped. A reply
+ * too long to store is cut short rather than refused, which would throw the
+ * paid turn away.
  */
 export function replyText(text: string): string {
-  const clean = withoutItalics(storableText(text).replace(CITATION_MARKER, ""));
+  const clean = withoutUnitOnReps(withoutItalics(storableText(text).replace(CITATION_MARKER, "")));
   const plain = clean.replace(/\[([^\]]{1,200})\]\((https?:\/\/[^\s)]+)\)/g, "$1").trim();
   return clip(plain || clean.trim(), REPLY_MAX_CHARS);
 }

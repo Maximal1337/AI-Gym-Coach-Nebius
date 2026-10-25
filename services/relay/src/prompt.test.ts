@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { JobContext } from "./outbox.js";
-import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText, SOURCE_LIMITS, storableText, withoutItalics } from "./prompt.js";
+import { buildMessages, CHECKIN_SKIP, contextBlock, extractSources, REPLY_MAX_CHARS, replyText, SOURCE_LIMITS, storableText, withoutItalics, withoutUnitOnReps } from "./prompt.js";
 
 const NOW = new Date("2026-10-10T08:00:00Z");
 
@@ -123,6 +123,22 @@ test("reply text: italics lose their asterisks, bold stays (2026-10-24)", () => 
   assert.equal(withoutItalics("*open\nclose*"), "*open\nclose*");
   // In the user's language too.
   assert.equal(withoutItalics("*חימום:* מוט ריק"), "חימום: מוט ריק");
+});
+
+test("reply text: a rep range loses its weight unit, with any hyphen or dash (2026-10-25)", () => {
+  assert.equal(
+    replyText("1. Back Squat – 4 × 5‑7 kg, RIR 1‑2, 180 s rest\n2. Romanian Deadlift – 3 × 8‑10 kg"),
+    "1. Back Squat – 4 × 5‑7, RIR 1‑2, 180 s rest\n2. Romanian Deadlift – 3 × 8‑10",
+  );
+  for (const dash of ["-", "‐", "‑", "‒", "–", "—", "―", "−"]) {
+    assert.equal(withoutUnitOnReps(`4×6${dash}8 kg`), `4×6${dash}8`, `dash U+${dash.codePointAt(0)!.toString(16)}`);
+    assert.equal(withoutUnitOnReps(`3 x 12 ${dash} 15lb, then rest`), `3 x 12 ${dash} 15, then rest`);
+  }
+  assert.equal(withoutUnitOnReps("3×8-10 kgs and 2X10-12 lbs"), "3×8-10 and 2X10-12");
+  // Loads stay: no rep range before the unit.
+  for (const load of ["2 × 22.5 kg dumbbells", "3 × 10 kg", "4×6-8 @ 80 kg", "bench 82.5 kg for 8", "2 × 7.5–10 kg"]) {
+    assert.equal(withoutUnitOnReps(load), load);
+  }
 });
 
 test("a check-in has no user text: an instruction with the skip word, and a placeholder turn", () => {
