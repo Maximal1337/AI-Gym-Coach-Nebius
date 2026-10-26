@@ -12,7 +12,7 @@ you undo it — and checks in every day on its own. Every user gets their
 own agent: **Hermes Agent running in their own NVIDIA OpenShell sandbox**,
 thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 
-- **Demo build:** ⟨public TestFlight link⟩
+- **Demo build:** [Notch Coach on TestFlight](https://testflight.apple.com/join/Sw2dfzn3) (iPhone)
 - **Demo video:** ⟨YouTube link⟩
 - **Judge accounts:** in the Devpost testing instructions (never in this public repository)
 

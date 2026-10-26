@@ -6,8 +6,8 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
 - **Nothing secret goes in this file** — the repository is public. Demo and
   judge addresses go only into App Review Information and Devpost's private
   testing instructions.
-- **⟨…⟩ marks the links filled in before submitting:** the public
-  TestFlight link, the video and the repository. Everything else is final.
+- **⟨…⟩ marks the links filled in before submitting:** the video and the
+  repository. Everything else is final.
 - **Dates:** submit on **2026-10-26**; the hard deadline is 2026-10-30, 10:00 PT.
 
 ## What the rules require (checked 2026-10-21)
@@ -79,8 +79,8 @@ eas submit --platform ios --id <build id> --non-interactive
       email sign-in and enter the address — you're signed in at once, with no
       code or password. The Coach is available on demo accounts only."
 - [x] Submit for Beta App Review; once approved, turn on the **public link**
-      and put it in the README and Devpost — approved 2026-10-23, link on;
-      it goes into both at submission.
+      and put it in the README and Devpost — approved 2026-10-23, link on:
+      https://testflight.apple.com/join/Sw2dfzn3
 - [ ] **Never** "Submit for Review" on the App Store tab: the App Store version
       real users have stays as it is (D-16).
 - [ ] Builds expire 90 days after upload: one uploaded on 2026-10-16 lasts to
@@ -112,7 +112,7 @@ eas submit --platform ios --id <build id> --non-interactive
 | Elevator pitch | [Below](#elevator-pitch) |
 | About the project | [Below](#about-the-project) |
 | Built with | [Below](#built-with) |
-| "Try it out" links | ⟨public TestFlight link⟩ and ⟨repository link⟩ |
+| "Try it out" links | https://testflight.apple.com/join/Sw2dfzn3 and ⟨repository link⟩ |
 | Video | ⟨YouTube link⟩ — public, under 3 minutes |
 | Track | **Personal AI** |
 | City | **Tel Aviv** (City Winner) |
@@ -120,7 +120,7 @@ eas submit --platform ios --id <build id> --non-interactive
 | Testing instructions | [Below](#testing-instructions) — with the judge addresses filled in. **First confirm the field is visible to judges and organizers only**; if it isn't, give the organizers the addresses privately and write "sent to the organizers" instead |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | [Below](#feedback) |
 
-Before pressing submit: the README's two links filled in, its status note
+Before pressing submit: the README's video link filled in, its status note
 still true, the license visible in GitHub's **About** panel (NH-92), and —
 if the entry links the mirror repository — the mirror fast-forwarded to this
 repository's `main`, the same commit at the head of both.
@@ -347,7 +347,7 @@ and only after the check in the form table above. Two of them are in prod's
 the spare one isn't, and holds the fourth place only while it's in use
 (decided 2026-10-23).
 
-> **Get the app.** On an iPhone, open ⟨TestFlight public link⟩, install
+> **Get the app.** On an iPhone, open https://testflight.apple.com/join/Sw2dfzn3, install
 > TestFlight if asked, then install Notch Coach.
 >
 > **Sign in with the demo email.** Choose email sign-in and enter your
