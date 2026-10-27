@@ -59,10 +59,11 @@ judging), My Coach $0.15 ($0.60 while judging) — a worst case of $68.45 to
 calls (post-turn reviews, session titles), whose tokens no one could count,
 are switched off.
 
-The live App Store app is unchanged: its in-workout coach stays on Google
-Gemini through OpenRouter. Importing a plan from pasted text, a file or a
-photo still needs that service, so it isn't available in the hackathon
-build.
+The live App Store app is unchanged: its in-workout coach and plan
+generation still run on the agent service on Fly.io, with Google Gemini
+through OpenRouter. The hackathon build doesn't call that service; importing
+a plan from pasted text, a file or a photo still needs it, so it isn't
+available in the hackathon build.
 
 ## Architecture
 
@@ -252,7 +253,7 @@ user's preferences into skills, where nothing about the user belongs
 |---|---|
 | `apps/mobile` | Expo (React Native) iOS app |
 | `apps/web` | Next.js landing and legal pages |
-| `services/agent` | The in-workout coach service (Fly.io, Gemini) — unchanged for real users |
+| `services/agent` | The in-workout coach and plan generation. In the hackathon build both run inside Edge Functions on Nemotron Super through Token Factory — this code in `session-start` and `coach-turn`, a port of its plan generation in `plan-generate`; the live App Store app still uses it as a service on Fly.io with Gemini |
 | `services/relay` | The relay and the sandbox manager (Node, runs on the cluster) |
 | `supabase/migrations` | Postgres schema and RLS; hackathon migrations are additive only |
 | `supabase/functions` | Edge Functions (Deno); `_shared` holds the shared modules |
@@ -264,8 +265,9 @@ user's preferences into skills, where nothing about the user belongs
 
 ## Engineering rules
 
-- Clients never call a model directly: the in-workout coach goes through the
-  agent service, the Coach assistant through the queue and the relay. Usage
+- Clients never call a model directly: My Coach goes through Edge Functions
+  (in the live app, on to the agent service), the Coach assistant through the
+  queue and the relay. Usage
   caps, prompt assembly and the kill switches live on the server.
 - All client database access is row-scoped by RLS; writes go through Edge
   Functions. The assistant writes only through `notch-tools`, which validates
@@ -344,12 +346,13 @@ Secrets (`supabase/functions/.env`, from `.env.example`):
 pnpm --filter @gymcoach/mobile start
 ```
 
-### In-workout coach service and website
+### The live app's coach service, and the website
 
-The hackathon app runs `services/agent`'s coach inside `session-start` and
-`coach-turn`, on Token Factory; this repository doesn't deploy it to Fly. The
-live app's service on Fly.io takes `OPENROUTER_API_KEY`, `AGENT_SHARED_SECRET`,
-and optionally `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `AGENT_DISABLED`. The website
+The hackathon build needs no coach service: `services/agent`'s coach runs
+inside `session-start` and `coach-turn` and plans come from `plan-generate`,
+all on Nemotron Super through Token Factory. Only the live App Store app uses
+the service on Fly.io, with Gemini through OpenRouter; it takes
+`OPENROUTER_API_KEY`, `AGENT_SHARED_SECRET`, and optionally `SENTRY_DSN`, `SENTRY_ENVIRONMENT`, `AGENT_DISABLED`. The website
 (`apps/web`, Vercel): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 
 ### The cluster
@@ -413,8 +416,9 @@ is new since 2026-08-26, and every migration in that period is additive:
 - **Nemotron on Nebius Token Factory** for every assistant reply and for memory,
   with hard daily spend ceilings.
 - **My Coach on Nemotron** in the hackathon build: plan generation and the
-  in-workout coach moved from the agent service on Gemini to Token Factory,
-  behind the assistant's flag; the live app keeps its coach.
+  in-workout coach run inside Edge Functions on Nemotron Super through Token
+  Factory, behind the assistant's flag; the live App Store app keeps the
+  agent service on Fly.io with Gemini.
 - **A separate TestFlight app** ("Notch Coach") on its own Supabase project,
   so the live app and its users are untouched.
 - **Tavily web search** with sources in the chat.

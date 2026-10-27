@@ -16,7 +16,7 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
       the About panel.
 - [x] **A README with instructions to run it** — the root `README.md`,
       "Setup": requirements, the workspace, Supabase (every function, and
-      what each needs), the app, the in-workout coach service and the
+      what each needs), the app, the live app's coach service and the
       cluster.
 - [x] **A written explanation of the significant changes**, since Notch
       existed before the hackathon — the README's "What changed during the
@@ -330,7 +330,9 @@ kubernetes · k3s · argo-cd · github-actions
 > - Nemotron on Nebius Token Factory for every assistant reply and for memory,
 >   with hard daily spend ceilings; Tavily search with sources.
 > - My Coach on Nemotron in the hackathon build: plan generation and the
->   in-workout coach moved from Gemini to Token Factory.
+>   in-workout coach run inside Edge Functions on Nemotron Super through
+>   Token Factory; the App Store app keeps its coach service on Fly.io with
+>   Gemini.
 > - A separate TestFlight app, Notch Coach, on its own Supabase project, so
 >   the App Store app and its users are untouched.
 > - The deployment: a k3s cluster on a Nebius VM managed by Argo CD, images
