@@ -1140,6 +1140,18 @@ Linear project **Notch — Post-hackathon**.
 | PH-15 | Separate dev and prod hosts, or promote prod by release tag instead of tracking `main` | Medium |
 | PH-16 | Capacity plan for real users: sandbox density, multi-node cluster, cost per active user | High |
 | PH-17 | Continue the user's Hermes session (`X-Hermes-Session-Id`) instead of sending the conversation again as text. In NH-25 it had the tools called in 16 of 16 follow-ups with thinking off, at about twice a text history's tokens. It needs a new session whenever the user deletes facts or messages (D-30: what they delete must stop mattering, and the session would still hold it), and the text history whenever the session is gone (Hermes answers 404 for it) | Medium |
+| PH-18 | Cluster monitoring and logs through Argo CD — Prometheus, Alertmanager, Grafana, Loki, a log collector, node-exporter, kube-state-metrics — with the relay's own metrics, dashboards and alerts as code (DOR-149; below) | Medium |
+
+**PH-18 in detail** (recorded 2026-10-27; estimate and plan after the submission, nothing before the owner's OK):
+
+- Namespace `monitoring`, everything through Argo CD from Git, Helm charts at pinned versions.
+- One workload per component: Prometheus and Alertmanager (StatefulSet), Grafana (Deployment), Loki single binary (StatefulSet, 7-day retention), the log collector as a DaemonSet, node-exporter (DaemonSet), kube-state-metrics. The collector: Grafana Alloy — Promtail is understood to be deprecated in its favour; its status is checked in the estimate.
+- The relay's `/metrics`: turn time, Nemotron tokens, time in the queue, deferred turns, Edge Function calls, the number of sandboxes; scraped through a ServiceMonitor.
+- Dashboards and alerts as code (Grafana provisioning, PrometheusRule); the alert channel is proposed in the estimate.
+- No inbound ports (D-27): Grafana only through an SSH tunnel or port-forward; a NetworkPolicy for the namespace.
+- Logs carry no secrets or personal data: what the relay and the functions write is checked, with a filter in the collector if needed.
+- Memory: hard requests and limits, a total proposed in the estimate; free memory measured with six sandboxes running, before and after.
+- When: before 2026-12-01 only if that measurement shows the headroom; frozen during judging (2026-12-01 to 12-15, D-32); otherwise after 2026-12-15, or with the VPS move on 2026-11-15.
 
 ---
 
