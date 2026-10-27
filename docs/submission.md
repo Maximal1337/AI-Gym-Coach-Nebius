@@ -108,7 +108,7 @@ eas submit --platform ios --id <build id> --non-interactive
 
 | Field | What goes in |
 |---|---|
-| Project name | Notch |
+| Project name | Notch Coach |
 | Elevator pitch | [Below](#elevator-pitch) |
 | About the project | [Below](#about-the-project) |
 | Built with | [Below](#built-with) |
@@ -144,11 +144,11 @@ for you, and keeps what it knows about you yours.
 
 ### What it does
 
-The **Coach assistant** is a new tab in the Notch app:
+The **Coach assistant** is a new tab in Notch Coach, the hackathon build of the Notch app:
 
 - **It remembers you.** Every night, Nemotron distils short, typed facts from
   your chats and workouts — injuries, goals, schedule, equipment,
-  preferences. *What the coach remembers* shows all of them, and deleting one
+  preferences. *What your coach remembers* shows all of them, and deleting one
   means the coach stops using it.
 - **It acts for you.** It saves notes for your next workout and changes an
   exercise's sets, rep range, rest, intensity or warm-up — never the movement
@@ -331,8 +331,8 @@ kubernetes · k3s · argo-cd · github-actions
 >   with hard daily spend ceilings; Tavily search with sources.
 > - My Coach on Nemotron in the hackathon build: plan generation and the
 >   in-workout coach moved from Gemini to Token Factory.
-> - A separate TestFlight app on its own Supabase project, so the App Store
->   app and its users are untouched.
+> - A separate TestFlight app, Notch Coach, on its own Supabase project, so
+>   the App Store app and its users are untouched.
 > - The deployment: a k3s cluster on a Nebius VM managed by Argo CD, images
 >   built by CI, isolation between environments, backups and monitoring.
 >
@@ -350,8 +350,8 @@ the spare one isn't, and holds the fourth place only while it's in use
 > **Get the app.** On an iPhone, open https://testflight.apple.com/join/Sw2dfzn3, install
 > TestFlight if asked, then install Notch Coach.
 >
-> **Sign in with the demo email.** Choose email sign-in and enter your
-> address — you're in at once, no code or password. (Sign in with Apple gives
+> **Sign in with the demo email.** Enter your address under Email address
+> and tap Continue — you're in at once, no code or password. (Sign in with Apple gives
 > a fresh account without the Coach.)
 >
 > - Judge account 1: ⟨address⟩
@@ -367,13 +367,13 @@ the spare one isn't, and holds the fourth place only while it's in use
 > **Try the Assistant tab:**
 >
 > 1. *"What do you know about me?"* — it answers from the facts it keeps. The
->    button in the chat's header opens *What the coach remembers*.
+>    bulb button in the chat's header opens *What your coach remembers*.
 > 2. *"Make my bench press 4 sets of 6 this week."* — it changes the plan and
->    says exactly what changed; the Workout tab shows it. Then *"undo that"*.
+>    says exactly what changed; the Plans tab shows it. Then *"undo that"*.
 > 3. *"Which vegetarian foods have 30 g of protein per serving?"* — a web
 >    answer with sources you can tap.
-> 4. Delete a fact on the memory screen, then ask about it: the coach no longer
->    uses it.
+> 4. On *What your coach remembers*, tap Forget on a fact, then ask about it:
+>    the coach no longer uses it.
 > 5. Once a day at 06:00 UTC (the night before in the Americas) the coach
 >    checks in on its own as a notification, when there's something worth
 >    saying. If it comes while you sleep, it's waiting in the chat.

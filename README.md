@@ -30,7 +30,7 @@ thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 | | |
 |---|---|
 | **Talks with you between workouts** | A new *Assistant* tab in the app, separate from the in-workout coach. Replies arrive in the chat and as a push notification. |
-| **Remembers you** | A nightly job distils short, typed facts from your chats and workouts — injuries, goals, schedule, equipment, preferences. *What the coach remembers* lists them; delete any and the coach stops using it. |
+| **Remembers you** | A nightly job distils short, typed facts from your chats and workouts — injuries, goals, schedule, equipment, preferences. *What your coach remembers* lists them; delete any and the coach stops using it. |
 | **Acts on your behalf** | Saves notes for your next workout and changes an exercise's sets, rep range, rest, intensity or warm-up — never the movement itself. Every change is recorded, stated exactly, and undoable for 24 hours. |
 | **Looks things up** | Web search through Tavily for nutrition facts, substitutions and equipment, with sources you can tap. The coach's rules keep personal details out of every query. |
 | **Checks in** | A daily message at 06:00 UTC about today's workout and one thing it remembers — or nothing, when there's nothing useful to say. |
@@ -74,7 +74,7 @@ same way.
 
 ```mermaid
 flowchart LR
-  app["iOS app<br/>Assistant tab · What the coach remembers"]
+  app["iOS app<br/>Assistant tab · What your coach remembers"]
   subgraph supabase["Supabase"]
     db[("Postgres + RLS<br/>messages · jobs · facts · actions")]
     send["assistant-send"]
