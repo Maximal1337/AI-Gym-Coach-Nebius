@@ -13,7 +13,7 @@ own agent: **Hermes Agent running in their own NVIDIA OpenShell sandbox**,
 thinking with **NVIDIA Nemotron on Nebius Token Factory**.
 
 - **Demo build:** [Notch Coach on TestFlight](https://testflight.apple.com/join/Sw2dfzn3) (iPhone)
-- **Demo video:** ⟨YouTube link⟩
+- **Demo video:** [Notch Coach on YouTube](https://www.youtube.com/watch?v=jPuwIdQtT20) (2:35)
 - **Judge accounts:** in the Devpost testing instructions (never in this public repository)
 
 > **Status on 2026-10-24.** Live on one Nebius VPS since 2026-10-20: a dev

@@ -6,8 +6,8 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
 - **Nothing secret goes in this file** — the repository is public. Demo and
   judge addresses go only into App Review Information and Devpost's private
   testing instructions.
-- **⟨…⟩ marks the links filled in before submitting:** the video and the
-  repository. Everything else is final.
+- **⟨…⟩ marks the link filled in before submitting:** the repository.
+  Everything else is final.
 - **Dates:** submit on **2026-10-26**; the hard deadline is 2026-10-30, 10:00 PT.
 
 ## What the rules require (checked 2026-10-21)
@@ -24,8 +24,8 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
       below ("What changed after 2026-08-26").
 - [x] **Feedback on Nebius and NVIDIA's tools** — below ("Feedback"); it
       goes into Devpost's feedback field (NH-93).
-- [ ] **A video under 3 minutes, public on YouTube** — the script and shot
-      list below; recording on 2026-10-24 (NH-91).
+- [x] **A video under 3 minutes, public on YouTube** — the script and shot
+      list below (NH-91); public since 2026-10-28, 2:35: https://www.youtube.com/watch?v=jPuwIdQtT20
 - [ ] **The repository in the entry is the code that runs.** Prod deploys
       from this repository (D-38). If the entry links the mirror repository
       instead, it is fast-forwarded to this repository's `main` right before
@@ -113,15 +113,14 @@ eas submit --platform ios --id <build id> --non-interactive
 | About the project | [Below](#about-the-project) |
 | Built with | [Below](#built-with) |
 | "Try it out" links | https://testflight.apple.com/join/Sw2dfzn3 and ⟨repository link⟩ |
-| Video | ⟨YouTube link⟩ — public, under 3 minutes |
+| Video | https://www.youtube.com/watch?v=jPuwIdQtT20 — public, 2:35 |
 | Track | **Personal AI** |
 | City | **Tel Aviv** (City Winner) |
 | Changes to a pre-existing project | [Below](#what-changed-after-2026-08-26) |
 | Testing instructions | [Below](#testing-instructions) — with the judge addresses filled in. **First confirm the field is visible to judges and organizers only**; if it isn't, give the organizers the addresses privately and write "sent to the organizers" instead |
 | Feedback on Token Factory, AI Cloud and NVIDIA tools | [Below](#feedback) |
 
-Before pressing submit: the README's video link filled in, its status note
-still true, the license visible in GitHub's **About** panel (NH-92), and —
+Before pressing submit: the README's status note still true, the license visible in GitHub's **About** panel (NH-92), and —
 if the entry links the mirror repository — the mirror fast-forwarded to this
 repository's `main`, the same commit at the head of both.
 
