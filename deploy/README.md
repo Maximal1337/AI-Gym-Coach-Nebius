@@ -123,6 +123,10 @@ argocd --core app sync root
 - **The prod freeze** (D-32): from 2026-12-01 to 2026-12-15 Argo CD doesn't
   sync `notch-prod` or `openshell-prod` automatically. For an incident, a
   person can still sync by hand: `argocd --core app sync notch-prod`.
+- **The freeze of `main`** (D-39): from 2026-10-30 17:00 UTC to 2027-01-11
+  nothing is pushed to `main`, so nothing on the cluster changes; work goes
+  to the `ops` branch. A fix the judges need goes in as "A hotfix during the
+  freeze" (below) describes.
 - **The Argo CD UI** isn't installed in the cluster. When needed, run it on
   the VPS bound to localhost and reach it through SSH:
   `ssh -L 8080:localhost:8080 claude@<vps>`, then on the VPS
@@ -204,6 +208,33 @@ own session, `sudo kubectl`.
 
 A step that goes wrong is undone by `git revert` of its commit, pushed with
 the same OK.
+
+### A hotfix during the freeze (D-39)
+
+From 2026-10-30 17:00 UTC to 2027-01-11 the GitHub ruleset `freeze-main`
+refuses every push to `main`. The one exception is a fix without which the
+judges can't test the app, with the owner's OK — also the one exception to
+"never during judging" above:
+
+1. The owner turns the ruleset off: the repository's Settings → Rules →
+   Rulesets → `freeze-main`, enforcement status **Disabled**.
+2. One commit on `main`: the fix, and in the plan's D-39 its date and reason.
+   Push.
+3. If the fix changes an image's inputs, CI and the Images workflow build it
+   and push dev's new tag to `main` themselves ("Deploy <sha> to the
+   cluster"), which needs the ruleset off as well: wait for that commit.
+   Prod then moves by a commit of its own, as in "Promoting to prod" above.
+   A Supabase function is deployed from the pushed `main`, as always.
+4. From 2026-12-01 to 12-15 the sync window holds prod: sync it by hand,
+   `argocd --core app sync notch-prod` (or `openshell-prod`).
+5. Check it as after a promotion: the relay up without errors, and a
+   message from a demo account answered.
+6. The owner turns the ruleset back on (**Active**), and `main` goes into
+   `ops`: `git checkout ops && git merge main && git push origin ops`. The
+   tag `devpost-submission` stays where it is.
+
+A hotfix that goes wrong is undone the same way: the ruleset off, `git
+revert`, push, the ruleset on.
 
 ## Isolation
 

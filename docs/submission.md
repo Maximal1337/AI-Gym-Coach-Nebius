@@ -6,8 +6,8 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
 - **Nothing secret goes in this file** — the repository is public. Demo and
   judge addresses go only into App Review Information and Devpost's private
   testing instructions.
-- **⟨…⟩ marks the link filled in before submitting:** the repository.
-  Everything else is final.
+- **Everything for Devpost is final.** ⟨…⟩ in the Devpost texts marks what
+  is filled in only there: the judge addresses and the team contact.
 - **Dates:** submit on **2026-10-26**; the hard deadline is 2026-10-30, 10:00 PT.
 
 ## What the rules require (checked 2026-10-21)
@@ -26,10 +26,10 @@ the checklist for keeping the demo alive through judging. Plan: [`nebius-hackath
       goes into Devpost's feedback field (NH-93).
 - [x] **A video under 3 minutes, public on YouTube** — the script and shot
       list below (NH-91); public since 2026-10-28, 2:35: https://www.youtube.com/watch?v=jPuwIdQtT20
-- [ ] **The repository in the entry is the code that runs.** Prod deploys
-      from this repository (D-38). If the entry links the mirror repository
-      instead, it is fast-forwarded to this repository's `main` right before
-      submitting, and checked: the same commit at the head of both.
+- [x] **The repository in the entry is the code that runs.** Prod deploys
+      from this repository (D-38), and the entry links it: https://github.com/Maximal1337/AI-Gym-Coach-Nebius.
+      From the deadline its `main` is frozen until the winners are announced
+      (D-39).
 
 ## The TestFlight build (NH-72)
 
@@ -112,7 +112,7 @@ eas submit --platform ios --id <build id> --non-interactive
 | Elevator pitch | [Below](#elevator-pitch) |
 | About the project | [Below](#about-the-project) |
 | Built with | [Below](#built-with) |
-| "Try it out" links | https://testflight.apple.com/join/Sw2dfzn3 and ⟨repository link⟩ |
+| "Try it out" links | https://testflight.apple.com/join/Sw2dfzn3 and https://github.com/Maximal1337/AI-Gym-Coach-Nebius |
 | Video | https://www.youtube.com/watch?v=jPuwIdQtT20 — public, 2:35 |
 | Track | **Personal AI** |
 | City | **Tel Aviv** (City Winner) |
